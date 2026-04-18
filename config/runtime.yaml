@@ -1,0 +1,33 @@
+# wevelStock — 동적 운영 설정
+# 이 파일을 수정하면 서버가 자동 감지하여 다음 호출부터 반영합니다 (프로세스 재시작 없이).
+# defaults.yaml 의 값을 덮어씁니다. 바꾸고 싶은 것만 작성하세요.
+
+# 예시: Telegram 활성화 (bot token 은 .env 에서)
+# telegram:
+#   enabled: true
+#   formats:
+#     principles: "🚨 [원칙] {title}\n{body}"
+
+# 예시: 팀 ON/OFF
+# teams:
+#   principles:
+#     enabled: true
+#     thresholds:
+#       total_weight_pct: 75   # 기본 80 을 75로 조이기
+
+# LLM 백엔드: gemini (Google AI Studio 무료 티어) 사용 중
+# GOOGLE_AI_API_KEY .env에 설정됨. 무료 한도: 일 1,500회 Flash / 50회 Pro
+llm:
+  provider: gemini
+  gemini:
+    # gemini-2.5-flash는 503 high demand 잦음 → lite 사용
+    model: gemini-2.5-flash-lite
+    max_tokens: 4096
+    temperature: 0.3
+
+# 예시: 모델 교체 / 크로스 검증 활성화
+# llm:
+#   primary: claude-haiku-4-5     # 비용 절감
+#   crosscheck:
+#     enabled: true
+#     targets: [orchestrator]

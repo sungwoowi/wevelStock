@@ -1,0 +1,19 @@
+{
+  "date": "2026-04-16",
+  "indicators": {
+    "kospi": {"value": 2720.5, "change_pct": 0.8},
+    "kosdaq": {"value": 870.3, "change_pct": 1.2},
+    "sp500": {"value": 5460, "change_pct": 0.3},
+    "nasdaq": {"value": 17200, "change_pct": 0.5},
+    "us_10y_yield": 4.28,
+    "dxy": 103.4,
+    "vix": 15.2,
+    "usd_krw": 1348,
+    "fear_greed": 62
+  },
+  "notable_events": [
+    {"date": "2026-04-18", "type": "FOMC", "note": "연준 FOMC 회의 예정"},
+    {"date": "2026-04-22", "type": "Earnings", "note": "삼성전자 1Q 실적"}
+  ],
+  "summary_hint": "금리 안정 + VIX 하락 + 원화 강세 소폭. 긍정적 톤 가능."
+}

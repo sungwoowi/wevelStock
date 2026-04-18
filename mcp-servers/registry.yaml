@@ -1,0 +1,5 @@
+# MCP 서버 레지스트리 — 자동 갱신
+mcp_servers: []
+# Phase 5 이후 kis-api, global-data, notification 등 추가 예정.
+
+generated_at: null

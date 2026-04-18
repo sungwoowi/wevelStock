@@ -1,0 +1,66 @@
+id: morning_pre
+name: "07:00 장전 브리핑"
+
+schedule:
+  - trigger: cron
+    expr: "0 7 * * 1-5"
+    timezone: Asia/Seoul
+
+knowledge:
+  shared_canon: true
+  rag_enabled: false
+
+stages:
+  - id: collect_overnight_us
+    module: stages.collect_overnight_us
+    type: collect
+    timeout_sec: 60
+
+  - id: collect_night_futures
+    module: stages.collect_night_futures
+    type: collect
+    parallel_with: collect_overnight_us
+    timeout_sec: 30
+
+  - id: collect_news
+    module: stages.collect_news
+    type: collect
+    parallel_with: collect_overnight_us
+    timeout_sec: 30
+
+  - id: load_positions
+    module: stages.load_positions
+    type: collect
+    parallel_with: collect_overnight_us
+    timeout_sec: 10
+
+  - id: check_principles
+    module: stages.check_principles
+    type: check
+    depends_on: [load_positions]
+    timeout_sec: 15
+
+  - id: analyze
+    module: stages.analyze
+    type: analyze
+    runtime: llm
+    depends_on: [collect_overnight_us, collect_night_futures, collect_news, load_positions, check_principles]
+    timeout_sec: 120
+    memory:
+      context_id: morning_pre
+      budget_tokens: 4000
+
+  - id: persist
+    module: stages.persist
+    type: act
+    depends_on: [analyze]
+    timeout_sec: 15
+
+  - id: notify
+    module: stages.notify
+    type: act
+    depends_on: [persist]
+    timeout_sec: 20
+
+contract_version: "1.0"
+status: active

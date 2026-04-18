@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "sqlite-db": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "./data/db/stock-advisor.sqlite"]
+    }
+  },
+  "_note": "MCP 서버는 Phase 5 이후 추가. 초기 토대에서는 sqlite-db 만 기본 등록. kis-api/global-data/notification은 추후 mcp-servers/<id>/ 구현 후 등록."
+}

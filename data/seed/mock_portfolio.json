@@ -1,0 +1,261 @@
+{
+  "scenarios": {
+    "normal": {
+      "description": "정상 포트폴리오 — 모든 원칙 준수",
+      "account_type": "mixed",
+      "total_value_krw": 50000000,
+      "cash_krw": 15500000,
+      "positions": [
+        {
+          "ticker": "005930",
+          "name": "삼성전자",
+          "strategy": "asset",
+          "weight_pct": 12,
+          "entry_price": 71000,
+          "current_price": 72500,
+          "stop_loss": 64000,
+          "target_price": 82000,
+          "rationale_at_entry": ["업황 사이클 저점", "반도체 수요 회복", "외국인 순매수 전환"]
+        },
+        {
+          "ticker": "000660",
+          "name": "SK하이닉스",
+          "strategy": "asset",
+          "weight_pct": 10,
+          "entry_price": 130000,
+          "current_price": 135500,
+          "stop_loss": 117000,
+          "target_price": 158000,
+          "rationale_at_entry": ["HBM 점유율", "메모리 사이클 반등", "기관 매수세"]
+        },
+        {
+          "ticker": "035720",
+          "name": "카카오",
+          "strategy": "swing",
+          "weight_pct": 6,
+          "entry_price": 46000,
+          "current_price": 45200,
+          "stop_loss": 42000,
+          "target_price": 52000,
+          "rationale_at_entry": ["AI 서비스 기대", "광고 매출 회복", "기술적 바닥 확인"]
+        },
+        {
+          "ticker": "373220",
+          "name": "LG에너지솔루션",
+          "strategy": "asset",
+          "weight_pct": 8,
+          "entry_price": 380000,
+          "current_price": 386000,
+          "stop_loss": 340000,
+          "target_price": 450000,
+          "rationale_at_entry": ["배터리 장기 성장", "수주 잔고 증가", "미국 시설 투자"]
+        },
+        {
+          "ticker": "TSLA",
+          "name": "Tesla",
+          "strategy": "swing",
+          "weight_pct": 3,
+          "entry_price": 180,
+          "current_price": 185,
+          "stop_loss": 162,
+          "target_price": 210,
+          "rationale_at_entry": ["자율주행 로드맵", "에너지 사업 성장", "가격 안정화"]
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA",
+          "strategy": "swing",
+          "weight_pct": 5,
+          "entry_price": 800,
+          "current_price": 845,
+          "stop_loss": 720,
+          "target_price": 950,
+          "rationale_at_entry": ["AI 인프라 수요", "데이터센터 매출 급증", "차세대 제품 로드맵"]
+        },
+        {
+          "ticker": "VOO",
+          "name": "Vanguard S&P 500",
+          "strategy": "asset",
+          "weight_pct": 15,
+          "entry_price": 450,
+          "current_price": 462,
+          "stop_loss": 405,
+          "target_price": null,
+          "rationale_at_entry": ["시장 지수 장기 보유", "비용 효율", "분산 효과"]
+        }
+      ]
+    },
+
+    "over-allocation": {
+      "description": "총 비중 초과 시나리오 — 투자비중 82% (80% 제한 초과)",
+      "account_type": "mixed",
+      "total_value_krw": 50000000,
+      "cash_krw": 9000000,
+      "positions": [
+        {
+          "ticker": "005930",
+          "name": "삼성전자",
+          "strategy": "asset",
+          "weight_pct": 14,
+          "entry_price": 71000,
+          "current_price": 72500,
+          "stop_loss": 64000,
+          "target_price": 82000,
+          "rationale_at_entry": ["반도체 사이클"]
+        },
+        {
+          "ticker": "000660",
+          "name": "SK하이닉스",
+          "strategy": "asset",
+          "weight_pct": 12,
+          "entry_price": 130000,
+          "current_price": 135500,
+          "stop_loss": 117000,
+          "target_price": 158000,
+          "rationale_at_entry": ["HBM"]
+        },
+        {
+          "ticker": "035720",
+          "name": "카카오",
+          "strategy": "swing",
+          "weight_pct": 13,
+          "entry_price": 46000,
+          "current_price": 45200,
+          "stop_loss": 42000,
+          "target_price": 52000,
+          "rationale_at_entry": ["AI"]
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA",
+          "strategy": "swing",
+          "weight_pct": 12,
+          "entry_price": 800,
+          "current_price": 845,
+          "stop_loss": 720,
+          "target_price": 950,
+          "rationale_at_entry": ["AI 모멘텀"]
+        },
+        {
+          "ticker": "VOO",
+          "name": "Vanguard S&P 500",
+          "strategy": "asset",
+          "weight_pct": 18,
+          "entry_price": 450,
+          "current_price": 462,
+          "stop_loss": 405,
+          "target_price": null,
+          "rationale_at_entry": ["장기 보유"]
+        },
+        {
+          "ticker": "QQQ",
+          "name": "Invesco QQQ",
+          "strategy": "asset",
+          "weight_pct": 13,
+          "entry_price": 430,
+          "current_price": 438,
+          "stop_loss": 387,
+          "target_price": null,
+          "rationale_at_entry": ["나스닥 100"]
+        }
+      ]
+    },
+
+    "no-stop-loss": {
+      "description": "손절선 누락 시나리오 — 일부 포지션에 stop_loss 없음",
+      "account_type": "mixed",
+      "total_value_krw": 50000000,
+      "cash_krw": 15000000,
+      "positions": [
+        {
+          "ticker": "005930",
+          "name": "삼성전자",
+          "strategy": "asset",
+          "weight_pct": 10,
+          "entry_price": 71000,
+          "current_price": 72500,
+          "stop_loss": 64000,
+          "target_price": 82000,
+          "rationale_at_entry": ["반도체"]
+        },
+        {
+          "ticker": "042700",
+          "name": "한미반도체",
+          "strategy": "swing",
+          "weight_pct": 8,
+          "entry_price": 150000,
+          "current_price": 162000,
+          "stop_loss": null,
+          "target_price": 185000,
+          "rationale_at_entry": ["실적 기대"]
+        },
+        {
+          "ticker": "NVDA",
+          "name": "NVIDIA",
+          "strategy": "swing",
+          "weight_pct": 7,
+          "entry_price": 800,
+          "current_price": 845,
+          "stop_loss": null,
+          "target_price": 950,
+          "rationale_at_entry": ["AI 인프라"]
+        },
+        {
+          "ticker": "VOO",
+          "name": "Vanguard S&P 500",
+          "strategy": "asset",
+          "weight_pct": 15,
+          "entry_price": 450,
+          "current_price": 462,
+          "stop_loss": 405,
+          "target_price": null,
+          "rationale_at_entry": ["지수"]
+        }
+      ]
+    },
+
+    "emotional": {
+      "description": "감정/FOMO 매매 시나리오 — 급등 추격 매수 + 진입 근거 불명",
+      "account_type": "mixed",
+      "total_value_krw": 50000000,
+      "cash_krw": 18000000,
+      "positions": [
+        {
+          "ticker": "005930",
+          "name": "삼성전자",
+          "strategy": "asset",
+          "weight_pct": 10,
+          "entry_price": 71000,
+          "current_price": 72500,
+          "stop_loss": 64000,
+          "target_price": 82000,
+          "rationale_at_entry": ["반도체 사이클"]
+        },
+        {
+          "ticker": "MEME1",
+          "name": "밈주식1",
+          "strategy": "daytrade",
+          "weight_pct": 12,
+          "entry_price": 9000,
+          "current_price": 9700,
+          "stop_loss": 8100,
+          "target_price": null,
+          "rationale_at_entry": ["남들이 다 사길래"],
+          "flags": ["fomo", "chase"]
+        },
+        {
+          "ticker": "MEME2",
+          "name": "밈주식2",
+          "strategy": "daytrade",
+          "weight_pct": 10,
+          "entry_price": 14000,
+          "current_price": 12500,
+          "stop_loss": 12600,
+          "target_price": null,
+          "rationale_at_entry": ["상한가 뉴스 보고"],
+          "flags": ["news-chase", "no-analysis"]
+        }
+      ]
+    }
+  }
+}

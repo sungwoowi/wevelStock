@@ -1,0 +1,111 @@
+# wevelStock — 안전한 기본값 (커밋됨)
+# 이 값들은 runtime.yaml 에 같은 키가 있으면 덮어써집니다.
+
+database:
+  path: data/db/stock-advisor.sqlite
+
+timezone: Asia/Seoul
+
+source_mode: seed   # seed | live
+
+logging:
+  level: INFO
+  format: json      # json | text
+
+llm:
+  # provider 전환:
+  #   anthropic   = Anthropic SDK 직접 호출 (ANTHROPIC_API_KEY 필요, sk-ant-api03-*)
+  #   claude_code = 로컬 `claude` CLI subprocess (Pro/Max 구독 OAuth 재사용, API 키 불필요)
+  #   mock        = 고정 응답 (개발/CI)
+  provider: anthropic
+  primary: claude-sonnet-4-5
+  # 실패/미설정 시 자동으로 mock 응답 폴백 (서비스 중단 방지)
+  mock_if_no_key: true
+  anthropic:
+    model: claude-sonnet-4-5
+    max_tokens: 2000
+    temperature: 0.3
+    prompt_caching: true
+  claude_code:
+    binary: claude         # PATH 에 있어야 함. 사전에 `claude setup-token` 으로 로그인 필요.
+    timeout_sec: 90
+    extra_args: []         # 예: ["--append-system-prompt-file", "path/to/extra.md"]
+  crosscheck:
+    enabled: false
+    targets: []            # ["daily_briefing", "macro_analysis"] 등
+
+telegram:
+  enabled: true        # BOT_TOKEN 없으면 자동으로 파일 폴백
+  fallback_dir: data/notifications
+  formats:
+    principles: "⚠️ *{title}*\n{body}"
+    daily_briefing: "📊 *{title}*\n\n{body}"
+    default: "🔔 *{title}*\n{body}"
+  # key: team_id (Python identifier). id 를 하이픈으로 쓰지 마세요.
+
+memory:
+  enabled: true
+  retention:
+    raw_days: 180
+    daily_days: 365
+    weekly_days: 730
+    monthly_days: null    # null = 무제한
+  context_budget_tokens: 4000
+  idempotency:
+    enabled: true
+    cache_ttl_days: 7
+
+knowledge:
+  enabled: true
+  embedding:
+    provider: openai     # openai | local
+    model: text-embedding-3-small
+  retrieval:
+    default_top_k: 3
+    score_threshold: 0.0   # 0 = 모든 결과 포함
+
+scheduler:
+  # 인프라 작업 기본 스케줄 (runtime.yaml 에서 변경 가능)
+  backup:
+    cron: "0 0 * * *"
+  daily_rollup:
+    cron: "50 23 * * *"
+  weekly_rollup:
+    cron: "55 23 * * 0"      # 일요일 23:55
+  monthly_rollup:
+    # 매월 마지막 날 23:58 — APScheduler 는 last 옵션 사용
+    day: last
+    hour: 23
+    minute: 58
+  memory_cleanup:
+    # 매월 1일 새벽 3시
+    day: 1
+    hour: 3
+    minute: 0
+
+teams:
+  # 팀별 기본값. 새 팀 추가 시 스캐폴더가 자동으로 entry 추가.
+  principles:
+    enabled: true
+    thresholds:
+      total_weight_pct: 80
+      single_stock_pct: 15
+      trading_weight_pct: 20
+      min_stop_loss_ratio: 0.02    # 손절선이 2% 이하로 세팅되어 있어야 유효로 인정
+      max_stop_loss_ratio: 0.20
+    notify_on: [warning, violation]
+  daily_briefing:
+    enabled: true
+    model_override: null
+    include_teams: [principles]     # 어느 팀 결과를 재료로 쓸지
+    notify_on: [info, warning, critical]
+  orchestrator:
+    enabled: true
+    max_parallel: 4
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  cors:
+    allowed_origins:
+      - http://localhost:3000

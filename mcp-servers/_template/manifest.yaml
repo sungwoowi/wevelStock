@@ -1,0 +1,18 @@
+id: "{MCP_ID}"
+name: "{MCP_NAME}"
+type: mcp-server
+runtime: python
+
+tools: []
+# 예시:
+# tools:
+#   - name: get_fred_series
+#     description: "FRED 경제 지표 시계열 조회"
+#     inputs: [series_id, start_date, end_date]
+#   - name: get_yahoo_ticker
+#     description: "야후 파이낸스 종목 조회"
+
+env_required: []     # 필수 환경변수. validate.py 가 .env.example 존재 검증.
+
+status: planned
+owner: you

@@ -1,0 +1,108 @@
+"""FastAPI entrypoint — uvicorn server.main:app
+
+Combines REST API + APScheduler + config watchdog in one process.
+"""
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import get_config, start_watcher, stop_watcher
+from core.db import get_db
+from core.logging import get_logger
+from core.scheduler import get_scheduler, shutdown_scheduler
+
+log = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup + shutdown hooks."""
+    log.info("server_starting")
+
+    # 1. Load config (triggers validation + starts watchdog)
+    cfg = get_config()
+    start_watcher()
+
+    # 2. Initialize DB
+    get_db()
+    log.info("db_ready", path=cfg.database.path)
+
+    # 3. Schedulers (infra jobs + pipeline schedules)
+    sched = get_scheduler()
+    try:
+        from server.schedulers.loader import register_pipeline_schedules
+        from server.schedulers.jobs import register_infra_jobs
+        register_infra_jobs(sched)
+        register_pipeline_schedules(sched)
+        sched.start()
+        log.info("scheduler_started", jobs=len(sched.get_jobs()))
+    except Exception as e:  # noqa: BLE001
+        log.error("scheduler_init_failed", error=str(e))
+
+    # 4. Gap filler (fire-and-forget on boot)
+    try:
+        from server.schedulers.jobs.gap_filler import run_gap_filler
+
+        await run_gap_filler()
+    except Exception as e:  # noqa: BLE001
+        log.warning("gap_filler_failed", error=str(e))
+
+    log.info("server_ready", host=cfg.server.host, port=cfg.server.port)
+    yield
+
+    log.info("server_stopping")
+    shutdown_scheduler()
+    stop_watcher()
+
+
+app = FastAPI(title="wevelStock", version="0.1.0", lifespan=lifespan)
+
+# CORS for the webapp
+try:
+    _allowed = get_config().server.cors.allowed_origins
+except Exception:
+    _allowed = ["http://localhost:3000"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Routes
+from server.api import briefings as briefings_route  # noqa: E402
+from server.api import config as config_route  # noqa: E402
+from server.api import notifications as notif_route  # noqa: E402
+from server.api import pipelines as pipelines_route  # noqa: E402
+from server.api import positions as positions_route  # noqa: E402
+from server.api import teams as teams_route  # noqa: E402
+
+app.include_router(pipelines_route.router, prefix="/api", tags=["pipelines"])
+app.include_router(teams_route.router, prefix="/api", tags=["teams"])
+app.include_router(config_route.router, prefix="/api", tags=["config"])
+app.include_router(notif_route.router, prefix="/api", tags=["notifications"])
+app.include_router(briefings_route.router, prefix="/api", tags=["briefings"])
+app.include_router(positions_route.router, prefix="/api", tags=["positions"])
+
+# Legacy demo route depends on the removed teams/ package; load only if importable.
+try:
+    from server.api import demo as demo_route  # noqa: E402
+
+    app.include_router(demo_route.router, prefix="/api", tags=["demo"])
+except ImportError as _e:  # noqa: F841
+    log.warning("demo_route_skipped_legacy_teams_import")
+
+
+@app.get("/api/health")
+async def health() -> dict:
+    return {"status": "ok", "repo_root": str(Path(__file__).resolve().parents[1])}
+
+
+@app.get("/")
+async def root() -> dict:
+    return {"name": "wevelStock", "docs": "/docs", "api": "/api/pipelines"}
