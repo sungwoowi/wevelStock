@@ -169,7 +169,7 @@ class AnalyzeStage(Stage):
             system=system_bundle.blocks,
             messages=[{"role": "user", "content": user_content}],
             input_hash=input_hash,
-            max_tokens=3000,
+            max_tokens=8000,
             temperature=0.3,
         )
 
