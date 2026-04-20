@@ -38,9 +38,9 @@ telegram:
   enabled: true        # BOT_TOKEN 없으면 자동으로 파일 폴백
   fallback_dir: data/notifications
   formats:
-    principles: "⚠️ *{title}*\n{body}"
-    daily_briefing: "📊 *{title}*\n\n{body}"
-    default: "🔔 *{title}*\n{body}"
+    principles: "⚠️ <b>{title}</b>\n{body}"
+    daily_briefing: "📊 <b>{title}</b>\n\n{body}"
+    default: "🔔 <b>{title}</b>\n{body}"
   # key: team_id (Python identifier). id 를 하이픈으로 쓰지 마세요.
 
 memory:

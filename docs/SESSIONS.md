@@ -22,6 +22,7 @@ Claude Code 내장 `-r` 은 세션의 "첫 메시지"를 제목처럼 보여줍�
 
 | 마지막 작업 | 상태 | 주제 | 상세 로그 |
 |---|---|---|---|
+| 2026-04-21 | completed | morning_pre 실전 Gemini 호출 + JSON truncation 해결(max_tokens 8000), 텔레그램 HTML 볼드, 원달러+CNN 공포탐욕 수집, briefings-on-demand SPEC(첫 SPEC) | [log](c_worked/2026-04-21_morning-pre-tuning-and-on-demand-spec.md) |
 | 2026-04-19 | completed | morning_pre 파이프라인 고도화 + 세션 연속성 시스템 구축 + git 초기화 — pipelines/morning_pre 신규(8 stages), DB 5테이블, collectors 3모듈, API 2라우터, /resume·/wrap-up 슬래시 명령, RESUME.md·SESSIONS.md, 첫 커밋 fc84c4c | [log](c_worked/2026-04-19_morning-pre-and-continuity.md) |
 
 <!-- 아래 줄부터 /wrap-up 이 자동 추가합니다. 수동 추가도 같은 형식으로. -->

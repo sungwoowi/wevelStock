@@ -30,6 +30,7 @@ OVERNIGHT_SYMBOLS = {
     "sox":     "^SOX",
     "vix":     "^VIX",
     "dxy":     "DX-Y.NYB",
+    "usdkrw":  "KRW=X",
     "us_10y":  "^TNX",
     "gold":    "GC=F",
     "wti":     "CL=F",

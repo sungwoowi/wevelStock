@@ -54,25 +54,39 @@ def _build_msg_1_overnight(overnight_us: dict, macro: dict, night_futures: dict)
     lines: list[str] = []
     lines.append("🌙 간밤 시황")
     lines.append("")
-    lines.append("📊 미국 지수")
+    lines.append("🇺🇸 미국 지수")
     for key, label in [("nasdaq", "나스닥"), ("sp500", "S&P500"),
-                        ("sox", "SOX(반도체)"), ("vix", "VIX")]:
+                        ("sox", "SOX (반도체)"), ("vix", "VIX (변동성 지수)")]:
         v = overnight_us.get(key) or {}
         if "error" not in v:
             lines.append(
-                f"  {label} {_fmt_num(v.get('price'))} "
+                f"  * {label} {_fmt_num(v.get('price'))} "
                 f"({_fmt_pct(v.get('change_pct'))})"
             )
 
+    fg = overnight_us.get("fear_greed") or {}
+    if fg and "error" not in fg and fg.get("score") is not None:
+        pct = fg.get("change_pct")
+        delta = f" ({_fmt_pct(pct)})" if pct is not None else ""
+        lines.append(
+            f"  * 공포·탐욕 지수 {fg['score']} "
+            f"[{fg.get('rating_kr') or fg.get('rating')}]{delta}"
+        )
+
     if macro:
         lines.append("")
-        lines.append("💱 거시")
-        for key, label in [("dxy", "DXY"), ("us_10y", "美10Y"),
-                           ("gold", "金"), ("wti", "WTI")]:
+        lines.append("🌐 거시경제 지표")
+        for key, label in [
+            ("dxy", "💵 (달러인덱스)"),
+            ("usdkrw", "🇰🇷 (원달러환율)"),
+            ("us_10y", "美10Y (10년 국채금리)"),
+            ("gold", "🥇 (국제금시세)"),
+            ("wti", "WTI (서부 텍사스산 원유 선물)"),
+        ]:
             v = macro.get(key) or {}
             if "error" not in v:
                 lines.append(
-                    f"  {label} {_fmt_num(v.get('price'))} "
+                    f"  * {label} {_fmt_num(v.get('price'))} "
                     f"({_fmt_pct(v.get('change_pct'))})"
                 )
 

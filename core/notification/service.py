@@ -10,6 +10,7 @@ All three are attempted in parallel-fallback mode:
 """
 from __future__ import annotations
 
+import html
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -36,7 +37,7 @@ async def _send_telegram(message: str) -> bool:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(
                 url,
-                json={"chat_id": chat_id, "text": message},
+                json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
             )
             if resp.status_code == 200:
                 return True
@@ -84,8 +85,13 @@ def _log_to_db(
 
 def _format_message(team_id: str, title: str, body: str) -> str:
     cfg = get_config().telegram
-    template = cfg.formats.get(team_id) or cfg.formats.get("default", "*{title}*\n{body}")
-    return template.format(title=title, body=body)
+    template = cfg.formats.get(team_id) or cfg.formats.get(
+        "default", "<b>{title}</b>\n{body}"
+    )
+    return template.format(
+        title=html.escape(title, quote=False),
+        body=html.escape(body, quote=False),
+    )
 
 
 async def notify(

@@ -19,6 +19,7 @@ dependencies = [
     "structlog>=24.1",
     # === LLM ===
     "anthropic>=0.34",
+    "google-genai>=0.3",
     # === 지식 레이어 (RAG) ===
     "chromadb>=0.4",
     "pypdf>=4.0",
