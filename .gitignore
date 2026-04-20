@@ -60,6 +60,7 @@ Thumbs.db
 
 # === Claude Code 로컬 설정 (사용자별 권한 등) ===
 .claude/settings.local.json
+.claude/worktrees/
 
 # === 로그 ===
 *.log
