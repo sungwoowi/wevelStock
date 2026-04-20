@@ -9,11 +9,12 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: Phase 2(morning_pre 파이프라인 기계적 뼈대) 완료 직후.
-Phase 3(두뇌 이식 = knowledge/canon 채우기)이 최대 공백.
+**현재 위치**: Phase 2(morning_pre 파이프라인 기계적 뼈대) 완료 + 세션 연속성 시스템 가동 + git 초기화.
+다음 최대 공백은 Phase 3(두뇌 이식 = knowledge/canon 채우기).
 
 **마지막 작업일**: 2026-04-19
-**마지막 세션 로그**: [2026-04-19_morning-pre-pipeline.md](c_worked/2026-04-19_morning-pre-pipeline.md)
+**마지막 세션 로그**: [2026-04-19_morning-pre-and-continuity.md](c_worked/2026-04-19_morning-pre-and-continuity.md)
+**마지막 커밋**: `fc84c4c` (로컬 main, GitHub 원격 미연결)
 
 ---
 
@@ -56,19 +57,23 @@ Phase 3(두뇌 이식 = knowledge/canon 채우기)이 최대 공백.
 ### 완성된 자산
 - `pipelines/morning_pre/` — 8 stages 전부 구현, 스모크 테스트 3/3 통과
 - `collectors/` — us_markets / kr_futures / news_rss (pipeline 간 공유)
-- `core/db/schema.sql` — 5 신규 테이블: watch_positions / sim_trades / sim_positions / predictions / news_items
+- `core/db/schema.sql` (v2) — 5 신규 테이블: watch_positions / sim_trades / sim_positions / predictions / news_items
 - API: `/api/briefings/*`, `/api/positions/*` (+ pipelines, teams, config, notifications)
+- 세션 연속성: RESUME.md / SESSIONS.md / c_worked/ 폴더 / `/resume` + `/wrap-up` 슬래시 명령 / CLAUDE.md 규칙 추가
+- Git: `main` 브랜치, 첫 커밋 `fc84c4c`, working tree clean
 
 ### 미완 또는 의도적 공백
-- `knowledge/canon/*.md` 의 TODO 구간 (사용자 주입 대기)
-- `scripts/demo.py`, `tests/test_e2e.py` 의 `teams.orchestrator` 잔재 (서버는 try/except 로 회피 중)
-- `docs/STRUCTURE.md` 구버전 (teams/ 기준)
+- `knowledge/canon/*.md` 의 TODO 구간 (사용자 주입 대기) — **다음 Top 1**
+- `scripts/demo.py`, `tests/test_e2e.py`, `server/api/demo.py` 의 `teams.orchestrator` 잔재 (server/main.py 만 try/except 로 회피 중)
+- `docs/STRUCTURE.md` 구버전 (teams/ 기준 서술)
 - 09:30 / 13:00 / 16:00 / 19:00 파이프라인 미착수
+- GitHub 원격 미연결 (프로토타입 단계, 나중에 결정)
 
 ### 꼭 알아둘 판단
 - **파이프라인 구조는 "시간대별 독립 폴더"** (사용자가 "수정 간섭 최소화"를 명시함). 공통 수집은 `collectors/` 라이브러리로만 공유, 파이프라인 간 코드 import 금지.
 - **수동 관심(`watch_positions`)과 AI 시뮬(`sim_positions` + `sim_trades`)은 스키마 분리**. 사용자가 실제 매매를 그대로 따라하지 않으므로 평단/수량은 AI 시뮬에서만 추적.
 - **텔레그램은 3분할 렌더링**. LLM은 1회만 호출되므로 판단 연속성 문제 없음.
+- **`docs/a_wanted/user_want_spec.md` 는 매 세션 초반 필수 읽기**. 작업이 프로젝트 본질에서 이탈하지 않도록 기준점 역할.
 
 ---
 
