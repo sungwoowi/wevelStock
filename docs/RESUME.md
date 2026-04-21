@@ -9,13 +9,12 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: morning_pre 실전 Gemini 호출 검증 완료 + 메시지 포맷 정제 + 세션 연속성 시스템 가동 중.
-브리핑 온디맨드 플랫폼(BRIEFING-ON-DEMAND-001) SPEC 작성까지 끝남 — **첫 SPEC**.
-다음 공백: SPEC 구현(텔레그램 봇 + 공통 API + DB v3) 또는 knowledge/canon 주입.
+**현재 위치**: morning_pre `new_candidates.ticker` placeholder(`"000000"`) 안전장치 패치 완료 — LLM 환각 차단. RESUME Top 3 #3 (15분 빠른 패치) 마무리.
+다음 본격 후보는 BRIEFING-ON-DEMAND-001 구현(SPEC→코드, 3~5h) 또는 knowledge/canon 인터뷰(1.5~2h) 둘 중 하나.
 
 **마지막 작업일**: 2026-04-21
-**마지막 세션 로그**: [2026-04-21_morning-pre-tuning-and-on-demand-spec.md](c_worked/2026-04-21_morning-pre-tuning-and-on-demand-spec.md)
-**Git**: `main` 브랜치 (로컬), GitHub 원격 미연결 — 세션별 커밋 축적 중
+**마지막 세션 로그**: [2026-04-21_ticker-placeholder-fix.md](c_worked/2026-04-21_ticker-placeholder-fix.md)
+**Git**: `main` 브랜치, 최신 커밋 `1202c16 fix(morning_pre): strip placeholder tickers`. GitHub 원격 미연결 — 세션별 커밋 축적 중
 
 ---
 
@@ -34,10 +33,10 @@
 - **범위**: `knowledge/canon/investment-principles.md`, `macro-framework.md`, `sector-insights.md`, `failure-lessons.md` 4파일의 TODO. 주제별 Q&A → 편집.
 - **예상 산출**: 4 MD 파일 업데이트. 코드 변경 없음. 1.5~2h.
 
-### 3. new_candidates ticker 정확도 개선 (작은 퀄리티 개선)
-- **왜**: 오늘 Gemini 응답에서 신규 종목 ticker 를 `"000000"` placeholder 로 반환. 실전 사용 불가.
-- **범위**: (a) 프롬프트에 "모르면 빈 문자열로 두세요" 지시 추가 — 15분, (b) 종목 마스터 테이블 로컬 시드 — 45분, (c) KIS API 연동 — 별도 SPEC.
-- **방식**: 먼저 (a) 로 빠르게 안전장치만.
+### 3. 16:00 close_review 파이프라인 신규 (적중률 사이클 완성)
+- **왜**: 본질의 "적중률 기반 고도화" 핵심. 매일 morning_pre 가 만든 `predictions` 를 장 마감 후 채점하지 않으면 "잘 맞췄는지" 알 수 없고 도메인 고도화 자체가 불가. briefings-on-demand v2 manifest `parts:` 추가만으로 자연 합류.
+- **범위**: `pipelines/close_review/` 신규 — manifest + stages (collect_close, score_predictions, summarize, persist, notify). predictions 테이블 채점 로직.
+- **예상**: 2~3h. morning_pre 패턴 그대로 복제 + 채점 stage 만 신규.
 
 ---
 
@@ -57,21 +56,22 @@
 
 ### 완성된 자산
 - `pipelines/morning_pre/` — 8 stages, **실전 Gemini 호출 검증 완료** (tokens_out=3521, cost≈$0.0015, JSON 완전 파싱)
+- `pipelines/morning_pre/stages/analyze.py::_sanitize_new_candidates` — LLM 환각 차단 안전장치. placeholder ticker(`000000`/`------`/공백 등)를 빈 문자열로 정규화, name 없는 항목 drop. 프롬프트 가이드 #5 도 동시 강화.
 - `collectors/` — us_markets(+usdkrw) / kr_futures / news_rss / **fear_greed**(CNN 비공식 API, User-Agent 위장)
 - `core/db/schema.sql` v2 — watch_positions / sim_trades / sim_positions / predictions / news_items
 - API: `/api/briefings/*`, `/api/positions/*`, `/api/pipelines/*` (+ config, notifications)
 - 텔레그램 알림: HTML 볼드(`<b>`) + parse_mode=HTML + html.escape. 메시지 포맷 사용자 정제 완료(🇺🇸/🌐/글머리 `*`/괄호 한글 설명)
 - 세션 연속성: RESUME.md / SESSIONS.md / c_worked/ / `/resume` + `/wrap-up` 슬래시 명령 / CLAUDE.md 규칙
-- Git: `main` 브랜치, 세션별 커밋 축적 중 (로컬, GitHub 원격 미연결)
+- Git: `main` 브랜치, 세션별 커밋 축적 중 (로컬, GitHub 원격 미연결). 최신 `1202c16`.
 - `docs/specs/BRIEFING-ON-DEMAND-001-briefings-on-demand.md` — **프로젝트 첫 SPEC**. 스케줄 파이프라인 파트 조회/재실행/재전송 공통 플랫폼 설계
 
 ### 미완 또는 의도적 공백
 - `knowledge/canon/*.md` 의 TODO (사용자 주입 대기) — **Top 후보**
 - BRIEFING-ON-DEMAND-001 **구현**(SPEC 뼈대만 완료, 코드 0) — `generates` 10파일 + DB v3 bump
-- `new_candidates[].ticker="000000"` placeholder 문제 (프롬프트 수정 미적용)
+- 종목명→ticker 정확도 본격 개선 (이번 세션은 안전장치만 — placeholder→`""` 정규화). KOSPI/KOSDAQ 시총 상위 시드 테이블 또는 KIS 마스터 연동이 follow-up
 - `scripts/demo.py`, `tests/test_e2e.py`, `server/api/demo.py` 의 `teams.orchestrator` 잔재 (server/main.py 만 try/except 로 회피 중)
 - `docs/STRUCTURE.md` 구버전 (teams/ 기준, 실제는 pipelines/)
-- 09:30 / 13:00 / 16:00 / 19:00 파이프라인 미착수 — BRIEFING-ON-DEMAND v2 로드맵과 짝
+- 09:30 / 13:00 / 16:00 / 19:00 파이프라인 미착수 — BRIEFING-ON-DEMAND v2 로드맵과 짝. close_review(16:00) 가 적중률 사이클의 키스톤
 - GitHub 원격 미연결 (프로토타입 단계, 나중에 결정)
 
 ### 꼭 알아둘 판단
@@ -83,6 +83,9 @@
 - **`docs/a_wanted/user_want_spec.md` 는 매 세션 초반 필수 읽기**. 작업이 프로젝트 본질에서 이탈하지 않도록 기준점 역할.
 
 **이번 세션에 굳힌 판단**
+- **LLM 환각 방지 = "모르는 값은 빈 문자열로 정직하게 표현"**: ticker placeholder(`000000`) 사례에서 도출. 프롬프트 가이드에 명시 + 코드(`_sanitize_new_candidates`)로 강제. 다른 LLM 출력 필드(코드/링크/숫자) 정규화 시 동일 패턴 적용.
+
+**직전 세션에 굳힌 판단** (계속 유효)
 - **브리핑은 2뎁스 멘탈모델**: Level1=파이프라인 유형(장전/장시작/장중/장마감), Level2=파트(overnight/scenario/positions). 단일 레벨로 명령어 펼치면 산만. 텔레그램은 Level1만 노출, 파트는 API/웹앱.
 - **온디맨드 기본은 "즉석 새 run"** (최신 데이터 우선), cache=true 로 재전송 옵션. 과거 날짜 조회는 v1 제외.
 - **텔레그램 수신**: v1 **long-polling** (로컬 개발), v3 webhook push (공개 URL 배포 시점의 최종 목표).
