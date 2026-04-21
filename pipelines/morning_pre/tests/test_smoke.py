@@ -120,3 +120,27 @@ async def test_runner_executes_with_mocks() -> None:
     # notify should produce 3 parts
     parts = result.stages["notify"].data.get("parts") or []
     assert len(parts) == 3
+
+
+def test_sanitize_new_candidates_strips_placeholder_tickers() -> None:
+    from pipelines.morning_pre.stages.analyze import _sanitize_new_candidates
+
+    parsed = {
+        "new_candidates": [
+            {"sector": "반도체장비", "ticker": "000000", "name": "원익IPS", "reason": "x"},
+            {"sector": "AI반도체", "ticker": "------", "name": "한미반도체", "reason": "y"},
+            {"sector": "방산", "ticker": "012450", "name": "한화에어로스페이스", "reason": "z"},
+            {"sector": "?", "ticker": "00000", "name": "  ", "reason": "drop"},
+            {"sector": "조선", "ticker": "  ", "name": "HD현대중공업", "reason": "blank ticker ok"},
+        ]
+    }
+    _sanitize_new_candidates(parsed)
+    cleaned = parsed["new_candidates"]
+
+    assert len(cleaned) == 4  # 4번째는 name 비어 drop
+    assert cleaned[0]["ticker"] == ""
+    assert cleaned[1]["ticker"] == ""
+    assert cleaned[2]["ticker"] == "012450"
+    assert cleaned[3]["ticker"] == ""
+    assert cleaned[0]["name"] == "원익IPS"
+    assert cleaned[3]["name"] == "HD현대중공업"

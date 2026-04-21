@@ -90,6 +90,27 @@ def _parse_llm_response(content: str) -> dict[str, Any]:
     }
 
 
+def _sanitize_new_candidates(parsed: dict[str, Any]) -> None:
+    """Strip placeholder tickers in-place; drop items without a usable name."""
+    candidates = parsed.get("new_candidates")
+    if not isinstance(candidates, list):
+        return
+    cleaned: list[dict[str, Any]] = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        ticker = str(item.get("ticker", "")).strip()
+        if ticker and set(ticker) <= {"0", "-", "_", "?", "x", "X", " "}:
+            ticker = ""
+        item["ticker"] = ticker
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        item["name"] = name
+        cleaned.append(item)
+    parsed["new_candidates"] = cleaned
+
+
 def _normalize_verdict(v: str | None) -> str:
     if not v:
         return "neutral"
@@ -174,6 +195,7 @@ class AnalyzeStage(Stage):
         )
 
         parsed = _parse_llm_response(resp["content"])
+        _sanitize_new_candidates(parsed)
         verdict = _normalize_verdict(parsed.get("verdict"))
         try:
             confidence = min(100, max(0, int(parsed.get("confidence", 50))))
