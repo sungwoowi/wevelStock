@@ -16,8 +16,8 @@ log = get_logger(__name__)
 
 async def _run_pipeline(pipeline_id: str) -> None:
     """Invoked by APScheduler — run a pipeline."""
+    import secrets
     from datetime import datetime, timezone
-    from uuid import uuid4
 
     from pipelines._base import PipelineRunner
     from pipelines._registry import get_pipeline
@@ -27,7 +27,7 @@ async def _run_pipeline(pipeline_id: str) -> None:
         log.error("scheduled_pipeline_not_found", pipeline=pipeline_id)
         return
 
-    run_id = f"{datetime.now(timezone.utc).isoformat()}#sched-{uuid4().hex[:6]}"
+    run_id = f"{datetime.now(timezone.utc).isoformat()}#sched-{secrets.token_hex(3)}"
     runner = PipelineRunner()
     try:
         result = await runner.run(manifest, run_id=run_id)

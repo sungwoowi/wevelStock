@@ -124,6 +124,29 @@ Memory Layer 참조.
 
 ---
 
+## 🆔 Run ID 형식
+
+파이프라인 1회 실행의 식별자. 두 가지 트리거 원천을 `suffix` 로 구분합니다.
+
+```
+<UTC ISO-8601 timestamp>#<source>-<6-hex>
+
+예)
+2026-04-23T09:00:00.123456+00:00#sched-a1b2c3
+2026-04-23T14:15:42.987654+00:00#manual-d4e5f6
+```
+
+| Suffix | 의미 | 생성 위치 |
+|---|---|---|
+| `#sched-<6hex>` | APScheduler cron/interval 트리거 | [server/schedulers/loader.py](../server/schedulers/loader.py) `_run_pipeline` |
+| `#manual-<6hex>` | REST API / 텔레그램 봇 수동 트리거 | [server/api/briefings_on_demand.py](../server/api/briefings_on_demand.py) `briefing_run` |
+
+- 6-hex 는 `secrets.token_hex(3)` 으로 생성 (양쪽 공통).
+- timestamp 는 UTC ISO-8601 (TZ offset 포함).
+- 분석·감사 시 suffix 로 자동/수동 호출을 구분할 수 있어야 합니다.
+
+---
+
 ## 🔁 오케스트레이터 실행 계약
 
 오케스트레이터(`teams/orchestrator/src/agent.py`)가 팀들을 호출할 때:

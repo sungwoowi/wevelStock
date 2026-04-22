@@ -19,11 +19,11 @@ from core.logging import get_logger
 from core.memory.hasher import compute_input_hash
 from core.memory.loader import persist_record
 from core.outputs import persist_output, today_date_string
-from pipelines._base import Stage, StageContext, StageResult
+from pipelines._base import Stage, StageContext, StageResult, pipeline_prompts_dir
 
 log = get_logger(__name__)
 
-PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+PROMPTS_DIR = pipeline_prompts_dir(__file__)
 
 
 def _read_prompt(name: str) -> str:

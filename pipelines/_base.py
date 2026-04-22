@@ -21,6 +21,15 @@ log = get_logger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def pipeline_prompts_dir(stage_file: str | Path) -> Path:
+    """Return the `prompts/` directory of the stage's pipeline.
+
+    Each pipeline stage lives at `pipelines/<id>/stages/<name>.py`, so the
+    prompts directory is always `pipelines/<id>/prompts/`.
+    """
+    return Path(stage_file).resolve().parent.parent / "prompts"
+
+
 # ---------------------------------------------------------------------------
 # Data contracts
 # ---------------------------------------------------------------------------

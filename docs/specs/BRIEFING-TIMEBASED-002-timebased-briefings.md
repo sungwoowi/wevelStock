@@ -278,6 +278,17 @@ User:
 - [ ] 기존 BRIEFING-ON-DEMAND-001 테스트 전부 통과 (회귀 없음)
 - [ ] 신규 테스트: `test_market_briefing.py`, `test_close_briefing.py`, `test_briefing_validation.py` 통과
 
+## 구현 진행 상황
+
+| Phase | 상태 | 완료일 | 메모 |
+|---|---|---|---|
+| Phase 0 — 사전 정리 | ✅ 완료 | 2026-04-23 | `pipeline_prompts_dir()` helper → `pipelines/_base.py`. scheduler·API run_id suffix 둘 다 `secrets.token_hex(3)` 통일. Run ID 형식 규약 → `docs/CONTRACTS.md` |
+| Phase 1 — `/briefing_pre` 09:00 validation | ⏳ 진행 중 | — | — |
+| Phase 2 — `/briefing_now` (market_briefing 신규) | 미착수 | — | — |
+| Phase 3 — `/briefing_close` + RAG | 미착수 | — | — |
+
+---
+
 ## v3 로드맵 (별도 SPEC)
 
 - **적중률 자동 채점**: close_briefing 의 `prediction_review.match_score` 누적 → 주간 리포트
