@@ -62,5 +62,16 @@ stages:
     depends_on: [persist]
     timeout_sec: 20
 
+parts:
+  - key: overnight
+    label: 간밤시황
+    order: 1
+  - key: scenario
+    label: 시나리오+뉴스
+    order: 2
+  - key: positions
+    label: 포지션+신규
+    order: 3
+
 contract_version: "1.0"
 status: active

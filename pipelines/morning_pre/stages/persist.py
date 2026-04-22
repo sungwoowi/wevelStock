@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timezone
 
+from core.briefing import upsert_parts
+from core.contracts.briefing_part import BriefingPart
 from core.db import get_db
 from core.logging import get_logger
 from pipelines._base import Stage, StageContext, StageResult
@@ -22,6 +24,68 @@ log = get_logger(__name__)
 
 # Default quantity for simulated trades when LLM doesn't specify one.
 DEFAULT_SIM_QTY = 10
+
+# briefing_parts 메타 선언 (manifest.yaml 의 parts 와 일치해야 함).
+# 파이프라인 전용 상수 — 다른 파이프라인은 고유 PARTS_META 를 가짐.
+_PARTS_META: list[tuple[str, str, int]] = [
+    ("overnight", "간밤시황", 1),
+    ("scenario", "시나리오+뉴스", 2),
+    ("positions", "포지션+신규", 3),
+]
+
+
+def _build_overnight_data(ctx: StageContext) -> dict:
+    overnight = ctx.get_stage_data("collect_overnight_us") or {}
+    futures = ctx.get_stage_data("collect_night_futures") or {}
+    return {
+        "overnight_us": overnight.get("overnight_us") or {},
+        "macro": overnight.get("macro") or {},
+        "night_futures": futures.get("night_futures") or {},
+    }
+
+
+def _build_scenario_data(ctx: StageContext, briefing: dict) -> dict:
+    news = ctx.get_stage_data("collect_news") or {}
+    return {
+        "scenario": briefing.get("scenario") or {},
+        "news_impact": briefing.get("news_impact") or [],
+        "news_items": news.get("items") or [],
+    }
+
+
+def _build_positions_data(ctx: StageContext, briefing: dict) -> dict:
+    principles = ctx.get_stage_data("check_principles") or {}
+    return {
+        "positions_advice": briefing.get("positions_advice") or [],
+        "new_candidates": briefing.get("new_candidates") or [],
+        "principles": principles,
+    }
+
+
+def _persist_briefing_parts(ctx: StageContext, briefing: dict) -> int:
+    """analyze 결과를 briefing_parts 테이블에 upsert. 저장된 파트 수 반환."""
+    parts = [
+        BriefingPart(
+            key="overnight",
+            label=_PARTS_META[0][1],
+            order=_PARTS_META[0][2],
+            data=_build_overnight_data(ctx),
+        ),
+        BriefingPart(
+            key="scenario",
+            label=_PARTS_META[1][1],
+            order=_PARTS_META[1][2],
+            data=_build_scenario_data(ctx, briefing),
+        ),
+        BriefingPart(
+            key="positions",
+            label=_PARTS_META[2][1],
+            order=_PARTS_META[2][2],
+            data=_build_positions_data(ctx, briefing),
+        ),
+    ]
+    upsert_parts(ctx.pipeline_id, ctx.run_id, parts)
+    return len(parts)
 
 
 def _now_iso() -> str:
@@ -67,6 +131,7 @@ class PersistStage(Stage):
             "news_items": 0,
             "sim_trades": 0,
             "watch_updates": 0,
+            "briefing_parts": 0,
         }
 
         try:
@@ -306,9 +371,20 @@ class PersistStage(Stage):
                 data={"counts": counts},
             )
 
+        # briefing_parts upsert — 기존 DB 쓰기와 독립 트랜잭션.
+        # 실패해도 persist 는 warning 으로 격하하고 나머지 데이터는 유지.
+        status = "ok"
+        briefing_parts_error: str | None = None
+        try:
+            counts["briefing_parts"] = _persist_briefing_parts(ctx, briefing)
+        except Exception as e:  # noqa: BLE001
+            log.warning("briefing_parts_upsert_failed", error=str(e))
+            status = "warning"
+            briefing_parts_error = str(e)
+
         log.info("persist_complete", pipeline=ctx.pipeline_id, **counts)
         return StageResult(
             stage_id=self.stage_id,
-            status="ok",
-            data={"counts": counts},
+            status=status,
+            data={"counts": counts, "briefing_parts_error": briefing_parts_error},
         )

@@ -27,12 +27,17 @@ dependencies = [
     # === 데이터 ===
     "pandas>=2.2",
     "numpy>=1.26",
+    # === 시장 데이터 (morning_pre 필수 — 미국지수/환율/금리/원자재/야간선물) ===
+    "yfinance>=0.2",
+    "fredapi>=0.5",
     # === 유틸 ===
     "httpx>=0.27",
     "tenacity>=8.2",
     "python-frontmatter>=1.1",
     "rich>=13.7",
     "typer>=0.12",
+    # === 텔레그램 봇 (BRIEFING-ON-DEMAND-001) ===
+    "python-telegram-bot>=21.0",
 ]
 
 [project.optional-dependencies]
@@ -46,11 +51,6 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-pyyaml",
-]
-# 추후 KIS/FRED 붙일 때 사용
-market = [
-    "fredapi>=0.5",
-    "yfinance>=0.2",
 ]
 # 로컬 임베딩 (오프라인)
 local-embed = [

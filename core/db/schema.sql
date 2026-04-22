@@ -242,6 +242,25 @@ CREATE TABLE IF NOT EXISTS news_items (
 CREATE INDEX IF NOT EXISTS idx_news_items_run ON news_items (run_id);
 
 -- ============================================================
+-- v3: 브리핑 온디맨드 (briefing_parts)
+-- ============================================================
+-- 파이프라인 1회 실행 = "브리핑". 그 내부 UI 섹션 = "파트".
+-- 같은 LLM 컨텍스트·메모리에서 파생된 하위 조각.
+CREATE TABLE IF NOT EXISTS briefing_parts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_id   TEXT NOT NULL,
+    run_id        TEXT NOT NULL,
+    part_key      TEXT NOT NULL,       -- overnight | scenario | positions | ...
+    part_label    TEXT NOT NULL,
+    part_order    INTEGER NOT NULL,
+    data_json     TEXT NOT NULL,        -- 파트별 구조화 데이터 (JSON 문자열)
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(pipeline_id, run_id, part_key)
+);
+CREATE INDEX IF NOT EXISTS idx_briefing_parts_lookup
+    ON briefing_parts(pipeline_id, created_at DESC);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -251,3 +270,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 INSERT OR IGNORE INTO schema_version (version) VALUES (1);
 INSERT OR IGNORE INTO schema_version (version) VALUES (2);
+INSERT OR IGNORE INTO schema_version (version) VALUES (3);

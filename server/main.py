@@ -1,9 +1,10 @@
 """FastAPI entrypoint — uvicorn server.main:app
 
-Combines REST API + APScheduler + config watchdog in one process.
+Combines REST API + APScheduler + config watchdog + Telegram bot in one process.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -51,10 +52,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("gap_filler_failed", error=str(e))
 
+    # 5. Telegram bot (BRIEFING-ON-DEMAND-001) — long-polling task.
+    # 토큰 미설정 시 build_application() 이 None 반환하여 봇만 비활성.
+    bot_task: asyncio.Task | None = None
+    try:
+        from server.telegram import build_application, run_polling_forever
+
+        bot_app = build_application()
+        if bot_app is not None:
+            bot_task = asyncio.create_task(run_polling_forever(bot_app))
+    except Exception as e:  # noqa: BLE001
+        log.warning("telegram_bot_init_failed", error=str(e))
+
     log.info("server_ready", host=cfg.server.host, port=cfg.server.port)
     yield
 
     log.info("server_stopping")
+    if bot_task is not None:
+        bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning("telegram_bot_shutdown_failed", error=str(e))
     shutdown_scheduler()
     stop_watcher()
 
@@ -76,6 +97,7 @@ app.add_middleware(
 
 # Routes
 from server.api import briefings as briefings_route  # noqa: E402
+from server.api import briefings_on_demand as briefings_on_demand_route  # noqa: E402
 from server.api import config as config_route  # noqa: E402
 from server.api import notifications as notif_route  # noqa: E402
 from server.api import pipelines as pipelines_route  # noqa: E402
@@ -87,6 +109,9 @@ app.include_router(teams_route.router, prefix="/api", tags=["teams"])
 app.include_router(config_route.router, prefix="/api", tags=["config"])
 app.include_router(notif_route.router, prefix="/api", tags=["notifications"])
 app.include_router(briefings_route.router, prefix="/api", tags=["briefings"])
+app.include_router(
+    briefings_on_demand_route.router, prefix="/api", tags=["briefings-on-demand"]
+)
 app.include_router(positions_route.router, prefix="/api", tags=["positions"])
 
 # Legacy demo route depends on the removed teams/ package; load only if importable.

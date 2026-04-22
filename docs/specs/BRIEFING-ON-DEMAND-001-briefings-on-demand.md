@@ -3,7 +3,7 @@ spec_id: BRIEFING-ON-DEMAND-001
 title: 브리핑 온디맨드 — 스케줄 파이프라인의 파트 조회/재실행/재전송 공통 플랫폼
 team: shared
 type: feature
-status: scaffolded
+status: implementing
 version: 1
 owner: platform
 generates:
@@ -28,8 +28,10 @@ modifies:
   - pyproject.toml
 depends_on: []
 contracts:
-  - briefing-part-v1
-  - team-output-v1
+  - name: briefing-part-v1
+    version: "1.0"
+  - name: team-output-v1
+    version: "1.0"
 ---
 
 # BRIEFING-ON-DEMAND-001: 브리핑 온디맨드
