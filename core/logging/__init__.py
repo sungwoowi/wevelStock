@@ -16,6 +16,10 @@ def _configure() -> None:
         stream=sys.stdout,
         level=level,
     )
+    # Suppress httpx/httpcore INFO-level URL logging — prevents leaking the
+    # Telegram bot token (included in request URLs) into logs.
+    for noisy in ("httpx", "httpcore", "telegram.ext"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     fmt = os.environ.get("LOG_FORMAT", "text")
     processors: list = [
         structlog.contextvars.merge_contextvars,

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Callable
@@ -27,6 +28,45 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "config"
 DEFAULTS_PATH = CONFIG_DIR / "defaults.yaml"
 RUNTIME_PATH = CONFIG_DIR / "runtime.yaml"
+
+
+def _main_worktree_root() -> Path:
+    """git common-dir 의 부모 = **메인 worktree** root. 서브 worktree 들이
+    공유하는 루트 경로. `.env` 와 `data/` 가 여기 한 곳에만 있으면 됨.
+
+    git 호출 실패 시 REPO_ROOT (현재 worktree) 로 fallback.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if out.returncode == 0:
+            git_common = Path(out.stdout.strip())
+            if git_common.exists():
+                return git_common.parent
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return REPO_ROOT
+
+
+def _resolve_env_file() -> Path | None:
+    """`.env` 탐색 — 현재 worktree → 메인 worktree 순.
+
+    git worktree 환경에서 서브 worktree 에는 `.env` 를 두지 않고 메인에만
+    둬도 모든 worktree 가 같은 시크릿을 공유.
+    """
+    local = REPO_ROOT / ".env"
+    if local.exists():
+        return local
+    shared = _main_worktree_root() / ".env"
+    if shared.exists():
+        return shared
+    return None
 
 _state_lock = threading.RLock()
 _current_config: RuntimeConfig | None = None
@@ -62,11 +102,14 @@ def load_config() -> RuntimeConfig:
         TIMEZONE        → timezone
         SOURCE_MODE     → source_mode
     """
-    env_file = REPO_ROOT / ".env"
-    if env_file.exists():
-        # override=True: 시스템에 빈값으로 설정된 환경변수(예: Windows 사용자 env)를
-        # .env 파일 값으로 강제 덮어쓰기. 없으면 .env가 무시됨.
-        load_dotenv(env_file, override=True)
+    # 테스트에서는 실 `.env` 자동 탐색을 건너뛴다 — 실 TELEGRAM_BOT_TOKEN 이
+    # 주입되어 테스트가 실제 Telegram 호출을 발생시키는 사고 방지.
+    if not os.environ.get("WEVELSTOCK_SKIP_DOTENV"):
+        env_file = _resolve_env_file()
+        if env_file is not None:
+            # override=True: 시스템에 빈값으로 설정된 환경변수(예: Windows 사용자 env)를
+            # .env 파일 값으로 강제 덮어쓰기. 없으면 .env가 무시됨.
+            load_dotenv(env_file, override=True)
 
     defaults = _load_yaml(DEFAULTS_PATH)
     runtime = _load_yaml(RUNTIME_PATH)
@@ -76,6 +119,18 @@ def load_config() -> RuntimeConfig:
     db_path = os.environ.get("DB_PATH")
     if db_path:
         merged.setdefault("database", {})["path"] = db_path
+
+    # DB path 가 상대경로면 **메인 worktree root** 기준으로 절대화.
+    # env var / yaml / .env 어디서 왔든 동일 적용 → 모든 git worktree 가 같은
+    # SQLite 파일을 공유. 로컬 DB 는 공유가 자연스럽고, 서브 worktree 별로
+    # 갈라지는 건 의도치 않은 격리.
+    cfg_db_path = merged.get("database", {}).get("path")
+    if cfg_db_path and not Path(cfg_db_path).is_absolute():
+        shared_root = _main_worktree_root()
+        merged.setdefault("database", {})["path"] = str(
+            (shared_root / cfg_db_path).resolve()
+        )
+
     if lvl := os.environ.get("LOG_LEVEL"):
         merged.setdefault("logging", {})["level"] = lvl.upper()
     if tz := os.environ.get("TIMEZONE"):
