@@ -104,10 +104,13 @@ BRIEFING-ON-DEMAND-001 v1 은 **단일 파이프라인(morning_pre)** 의 공통
 기존 morning_pre 를 그대로 사용. Validation 로직만 추가.
 
 **Validation**:
-- 현재 시각 `< 09:00 KST` → 실시간 새 run 생성 가능 (현 동작 유지)
-- 현재 시각 `≥ 09:00 KST` → **당일 09:00 이전 마지막 run 을 재전송**. 신규 생성 금지.
+- 현재 시각 `< 09:00 KST` → 실시간 새 run 생성 (현 동작 유지)
+- 현재 시각 `≥ 09:00 KST` + `force=false` (기본) → **당일 09:00 이전 마지막 run 을 재전송**
   - 텔레그램 메시지 상단에 `⏰ 장 시작 전 데이터 기준 (HH:MM 생성)` prefix
-  - 오늘자 09:00 이전 run 이 없으면 → "오늘 장전 브리핑이 생성되지 않았습니다" 안내
+  - 오늘자 09:00 이전 run 이 없으면 → "오늘 장전 브리핑이 생성되지 않았습니다 (`force=true` 로 실시간 실행 가능)" 안내
+- 현재 시각 `≥ 09:00 KST` + `force=true` → **09:00 분기 우회 + LLM 실시간 실행**
+  - 서버 다운 / 주말·공휴일 cron 누락 등으로 아침 보관본이 없을 때 수동 복구용
+  - 텔레그램 `/briefing_pre_force` 전용
 
 ### `/briefing_now` → `market_briefing` (신규)
 
@@ -162,6 +165,8 @@ BRIEFING-ON-DEMAND-001 v1 은 **단일 파이프라인(morning_pre)** 의 공통
 | 15:45 cron | — | — | scheduled run |
 | 15:45~23:59 | 보관본 재전송 | 실시간 | 실시간 |
 
+> 위 표의 `/briefing_pre` 열은 **force=false 기본 호출** 기준. `/briefing_pre_force` (force=true) 는 09:00 이후여도 새 LLM run 실행.
+
 ## API 변경
 
 ### 신규 엔드포인트 없음
@@ -170,15 +175,24 @@ BRIEFING-ON-DEMAND-001 의 `/api/briefings/{pipeline_id}/...` 가 그대로 3개
 
 ### `briefing_run` 확장
 
-`server/api/briefings_on_demand.py::briefing_run` 내부 분기 추가:
+`server/api/briefings_on_demand.py::briefing_run`:
+
+- `force` 파라미터 default 를 `True`→`False` 로 재정의. 의미: **"cache/snapshot 우회 + LLM 실시간 실행"**
+- 09:00 분기는 cache 레이어 **앞**에 배치 — `force=true` 로 방금 만든 post-09:00 run 이 60s cache 에 남아 `force=false` 다음 호출에 새는 것 방지
 
 ```python
-if pipeline_id == "morning_pre" and _now_kst().hour >= 9:
-    # 09:00 이후는 당일 아침 보관본 재전송
-    snapshot = get_last_run_before(pipeline_id, today_9am_kst)
+if pipeline_id == "morning_pre" and not force and _now_kst().hour >= 9:
+    # 09:00 이후 + force=false (기본) = 당일 아침 보관본 재전송
+    snapshot = get_last_run_before(
+        pipeline_id, today_9am_utc, since_iso=today_start_utc
+    )
     if snapshot:
-        return snapshot.as_cached_response(prefix_note="before_market_open")
-    raise 404
+        return BriefingResponse.build(
+            ..., cache_hit=True, note="before_market_open"
+        )
+    raise 404("force=true 로 실시간 실행 가능")
+# force=true 는 아래 cache → DB cache → manifest 실행 플로우로 낙하
+
 if pipeline_id == "market_briefing" and _now_kst().hour < 9:
     raise 400 "use /briefing_pre before 09:00"
 if pipeline_id == "close_briefing" and (_now_kst().hour, _now_kst().minute) < (15, 30):
@@ -186,7 +200,7 @@ if pipeline_id == "close_briefing" and (_now_kst().hour, _now_kst().minute) < (1
 ```
 
 ### `parts_store` 확장
-- `get_last_run_before(pipeline_id, cutoff_iso)` 신규
+- `get_last_run_before(pipeline_id, cutoff_iso, since_iso=None)` 신규. `since_iso` 는 당일 하한 (`[since_iso, cutoff_iso)` 범위 내 최신). `since_iso=None` 이면 하한 없음
 
 ### `BriefingResponse` 확장 (호환 유지)
 - `note: str | None` 필드 추가 — `"before_market_open"` 같은 태그
@@ -196,12 +210,14 @@ if pipeline_id == "close_briefing" and (_now_kst().hour, _now_kst().minute) < (1
 
 | 명령 | 동작 | 처리 경로 |
 |---|---|---|
-| `/briefing_pre` | morning_pre 브리핑 | `briefing_run("morning_pre", force=True)` (09시 이후엔 내부 분기로 보관본) |
-| `/briefing_now` | 실시간 시장 관찰 | `briefing_run("market_briefing", force=True)` |
-| `/briefing_close` | 장 마감 해석 | `briefing_run("close_briefing", force=True)` |
+| `/briefing_pre` | morning_pre 브리핑 (기본=보관본 모드) | `briefing_run("morning_pre", force=False, notify=False)`. 09:00 이후엔 당일 아침 보관본 or 404 |
+| `/briefing_pre_force` | morning_pre 09:00 분기 우회 + LLM 실시간 실행 | `briefing_run("morning_pre", force=True, notify=False)`. 서버 다운/공휴일 등으로 아침 cron 놓친 경우 수동 복구 |
+| `/briefing_now` | 실시간 시장 관찰 (Phase 2 부터 market_briefing) | `briefing_run("market_briefing", force=True, notify=False)` |
+| `/briefing_close` | 장 마감 해석 | `briefing_run("close_briefing", force=True, notify=False)` |
 | `/help` | 명령어 목록 + 각자 성격 설명 | 정적 텍스트 |
-| `/briefing` | **제거 or 안내**: "아래 3개 중 선택하세요" | 텍스트 응답 |
-| `/briefing_now` (구) | **제거** — 이전 v1 의 `/briefing_now` (= force morning_pre) 의미 변경됨 |
+| ~~`/briefing`~~ | **Phase 1 에서 제거됨** — `/briefing_pre` 와 기능 중복 | — |
+
+> 봇 호출은 항상 `notify=False` — 파이프라인 내부 notify stage 가 돌면 봇의 `_send_briefing` 렌더링과 중복 발송 (각 3파트). `notify=True` (default) 는 scheduled cron 경로 전용.
 
 > 주의: `/briefing_now` 명령어는 v1 에서 "morning_pre force" 였는데 v2 에서 "market_briefing force" 로 **의미가 바뀜**. 이는 v1 을 사용 중이던 사용자에게는 breaking change. 혼자 쓰는 프로젝트라 즉시 전환 허용.
 

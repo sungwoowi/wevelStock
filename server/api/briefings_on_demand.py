@@ -16,10 +16,12 @@ import secrets
 import time
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 
 from core.briefing import (
+    get_last_run_before,
     get_latest_parts,
     get_latest_parts_with_age,
     get_parts_by_run,
@@ -51,6 +53,14 @@ _run_locks: dict[str, asyncio.Lock] = {}
 
 def _time_source() -> float:
     return time.monotonic()
+
+
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def _now_kst() -> datetime:
+    """KST 기준 현재 시각. 테스트에서 monkeypatch 포인트."""
+    return datetime.now(_KST)
 
 
 def _cache_key(pipeline_id: str, force: bool) -> str:
@@ -157,10 +167,17 @@ async def briefing_latest_part(pipeline_id: str, key: str) -> dict[str, Any]:
 @router.post("/{pipeline_id}/run", response_model=BriefingResponse)
 async def briefing_run(
     pipeline_id: str,
-    force: bool = Query(True, description="true=새 run 실행 (default)"),
+    force: bool = Query(
+        False,
+        description="true=LLM 실시간 실행, 09:00 이후 보관본 분기 우회",
+    ),
     cache: bool = Query(False, description="true=최근 run 재사용"),
+    notify: bool = Query(
+        True,
+        description="false=파이프라인 내부 notify stage 스킵 (봇이 자체 렌더링하는 경로)",
+    ),
 ) -> BriefingResponse:
-    """`cache=true` → 최근 run 재사용. 기본 `force=true` → 새 run 실행."""
+    """기본: 09:00 이후 morning_pre 는 당일 아침 보관본 반환 / `cache=true` → 최근 run / `force=true` → 실시간 실행."""
     if cache:
         latest = get_latest_parts(pipeline_id)
         if latest is None:
@@ -175,6 +192,51 @@ async def briefing_run(
             parts=parts,
             cache_hit=True,
         )
+
+    # 장전 브리핑은 09:00 KST 이후엔 당일 아침 보관본 재전송 — LLM 재실행 방지.
+    # `force=true` 는 우회 (수동 LLM 실행. 서버 다운 등으로 아침 cron 놓친 경우).
+    # cache 레이어 앞에 배치 — force=true 로 방금 생성한 post-09:00 run 이
+    # 60s cache 에 남아 force=false 호출에 새는 것 방지.
+    if pipeline_id == "morning_pre" and not force:
+        now_kst = _now_kst()
+        if now_kst.hour >= 9:
+            today_midnight_kst = now_kst.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            today_9am_kst = now_kst.replace(
+                hour=9, minute=0, second=0, microsecond=0
+            )
+            today_start_utc = today_midnight_kst.astimezone(
+                timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            cutoff_utc = today_9am_kst.astimezone(timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            snapshot = get_last_run_before(
+                "morning_pre", cutoff_utc, since_iso=today_start_utc
+            )
+            if snapshot is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        "오늘 09:00 이전 장전 브리핑 보관본이 없습니다. "
+                        "force=true 로 실시간 실행 가능."
+                    ),
+                )
+            snap_run_id, snap_parts = snapshot
+            log.info(
+                "briefing_run_preserved_snapshot",
+                pipeline=pipeline_id,
+                run_id=snap_run_id,
+                now_kst=now_kst.isoformat(),
+            )
+            return BriefingResponse.build(
+                pipeline_id=pipeline_id,
+                run_id=snap_run_id,
+                parts=snap_parts,
+                cache_hit=True,
+                note="before_market_open",
+            )
 
     key = _cache_key(pipeline_id, force)
     cached = _cache_get(key)
@@ -208,7 +270,11 @@ async def briefing_run(
             + f"#manual-{secrets.token_hex(3)}"
         )
         runner = PipelineRunner()
-        pipeline_result = await runner.run(manifest, run_id=run_id)
+        pipeline_result = await runner.run(
+            manifest,
+            run_id=run_id,
+            input_data={"skip_notify": not notify},
+        )
 
         if pipeline_result.errors:
             log.error(

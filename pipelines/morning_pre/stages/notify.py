@@ -34,6 +34,20 @@ class NotifyStage(Stage):
     stage_type = "act"
 
     async def run(self, ctx: StageContext) -> StageResult:
+        # 수동 트리거 (봇/API 의 /run?notify=false) 시 파이프라인 notify 스킵.
+        # 호출자가 자체 렌더링하는 경로에서 이중 발송 방지.
+        if ctx.data.get("skip_notify"):
+            log.info(
+                "notify_skipped",
+                pipeline=ctx.pipeline_id,
+                reason="skip_notify_flag",
+            )
+            return StageResult(
+                stage_id=self.stage_id,
+                status="ok",
+                data={"skipped": True},
+            )
+
         parts = get_parts_by_run(ctx.pipeline_id, ctx.run_id)
         if not parts:
             log.warning("notify_no_parts", run_id=ctx.run_id)

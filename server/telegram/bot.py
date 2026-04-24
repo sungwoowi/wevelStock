@@ -44,13 +44,15 @@ def build_application() -> Application | None:
     from telegram.ext import CommandHandler
 
     from server.telegram.commands import (
-        cmd_briefing,
         cmd_briefing_now,
+        cmd_briefing_pre,
+        cmd_briefing_pre_force,
         cmd_help,
     )
 
     app = Application.builder().token(token).build()
-    app.add_handler(CommandHandler("briefing", cmd_briefing))
+    app.add_handler(CommandHandler("briefing_pre", cmd_briefing_pre))
+    app.add_handler(CommandHandler("briefing_pre_force", cmd_briefing_pre_force))
     app.add_handler(CommandHandler("briefing_now", cmd_briefing_now))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("start", cmd_help))
@@ -62,7 +64,8 @@ async def _setup_bot_commands(app: Application) -> None:
     try:
         await app.bot.set_my_commands(
             [
-                BotCommand("briefing", "오늘자 최근 브리핑 재전송"),
+                BotCommand("briefing_pre", "장전 브리핑 (09:00 이후엔 아침 보관본)"),
+                BotCommand("briefing_pre_force", "09:00 이후 LLM 실시간 실행 (~30s)"),
                 BotCommand("briefing_now", "지금 기준으로 새 브리핑 실행 (~30s)"),
                 BotCommand("help", "명령어 목록"),
             ]

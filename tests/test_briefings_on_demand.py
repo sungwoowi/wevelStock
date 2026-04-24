@@ -50,7 +50,14 @@ def _sample_parts() -> list[BriefingPart]:
 
 @pytest.fixture(autouse=True)
 def _reset_cache_and_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    """각 테스트마다 briefing_parts 초기화 + in-memory 캐시 초기화."""
+    """각 테스트마다 briefing_parts 초기화 + in-memory 캐시 초기화.
+
+    기본 KST 시각 08:00 고정 — morning_pre 09:00 보관본 분기 회피. 분기 검증
+    테스트는 각자 `_now_kst` 를 재monkeypatch.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
     from core.db import get_db
     from server.api import briefings_on_demand as mod
 
@@ -59,6 +66,11 @@ def _reset_cache_and_db(monkeypatch: pytest.MonkeyPatch) -> None:
         conn.execute("DELETE FROM briefing_parts")
     mod._run_cache.clear()
     mod._run_locks.clear()
+    monkeypatch.setattr(
+        mod,
+        "_now_kst",
+        lambda: datetime(2026, 4, 24, 8, 0, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+    )
 
 
 @pytest.fixture
@@ -333,3 +345,153 @@ def test_run_force_db_cache_expires_after_ttl(
     assert body["cache_hit"] is False
     assert body["run_id"] != "stale_run"
     assert counter["n"] == 1
+
+
+# ----------------------------------------------------------------------------
+# Phase 1 (M3/M3.5): morning_pre 09:00 KST 이후 validation
+# ----------------------------------------------------------------------------
+
+
+def _freeze_now_kst(monkeypatch: pytest.MonkeyPatch, hour: int) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from server.api import briefings_on_demand as mod
+
+    monkeypatch.setattr(
+        mod,
+        "_now_kst",
+        lambda: datetime(
+            2026, 4, 24, hour, 0, 0, tzinfo=ZoneInfo("Asia/Seoul")
+        ),
+    )
+
+
+def _insert_today_morning_snapshot(run_id: str) -> None:
+    """당일 07:00 KST = 어제 22:00 UTC 에 보관본 하나 넣기."""
+    from core.db import get_db
+
+    upsert_parts("morning_pre", run_id, _sample_parts())
+    db = get_db()
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE briefing_parts SET created_at='2026-04-23 22:00:00' "
+            "WHERE run_id = ?",
+            (run_id,),
+        )
+
+
+def test_run_without_force_after_9am_returns_snapshot(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _freeze_now_kst(monkeypatch, hour=10)
+    _insert_today_morning_snapshot("snap_run")
+
+    r = client.post("/api/briefings/morning_pre/run")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] == "snap_run"
+    assert body["note"] == "before_market_open"
+    assert body["cache_hit"] is True
+
+
+def test_run_without_force_after_9am_no_snapshot_returns_404(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _freeze_now_kst(monkeypatch, hour=10)
+
+    r = client.post("/api/briefings/morning_pre/run")
+    assert r.status_code == 404
+    assert "force=true" in r.json()["detail"]
+
+
+def test_run_force_after_9am_bypasses_snapshot(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """보관본 있어도 force=true 면 실시간 새 run 실행."""
+    _freeze_now_kst(monkeypatch, hour=10)
+    _insert_today_morning_snapshot("snap_run")
+    _install_fake_runner(monkeypatch)
+
+    r = client.post("/api/briefings/morning_pre/run?force=true")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["run_id"] != "snap_run"
+    assert body.get("note") is None
+    assert body["cache_hit"] is False
+
+
+# ----------------------------------------------------------------------------
+# M6: 이중 발송 방지 — notify 쿼리 파라미터
+# ----------------------------------------------------------------------------
+
+
+def _install_capturing_runner(
+    monkeypatch: pytest.MonkeyPatch, captured: dict
+) -> None:
+    from pipelines._base import PipelineRunner
+
+    async def fake_run(
+        self: Any,
+        manifest: PipelineManifest,
+        *,
+        input_data: dict | None = None,
+        run_id: str | None = None,
+    ) -> PipelineResult:
+        captured["input_data"] = input_data or {}
+        assert run_id is not None
+        upsert_parts(manifest.id, run_id, _sample_parts())
+        result = PipelineResult(pipeline_id=manifest.id, run_id=run_id)
+        result.stages["analyze"] = StageResult(
+            stage_id="analyze",
+            status="ok",
+            data={"metadata": {"model": "gemini-2.5-pro"}},
+        )
+        return result
+
+    monkeypatch.setattr(PipelineRunner, "run", fake_run)
+
+
+def test_run_notify_false_passes_skip_notify_true_to_runner(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """notify=false 쿼리 → runner input_data 에 skip_notify=True 전달."""
+    captured: dict = {}
+    _install_capturing_runner(monkeypatch, captured)
+
+    r = client.post(
+        "/api/briefings/morning_pre/run?force=true&notify=false"
+    )
+    assert r.status_code == 200
+    assert captured["input_data"].get("skip_notify") is True
+
+
+def test_run_notify_default_passes_skip_notify_false(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """notify 기본 true → skip_notify=False (scheduled cron 경로 호환)."""
+    captured: dict = {}
+    _install_capturing_runner(monkeypatch, captured)
+
+    r = client.post("/api/briefings/morning_pre/run?force=true")
+    assert r.status_code == 200
+    assert captured["input_data"].get("skip_notify") is False
+
+
+def test_notify_stage_skips_when_skip_notify_flag_set() -> None:
+    """morning_pre notify stage 가 skip_notify=True 이면 early return."""
+    import asyncio
+
+    from pipelines._base import StageContext
+    from pipelines.morning_pre.stages.notify import NotifyStage
+
+    stage = NotifyStage()
+    ctx = StageContext(
+        run_id="test_run",
+        pipeline_id="morning_pre",
+        date="2026-04-25",
+        data={"skip_notify": True},
+    )
+    result = asyncio.run(stage.run(ctx))
+    assert result.status == "ok"
+    assert result.data.get("skipped") is True

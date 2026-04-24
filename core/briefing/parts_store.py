@@ -107,6 +107,35 @@ def get_latest_parts_with_age(
     return run_id, get_parts_by_run(pipeline_id, run_id), age
 
 
+def get_last_run_before(
+    pipeline_id: str,
+    cutoff_iso: str,
+    since_iso: str | None = None,
+) -> tuple[str, list[BriefingPart]] | None:
+    """`[since_iso, cutoff_iso)` 범위 내 가장 최근 run 의 (run_id, parts). 없으면 None.
+
+    `cutoff_iso` / `since_iso` 는 SQLite `datetime('now')` 포맷
+    (`'YYYY-MM-DD HH:MM:SS'`, UTC) 과 비교. 호출자가 KST 시각을 UTC 로 변환해 전달.
+    `since_iso=None` 이면 하한 없음 (전체 과거).
+    """
+    db = get_db()
+    row = db.fetch_one(
+        """
+        SELECT run_id
+        FROM briefing_parts
+        WHERE pipeline_id = ? AND created_at < ?
+          AND (? IS NULL OR created_at >= ?)
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (pipeline_id, cutoff_iso, since_iso, since_iso),
+    )
+    if row is None:
+        return None
+    run_id: str = row["run_id"]
+    return run_id, get_parts_by_run(pipeline_id, run_id)
+
+
 def get_part(pipeline_id: str, run_id: str, key: str) -> BriefingPart | None:
     """단일 파트 조회."""
     db = get_db()

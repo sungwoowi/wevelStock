@@ -4,6 +4,7 @@
 - `parts_store` : briefing_parts 테이블 upsert/조회
 """
 from core.briefing.parts_store import (
+    get_last_run_before,
     get_latest_parts,
     get_latest_parts_with_age,
     get_part,
@@ -25,6 +26,7 @@ __all__ = [
     "upsert_parts",
     "get_latest_parts",
     "get_latest_parts_with_age",
+    "get_last_run_before",
     "get_parts_by_run",
     "get_part",
 ]

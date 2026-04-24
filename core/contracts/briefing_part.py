@@ -39,6 +39,7 @@ class BriefingResponse(BaseModel):
     status: BriefingStatus = "ok"
     cache_hit: bool = False
     parts: list[BriefingPart] = Field(default_factory=list)
+    note: str | None = None  # e.g. "before_market_open" — renderer hint
     contract_version: str = CONTRACT_VERSION
 
     @field_validator("generated_at")
@@ -62,6 +63,7 @@ class BriefingResponse(BaseModel):
         status: BriefingStatus = "ok",
         cache_hit: bool = False,
         generated_at: str | None = None,
+        note: str | None = None,
     ) -> BriefingResponse:
         if generated_at is None:
             generated_at = datetime.now(timezone.utc).astimezone().isoformat()
@@ -72,6 +74,7 @@ class BriefingResponse(BaseModel):
             status=status,
             cache_hit=cache_hit,
             parts=parts,
+            note=note,
         )
 
 
