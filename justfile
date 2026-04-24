@@ -1,6 +1,10 @@
 # wevelStock — 크로스 플랫폼 태스크 러너
 # 사용: just <command> [args]
 
+# 메인 worktree 의 .venv 를 모든 worktree 에서 공유.
+# worktree 안에서도 uv/python 이 항상 같은 가상환경을 보도록 강제 (google-genai 등 deps 재설치 불필요).
+export VIRTUAL_ENV := `git rev-parse --git-common-dir | sed 's,/\.git/*$,,'` + "/.venv"
+
 # 기본: 명령 목록 출력
 default:
     @just --list
