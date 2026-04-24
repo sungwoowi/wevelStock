@@ -29,12 +29,6 @@ server:
 server-prod:
     uv run uvicorn server.main:app --host 0.0.0.0 --port 8000 --workers 1
 
-# === 데모 ===
-
-# E2E 데모 실행 (scenario: normal | over-allocation | no-stop-loss | emotional)
-demo scenario="over-allocation":
-    uv run python -m scripts.demo {{scenario}}
-
 # === 스캐폴딩 ===
 
 # 새 팀 생성 (runtime: rule | llm | hybrid)
@@ -69,13 +63,13 @@ domain-doc spec_id:
 test:
     uv run pytest
 
-# 팀별 테스트
-test-team team:
-    uv run pytest teams/{{team}}/tests
+# 파이프라인별 테스트
+test-pipeline name:
+    uv run pytest pipelines/{{name}}/tests
 
 # 커버리지
 test-cov:
-    uv run pytest --cov=core --cov=teams --cov=server --cov-report=html
+    uv run pytest --cov=core --cov=pipelines --cov=server --cov-report=html
 
 # === 지식 레이어 ===
 
@@ -99,7 +93,7 @@ knowledge-browse team query:
 
 lint:
     uv run ruff check .
-    uv run mypy core server teams scripts
+    uv run mypy core server pipelines scripts
 
 fmt:
     uv run ruff format .

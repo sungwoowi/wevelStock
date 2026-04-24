@@ -1,1 +1,1 @@
-"""Server-side orchestration hooks (delegates to teams.orchestrator)."""
+"""Server-side orchestration hooks (reserved namespace for pipeline runner helpers)."""

@@ -1,6 +1,6 @@
 # 📐 STRUCTURE.md — 폴더 규약의 원천
 
-> **이 문서가 프로젝트의 모든 폴더 규칙의 기준입니다.** 
+> **이 문서가 프로젝트의 모든 폴더 규칙의 기준입니다.**
 > 어디에 파일을 둘지, 어떤 이름을 쓸지 결정할 때 항상 이 문서를 참조합니다.
 
 ---
@@ -8,100 +8,148 @@
 ## 🎯 5가지 설계 원칙 (북극성)
 
 1. **자명성(Self-evidence)** — 폴더 이름만 봐도 역할이 드러나야 한다.
-2. **대칭성(Symmetry)** — 모든 팀·컴포넌트는 동일한 내부 구조를 가진다.
-3. **격리(Isolation)** — 팀은 다른 팀의 코드를 import 하지 않는다. DB·계약으로만 통신.
+2. **대칭성(Symmetry)** — 모든 파이프라인·컴포넌트는 동일한 내부 구조를 가진다.
+3. **격리(Isolation)** — 파이프라인은 다른 파이프라인의 코드를 import 하지 않는다. 공용은 `collectors/`·`checkers/`·DB·계약으로만 통신.
 4. **추적성(Traceability)** — SPEC ↔ 코드 ↔ 테스트가 양방향으로 연결된다.
 5. **검증성(Verifiability)** — `just validate` 하나로 모든 규약이 자동 검증된다.
 
 ---
 
-## 🏛️ 최상위 폴더 (6개 역할)
+## 🏛️ 최상위 폴더
 
 | 폴더 | 역할 | 특징 |
 |---|---|---|
-| `teams/` | 🤖 AI 에이전트 팀 (분석/판단) | 각 팀이 `manifest.yaml`에 schedule 선언 |
-| `mcp-servers/` | 🔌 외부 세계 연결 도구 | 별도 프로세스 (MCP 프로토콜) |
-| `server/` | 🖥️ 상주 런타임 | FastAPI + APScheduler + 오케스트레이터 |
+| `pipelines/` | 🔀 시간대별 AI 판단 파이프라인 | 각 파이프라인이 `manifest.yaml`에 stages + schedule 선언 |
+| `collectors/` | 📥 공용 데이터 수집 라이브러리 | 파이프라인 간 import 허용되는 무상태 함수 모듈 |
+| `checkers/` | ✅ 공용 규칙/원칙 체커 | 7계명, 손절 체크 등 순수 로직 |
+| `connectors/` | 🔌 외부 API 커넥터 | KIS / yfinance 등 외부 시스템 어댑터 |
+| `mcp-servers/` | 🔌 MCP 프로토콜 서버 | 별도 프로세스 |
+| `server/` | 🖥️ 상주 런타임 | FastAPI + APScheduler + 텔레그램 봇 |
 | `webapp/` | 🌐 UI (Next.js) | `server/api`를 HTTP로 호출만 함 |
-| `core/` | 🧱 공유 라이브러리 | 모든 팀이 의존 |
+| `core/` | 🧱 공유 라이브러리 | contracts / db / llm / memory / knowledge / config / logging / notification |
 | `docs/` | 📘 사람용 문서 | 규약, SPEC, 도메인 문서 |
 
 보조 폴더:
 - `config/` — 운영 설정 (동적 리로드 대상)
-- `knowledge/` — 팀 공용 기본 자료
+- `knowledge/` — 팀 공용 기본 자료 (canon/, reference/)
 - `data/` — 런타임 데이터 (gitignore)
 - `scripts/` — 개발·운용 도구
-- `tests/` — E2E 테스트 (팀 단위는 각 팀 폴더)
+- `tests/` — 레포 전역 테스트 (파이프라인 단위는 각 파이프라인 폴더)
 - `.claude/` — Claude Code 설정
 
 **규칙**: 하나의 모듈은 **하나의 폴더 역할**에만 속한다. 어디에 둘지 모호하다면 STRUCTURE.md를 다시 읽는다.
 
 ---
 
-## 🤖 팀 표준 레이아웃 (teams/<team-id>/)
+## 🔀 파이프라인 표준 레이아웃 (pipelines/<pipeline-id>/)
 
-모든 팀은 이 구조를 **100% 동일하게** 따른다. `scripts/validate.py` 가 자동 검증.
+모든 파이프라인은 이 구조를 따른다. `scripts/validate.py` 가 자동 검증.
 
 ```
-teams/<team-id>/
-├── CLAUDE.md                 # 이 팀의 AI 컨텍스트 (짧고 명확)
-├── persona.md                # LLM 주입용 페르소나 (LLM 팀만)
-├── manifest.yaml             # ★ 팀 메타데이터 (스케줄/메모리/지식 선언)
-├── CHANGELOG.md              # 이 팀의 변경 이력
-├── specs/                    # 이 팀 전용 SPEC
-│   ├── <PREFIX>-001-*.md
-│   └── <PREFIX>-002-*.md
-├── src/
+pipelines/<pipeline-id>/
+├── __init__.py
+├── manifest.yaml             # ★ 파이프라인 메타 (stages + schedule + parts)
+├── stages/                   # ★ 각 stage = 단일 책임 모듈
 │   ├── __init__.py
-│   ├── agent.py              # ★ 표준 진입점: class Agent: async def run(input) -> Output
-│   ├── prompts/              # (LLM 팀) 프롬프트 템플릿
-│   └── <module>.py           # 기타 구현
-├── knowledge/                # 이 팀 전용 학습 자료
-│   ├── sources/              # 원본 (PDF/MD/YouTube urls.txt)
-│   ├── compiled.md           # Canon (LLM으로 압축된 핵심 프레임워크)
-│   ├── vector-index/         # Chroma DB (gitignore)
-│   └── templates/            # 프롬프트/롤업 템플릿
+│   ├── collect_<x>.py        # type: collect  — 외부/DB 수집
+│   ├── check_<y>.py          # type: check    — 규칙·불변식 검증
+│   ├── analyze.py            # type: analyze  — LLM 판단 (runtime: llm)
+│   ├── persist.py            # type: act      — DB 저장 (briefing_parts 등)
+│   └── notify.py             # type: act      — 텔레그램/파일 알림
+├── prompts/                  # (runtime: llm 가진 stage 있을 때) 프롬프트 템플릿
+│   └── *.md                  # stages/analyze.py 가 pipeline_prompts_dir() 로 자동 해결
 └── tests/
-    ├── test_agent.py         # 팀 전체 계약 테스트
-    └── test_<module>.py
+    ├── test_<stage>.py
+    └── test_smoke.py         # 파이프라인 전체 스모크
 ```
-
-### 필수 파일 체크리스트
-- [x] `CLAUDE.md`
-- [x] `manifest.yaml`
-- [x] `src/agent.py` (표준 Agent 클래스)
-- [x] `tests/test_agent.py` (계약 테스트)
-- [x] `CHANGELOG.md`
-- [x] `persona.md` — LLM 팀만
 
 ### `manifest.yaml` 필수 필드
+
 ```yaml
-id: <team-id>              # 폴더 이름과 일치
-name: <한글 이름>
-type: team-agent
-runtime: rule | llm | hybrid
-inputs:
-  - source: ...            # mcp:<name> | db | seed | user
-    ...
-outputs:
-  - target: db
-    tables: [team_outputs, ...]
-schedule:                  # 선택. 없으면 수동/이벤트 트리거
+id: morning_pre                 # 폴더 이름과 일치 (snake_case)
+name: "07:00 장전 브리핑"
+
+schedule:                       # 선택. 없으면 수동/이벤트 트리거
   - trigger: cron | interval | event
-    expr: "..."
+    expr: "0 7 * * 1-5"
     timezone: Asia/Seoul
+
+knowledge:                      # 선택. 지식 레이어 활성화
+  shared_canon: true
+  rag_enabled: false
+
+stages:                         # ★ 실행 그래프. depends_on + parallel_with 로 DAG 정의
+  - id: <stage-id>
+    module: stages.<module_name>
+    type: collect | check | analyze | act
+    runtime: llm                # 선택. llm 호출 stage만
+    depends_on: [...]           # 선택. 선행 stage id 목록
+    parallel_with: <stage-id>   # 선택. 같이 시작 가능
+    timeout_sec: <int>
+    memory:                     # 선택. analyze 등에서 컨텍스트 주입
+      context_id: <key>
+      budget_tokens: <int>
+
+parts:                          # 선택. 브리핑 파이프라인이 산출하는 파트 목록
+  - key: overnight
+    label: 간밤시황
+    order: 1
+
 contract_version: "1.0"
-depends_on: []             # 다른 팀의 코드 import 금지. 의존 "테이블/계약" 만 명시.
-status: planned | scaffolded | implemented | verified
-owner: <사람 또는 팀>
-memory:                    # 선택. 기본값은 core 기본값 적용
-  enabled: true
-  retention: { raw_days: 180, ... }
-  context_budget_tokens: 4000
-knowledge:                 # 선택. knowledge 레이어 활성화
-  canon: { version: 1, path: knowledge/compiled.md, token_budget: 8000 }
-  reference: { enabled: true, retrieval_top_k: 3 }
+status: draft | scaffolded | active | deprecated
 ```
+
+### 필수 체크리스트
+- [x] `__init__.py`
+- [x] `manifest.yaml` — id 가 폴더명과 일치
+- [x] `stages/` 내 manifest 가 참조하는 모든 module 존재
+- [x] `tests/` — 최소 1개 smoke test
+- [x] snake_case 폴더명 (파이썬 패키지 호환)
+
+### 파이프라인 간 규칙
+- **다른 파이프라인의 `stages/` 를 import 하지 않는다.** 공용 로직은 `collectors/`·`checkers/` 로만.
+- 파이프라인 간 통신은 DB (team_outputs, briefing_parts, 등) 또는 계약 JSON 으로만.
+
+---
+
+## 📥 collectors/ — 공용 데이터 수집 라이브러리
+
+```
+collectors/
+├── __init__.py
+├── us_markets.py              # 미국 야간 시황 + 원달러
+├── kr_futures.py              # 코스피 야간 선물
+├── news_rss.py                # 뉴스 RSS
+└── fear_greed.py              # CNN Fear & Greed (비공식 API)
+```
+
+**규칙**: 파이프라인의 stage 가 얇게 래핑해서 쓴다. 무상태 함수 중심. 외부 API 호출은 `connectors/` 를 경유.
+
+---
+
+## ✅ checkers/ — 공용 규칙/원칙 체커
+
+```
+checkers/
+├── __init__.py
+├── commandments/              # 7계명 각 조항별 순수 체커
+└── principles.py              # 원칙팀 진입점
+```
+
+**규칙**: LLM 호출 없음. 입력 → bool/verdict 반환. 테스트하기 쉬운 순수 함수.
+
+---
+
+## 🔌 connectors/ — 외부 API 커넥터
+
+```
+connectors/
+├── __init__.py
+├── kis/                       # 한국투자증권 OpenAPI (주문 금지, paper 모드만)
+└── yfinance/                  # Yahoo Finance
+```
+
+**규칙**: 외부 SDK 의 얇은 래퍼. 에러 정규화·재시도·토큰 갱신 등 외부 시스템 어댑터 역할만.
 
 ---
 
@@ -123,39 +171,37 @@ mcp-servers/<id>/
 ## 📜 SPEC 문서 규약
 
 ### 파일명: `<PREFIX>-<NNN>-<slug>.md`
-- PREFIX = 팀 ID 대문자 또는 특별 분류
-  - 예: `PRINCIPLE`, `MACRO`, `TECH`, `BRIEFING`
+- PREFIX = 특별 분류 또는 파이프라인 관련 키워드
+  - 예: `BRIEFING`, `PRINCIPLE`, `MACRO`, `TECH`
   - 전역: `GLOBAL`, 계약: `CONTRACT`, 인프라: `INFRA`
-- `NNN` = 팀별 3자리 순번 (001부터)
+- `NNN` = 3자리 순번 (001부터)
 - `<slug>` = kebab-case 짧은 제목
 
-예: `PRINCIPLE-001-seven-commandments-checker.md`, `CONTRACT-001-team-output-v1.md`
+예: `BRIEFING-ON-DEMAND-001-briefings-on-demand.md`, `CONTRACT-001-team-output-v1.md`
 
 ### 위치
 | SPEC 범위 | 위치 |
 |---|---|
-| 단일 팀 전용 | `teams/<team-id>/specs/` |
-| 여러 팀 공유 | `docs/specs/` |
+| 전역 / 여러 파이프라인 공유 | `docs/specs/` |
 | 계약(프로토콜) | `docs/specs/CONTRACT-*.md` |
 | 인프라(core/server) | `docs/specs/INFRA-*.md` |
 
 ### 필수 Frontmatter
 ```yaml
 ---
-spec_id: PRINCIPLE-001
-title: 7계명 체커
-team: principles
+spec_id: BRIEFING-ON-DEMAND-001
+title: 온디맨드 브리핑
 type: feature            # feature | refactor | infra | protocol
 status: draft            # draft | approved | implementing | implemented | verified
 generates:               # ★ 이 SPEC이 만들 파일들 (validate.py가 검증)
-  - teams/principles/src/commandments/weight_limit.py
-  - teams/principles/tests/test_commandments.py
+  - core/briefing/render.py
+  - server/api/briefings_on_demand.py
 modifies:                # 수정할 기존 파일 (있으면)
   - core/db/schema.sql
 depends_on:              # 선행 SPEC
   - INFRA-001
 contracts:               # 따르는 계약
-  - contract: team-output-v1
+  briefing_part: briefing-part-v1
 ---
 ```
 
@@ -175,13 +221,14 @@ AI는 `INTERVIEW-SLOT` 마커가 있는 영역만 수정하고 나머지는 건�
 
 ## 🔗 계약 레이어 (core/contracts/)
 
-팀 간 통신은 **Pydantic 모델로 정의된 계약**을 통해서만 이루어집니다.
+파이프라인 간 통신은 **Pydantic 모델로 정의된 계약**을 통해서만.
 
 | 계약 | 파일 | 설명 |
 |---|---|---|
-| StandardOutput | `core/contracts/team_output.py` | 모든 팀 출력의 표준 형식 |
+| StandardOutput | `core/contracts/team_output.py` | 팀/파이프라인 출력의 표준 형식 |
+| BriefingPart | `core/contracts/briefing_part.py` | 브리핑 파트 (parts_store upsert 단위) |
 | SpecFrontmatter | `core/contracts/spec_frontmatter.py` | SPEC 메타 파서 |
-| MemoryRecord | `core/contracts/memory.py` | 팀 메모리 레코드 |
+| MemoryRecord | `core/contracts/memory.py` | 메모리 레이어 레코드 |
 | KnowledgeChunk | `core/contracts/knowledge.py` | RAG 청크 메타 |
 
 **규칙**: 계약 변경 시 `contract_version`을 올리고, 하위 호환성 또는 마이그레이션 경로를 명시합니다.
@@ -198,7 +245,7 @@ config/
 
 - `.env` = 시크릿 (API 키 등). git에 절대 올리지 않음.
 - `config/runtime.yaml` = 운영 설정 (임계값, 스케줄, 알림 포맷).
-- 코드에서는 `from core.config import config` 로 타입 안전하게 접근.
+- 코드에서는 `from core.config import get_config` 로 타입 안전하게 접근.
 - 잘못된 YAML 저장 시 → **이전 설정 유지 + 에러 로그** (안전 실패).
 
 ---
@@ -210,7 +257,7 @@ data/
 ├── db/stock-advisor.sqlite    # 메인 SQLite DB
 ├── backups/                   # 일별 DB 백업 (30일 보관)
 ├── reports/                   # 생성된 리포트 (마크다운)
-├── memory/<team>/YYYY-MM-DD.md   # 팀별 일일 narrative
+├── memory/<context>/YYYY-MM-DD.md   # 일일 narrative
 ├── notifications/*.jsonl      # Telegram 미설정 시 알림 폴백
 ├── seed/                      # 시드 데이터 (mock_portfolio.json 등) — 커밋함
 └── snapshots/last_snapshot.json  # 갭필링용 상태
@@ -224,31 +271,19 @@ data/
 
 ```
 core/
-├── db/               # SQLite 연결, 마이그레이션
-├── contracts/        # Pydantic 계약 모델
-├── llm/              # LLM 클라이언트 (Anthropic 중심 + Prompt Caching)
-├── memory/           # LLM 맥락 메모리 레이어
-│   ├── loader.py     # 계층별 컨텍스트 조회 + 토큰 예산 내 추리기
-│   ├── composer.py   # system_prompt 조립
-│   ├── rollup.py     # 일/주/월 롤업 생성
-│   ├── cleanup.py    # 보관기간 경과 pruning
-│   ├── cache.py      # LLM 호출 캐시 (멱등성)
-│   └── hasher.py     # input_hash 정규화/계산
-├── knowledge/        # RAG 지식 레이어
-│   ├── ingest.py     # 자료 수집 + 텍스트 추출
-│   ├── chunk.py      # 청킹
-│   ├── embed.py      # Embedding
-│   ├── store.py      # Chroma DB
-│   ├── retrieve.py   # 유사도 검색
-│   ├── compile.py    # Canon 생성
-│   └── manifest.py   # 팀별 자료 카탈로그
-├── config/           # 통합 Config + 동적 리로드
-├── logging/          # 구조화 로거
-├── notification/     # 알림 발송 (Telegram + 파일 폴백)
-└── scheduler/        # APScheduler 래퍼
+├── briefing/            # 브리핑 렌더러 + parts_store (upsert/get)
+├── config/              # 통합 Config + 동적 리로드
+├── contracts/           # Pydantic 계약 모델
+├── db/                  # SQLite 연결, 마이그레이션
+├── knowledge/           # RAG 지식 레이어 (ingest/chunk/embed/retrieve/compile)
+├── llm/                 # LLM 클라이언트 (Anthropic/Gemini + Prompt Caching)
+├── logging/             # 구조화 로거 (httpx/telegram 등 토큰 유출 차단 포함)
+├── memory/              # LLM 맥락 메모리 레이어 (loader/composer/rollup/cleanup/cache/hasher)
+├── notification/        # 알림 발송 (Telegram + 파일 폴백)
+└── scheduler/           # APScheduler 래퍼
 ```
 
-**규칙**: `core/`는 프레임워크. 특정 팀·도메인 로직이 들어가지 않는다.
+**규칙**: `core/`는 프레임워크. 특정 파이프라인·도메인 로직이 들어가지 않는다.
 
 ---
 
@@ -256,27 +291,29 @@ core/
 
 ```
 server/
-├── main.py                    # ★ uvicorn 진입점. FastAPI + APScheduler 시작.
+├── main.py                    # ★ uvicorn 진입점. FastAPI + APScheduler + Telegram 봇 시작.
 ├── api/                       # REST 엔드포인트
-│   ├── teams.py               #   GET /api/teams, GET /api/teams/<id>/latest
+│   ├── pipelines.py           #   GET/POST /api/pipelines, /api/pipelines/<id>/run
+│   ├── teams.py               #   GET /api/teams/<id>/latest (호환)
+│   ├── briefings.py           #   GET /api/briefings/...
+│   ├── briefings_on_demand.py #   4종 엔드포인트 (latest/parts/run/resend)
 │   ├── config.py              #   GET/POST /api/config
-│   ├── demo.py                #   POST /api/demo/run?scenario=...
-│   └── telegram.py            #   Telegram webhook
-├── orchestration/
-│   └── runner.py              # asyncio.gather 병렬 팀 실행
-├── schedulers/
-│   ├── loader.py              # 팀 manifest의 schedule 읽어 APScheduler 등록
-│   └── jobs/                  # 팀에 속하지 않는 인프라성 작업만
-│       ├── backup.py
-│       ├── gap_filler.py
-│       ├── daily_rollup.py
-│       ├── weekly_rollup.py
-│       ├── monthly_rollup.py
-│       └── memory_cleanup.py
-└── CLAUDE.md
+│   ├── notifications.py       #   알림 조회
+│   └── positions.py           #   watch_positions / sim_positions
+├── telegram/                  # python-telegram-bot long-polling + 3 명령어
+├── orchestration/             # (예약) 파이프라인 실행 헬퍼
+└── schedulers/
+    ├── loader.py              # pipelines/*/manifest.yaml 의 schedule 읽어 APScheduler 등록
+    └── jobs/                  # 파이프라인에 속하지 않는 인프라 작업
+        ├── backup.py
+        ├── gap_filler.py
+        ├── daily_rollup.py
+        ├── weekly_rollup.py
+        ├── monthly_rollup.py
+        └── memory_cleanup.py
 ```
 
-**원칙**: `server/`는 FastAPI + 스케줄러만. 팀 로직은 전혀 없음. 오로지 팀을 "불러쓰는" 레이어.
+**원칙**: `server/`는 FastAPI + 스케줄러 + 텔레그램 봇만. 파이프라인 로직은 전혀 없음. 오로지 파이프라인을 "불러쓰는" 레이어.
 
 ---
 
@@ -295,18 +332,23 @@ webapp/
 
 ---
 
-## 📚 knowledge/ vs teams/<team>/knowledge/
+## 📚 knowledge/ — 공용 학습 자료
 
-| 위치 | 용도 |
-|---|---|
-| `knowledge/` (최상위) | 여러 팀이 공유하는 기본 자료 (시장 상식, 용어 사전 등) |
-| `teams/<team>/knowledge/` | 해당 팀 전용 자료 (페르소나 관점의 전문 지식) |
+```
+knowledge/
+├── canon/                     # 항상 주입되는 compiled 지식
+│   ├── investment-principles.md
+│   ├── macro-framework.md
+│   ├── sector-insights.md
+│   └── failure-lessons.md
+└── reference/                 # Chroma RAG 용 원본 (Phase 3 에서 ingest)
+```
 
 자료 투입 흐름:
-1. 사용자가 `teams/<team>/knowledge/sources/` 에 파일 드롭
-2. `just knowledge-ingest <team>` → Chroma 인덱싱
-3. `just knowledge-compile <team>` → Canon (compiled.md) 재생성
-4. 서버가 config reload 감지 → 다음 판단부터 반영
+1. 사용자가 `knowledge/reference/` 에 파일 드롭
+2. `just knowledge-ingest <topic>` → Chroma 인덱싱 (Phase 3)
+3. canon 은 수작업 편집 또는 `just knowledge-compile` 로 재생성
+4. 다음 LLM 호출부터 반영
 
 ---
 
@@ -314,12 +356,14 @@ webapp/
 
 | 스크립트 | 역할 |
 |---|---|
-| `scaffold.py` | 새 팀/MCP/SPEC 자동 생성 (표준 레이아웃) |
+| `scaffold.py` | 새 파이프라인/MCP/SPEC 자동 생성 |
 | `validate.py` | 전체 구조 정합성 검증 |
 | `trace.py` | SPEC ↔ 코드 양방향 매핑 (`docs/traceability.md` 생성) |
 | `generate_domain_doc.py` | SPEC + 코드 → 도메인 문서 자동 생성 |
+| `db_init.py` | SQLite 스키마 초기화 |
+| `knowledge.py` | knowledge ingest/compile/status/browse |
 
-`justfile` 에서 모든 명령을 단축 (`just validate`, `just trace`, `just new-team <id>`).
+`justfile` 에서 모든 명령을 단축 (`just validate`, `just trace`, `just test-pipeline <name>`).
 
 ---
 
@@ -329,17 +373,21 @@ webapp/
 docs/
 ├── STRUCTURE.md          # ★ 이 문서 (규약의 원천)
 ├── WORKFLOW.md           # SDD 사이클 1페이지
-├── CONTRACTS.md          # 팀 간 계약 명세
+├── CONTRACTS.md          # 메시지/DB/run_id 계약 명세
 ├── RUNTIME.md            # 서버·스케줄러·메모리·지식 동작
-├── FOUNDATION-PLAN.md    # 이 토대의 설계 계획서
+├── RESUME.md             # 세션 재진입용 상태판
+├── SESSIONS.md           # 세션 로그 인덱스
 ├── traceability.md       # 자동 생성 (SPEC↔코드 매핑)
+├── a_wanted/             # 사용자 원 요구사항
+├── b_plan/               # 활성 설계/계획 문서
+├── c_worked/             # 세션별 완료 로그 (YYYY-MM-DD_*.md)
 ├── specs/                # 전역 SPEC
+│   ├── BRIEFING-*.md
 │   ├── CONTRACT-*.md
 │   ├── INFRA-*.md
 │   └── GLOBAL-*.md
 ├── domain/               # ★ 자동 생성 — 사용자용 결과물 설명서
-│   └── <team>/<topic>.md
-└── [기존 아키텍처 원본 문서들]
+└── raw_docs/             # 원본 아키텍처 문서
 ```
 
 **`docs/domain/` 은 자동 생성**. 사람이 직접 편집하지 않음. `scripts/generate_domain_doc.py` 가 SPEC + 코드 docstring + 테스트 케이스를 조합해 생성.
@@ -348,13 +396,13 @@ docs/
 
 ## ✅ 검증 규칙 (validate.py가 체크)
 
-- [ ] 모든 팀이 필수 파일(CLAUDE.md, manifest.yaml, src/agent.py) 구비
+- [ ] 모든 파이프라인이 필수 파일(`__init__.py`, `manifest.yaml`, `stages/`) 구비
+- [ ] manifest.yaml 의 id 가 폴더명과 일치 (snake_case)
 - [ ] 모든 SPEC이 frontmatter 구비
 - [ ] SPEC의 `generates` 경로에 실제 파일 존재 (status=implemented 이상)
-- [ ] `teams/registry.yaml` ↔ 팀 폴더 존재 일치
 - [ ] `mcp-servers/registry.yaml` ↔ MCP 폴더 존재 일치
 - [ ] DB 스키마 ↔ `core/db/schema.sql` 일치
-- [ ] 팀 간 코드 import 없음 (AST 검사)
+- [ ] 파이프라인 간 `stages/` 코드 import 없음 (AST 검사)
 - [ ] 모든 `.py` 파일이 타입 힌트 구비 (선택적 경고)
 - [ ] `contract_version` 충돌 없음
 - [ ] `config/runtime.yaml` 이 Pydantic 스키마 통과
@@ -363,10 +411,11 @@ docs/
 
 ## 🚫 절대 하지 말 것
 
-- 팀에서 다른 팀 코드 `import` 금지 — DB나 메시지 계약으로만 통신
-- `.sh` 스크립트 작성 금지 — `justfile` + Python 스크립트 사용
+- 파이프라인의 `stages/` 가 다른 파이프라인의 `stages/` 를 `import` 금지 — 공용은 `collectors/`·`checkers/`·`core/` 로만 공유
+- `.sh` / `.bat` 스크립트 작성 금지 — `justfile` + Python 스크립트 사용
 - 문자열 경로 조합 금지 — `pathlib.Path` 사용
-- 하드코딩된 임계값 금지 — `config/runtime.yaml` 에 선언
+- 하드코딩된 임계값 금지 — `config/runtime.yaml` 또는 `manifest.yaml` 에 선언
 - SPEC의 `generates` 외 위치에 파일 생성 금지
 - `data/` 아래 파일을 커밋 (단, `data/seed/` 제외)
 - `config/runtime.yaml` 과 `.env` 값을 코드에 인라인하지 않기
+- 파이프라인 폴더명에 하이픈 사용 금지 — 파이썬 패키지 호환 위해 snake_case

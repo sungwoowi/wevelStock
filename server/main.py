@@ -114,14 +114,6 @@ app.include_router(
 )
 app.include_router(positions_route.router, prefix="/api", tags=["positions"])
 
-# Legacy demo route depends on the removed teams/ package; load only if importable.
-try:
-    from server.api import demo as demo_route  # noqa: E402
-
-    app.include_router(demo_route.router, prefix="/api", tags=["demo"])
-except ImportError as _e:  # noqa: F841
-    log.warning("demo_route_skipped_legacy_teams_import")
-
 
 @app.get("/api/health")
 async def health() -> dict:
