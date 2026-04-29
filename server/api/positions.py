@@ -2,7 +2,7 @@
 
 Users won't track avg_price/quantity (they don't follow AI advice 1:1).
 We only store the ticker + optional watch_price + signal counters that
-the morning_pre pipeline increments over time.
+the market_briefing_pre pipeline increments over time.
 
 Endpoints:
   GET    /api/positions/watch              — list

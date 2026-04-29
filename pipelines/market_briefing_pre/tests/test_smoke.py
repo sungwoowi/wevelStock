@@ -30,7 +30,7 @@ EXPECTED_STAGES = [
 
 
 def test_manifest_loaded() -> None:
-    manifest = get_pipeline("morning_pre")
+    manifest = get_pipeline("market_briefing_pre")
     assert manifest is not None, "morning_pre not discovered by registry"
     assert manifest.status == "active"
     assert len(manifest.stages) == len(EXPECTED_STAGES)
@@ -40,7 +40,7 @@ def test_manifest_loaded() -> None:
 
 def test_all_stages_importable() -> None:
     for stage_id in EXPECTED_STAGES:
-        mod = importlib.import_module(f"pipelines.morning_pre.stages.{stage_id}")
+        mod = importlib.import_module(f"pipelines.market_briefing_pre.stages.{stage_id}")
         stage_classes = [
             obj for name, obj in vars(mod).items()
             if isinstance(obj, type) and issubclass(obj, Stage) and obj is not Stage
@@ -51,7 +51,7 @@ def test_all_stages_importable() -> None:
 @pytest.mark.asyncio
 async def test_runner_executes_with_mocks() -> None:
     """End-to-end run with external IO mocked out."""
-    manifest = get_pipeline("morning_pre")
+    manifest = get_pipeline("market_briefing_pre")
     assert manifest is not None
 
     # Mock the LLM call — return a minimal valid JSON briefing.
@@ -96,13 +96,13 @@ async def test_runner_executes_with_mocks() -> None:
     news_mock: list[dict] = []
 
     with (
-        patch("pipelines.morning_pre.stages.collect_overnight_us.fetch_overnight",
+        patch("pipelines.market_briefing_pre.stages.collect_overnight_us.fetch_overnight",
               new=AsyncMock(return_value=overnight_mock)),
-        patch("pipelines.morning_pre.stages.collect_night_futures.fetch_night_futures",
+        patch("pipelines.market_briefing_pre.stages.collect_night_futures.fetch_night_futures",
               new=AsyncMock(return_value=futures_mock)),
-        patch("pipelines.morning_pre.stages.collect_news.fetch_news",
+        patch("pipelines.market_briefing_pre.stages.collect_news.fetch_news",
               new=AsyncMock(return_value=news_mock)),
-        patch("pipelines.morning_pre.stages.analyze.call_llm",
+        patch("pipelines.market_briefing_pre.stages.analyze.call_llm",
               new=AsyncMock(return_value=llm_response)),
     ):
         runner = PipelineRunner()
@@ -123,7 +123,7 @@ async def test_runner_executes_with_mocks() -> None:
 
 
 def test_sanitize_new_candidates_strips_placeholder_tickers() -> None:
-    from pipelines.morning_pre.stages.analyze import _sanitize_new_candidates
+    from pipelines.market_briefing_pre.stages.analyze import _sanitize_new_candidates
 
     parsed = {
         "new_candidates": [

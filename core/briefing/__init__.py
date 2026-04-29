@@ -12,6 +12,7 @@ from core.briefing.parts_store import (
     upsert_parts,
 )
 from core.briefing.render import (
+    render_market_briefing,
     render_morning_pre,
     render_overnight,
     render_positions,
@@ -20,6 +21,7 @@ from core.briefing.render import (
 
 __all__ = [
     "render_morning_pre",
+    "render_market_briefing",
     "render_overnight",
     "render_scenario",
     "render_positions",

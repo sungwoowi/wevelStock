@@ -1,4 +1,4 @@
-id: morning_pre
+id: market_briefing_pre
 name: "07:00 장전 브리핑"
 
 schedule:
@@ -47,7 +47,7 @@ stages:
     depends_on: [collect_overnight_us, collect_night_futures, collect_news, load_positions, check_principles]
     timeout_sec: 120
     memory:
-      context_id: morning_pre
+      context_id: market_briefing_pre
       budget_tokens: 4000
 
   - id: persist

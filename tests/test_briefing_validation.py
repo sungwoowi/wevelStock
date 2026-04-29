@@ -48,7 +48,7 @@ def _insert_morning_snapshot(run_id: str, created_at_utc: str) -> None:
     """지정된 UTC 시각으로 보관본 하나 심는다."""
     from core.db import get_db
 
-    upsert_parts("morning_pre", run_id, _sample_parts())
+    upsert_parts("market_briefing_pre", run_id, _sample_parts())
     db = get_db()
     with db.connect() as conn:
         conn.execute(
@@ -111,7 +111,7 @@ def test_pre_9am_force_false_runs_realtime(
     _freeze_now_kst(monkeypatch, hour=8, minute=30)
     _install_fake_runner(monkeypatch)
 
-    r = client.post("/api/briefings/morning_pre/run")
+    r = client.post("/api/briefings/market_briefing_pre/run")
     assert r.status_code == 200
     body = r.json()
     assert body["cache_hit"] is False
@@ -132,7 +132,7 @@ def test_post_9am_force_false_returns_snapshot(
     # 2026-04-24 07:00 KST = 2026-04-23 22:00 UTC (실제 현재 UTC 보다 과거)
     _insert_morning_snapshot("today_pre_run", "2026-04-23 22:00:00")
 
-    r = client.post("/api/briefings/morning_pre/run")
+    r = client.post("/api/briefings/market_briefing_pre/run")
     assert r.status_code == 200
     body = r.json()
     assert body["run_id"] == "today_pre_run"
@@ -151,7 +151,7 @@ def test_post_9am_force_false_no_snapshot_returns_404_with_hint(
     """10:00 + force=false + 보관본 없음 → 404 + detail 에 force=true 안내."""
     _freeze_now_kst(monkeypatch, hour=10)
 
-    r = client.post("/api/briefings/morning_pre/run")
+    r = client.post("/api/briefings/market_briefing_pre/run")
     assert r.status_code == 404
     assert "force=true" in r.json()["detail"]
 
@@ -169,7 +169,7 @@ def test_post_9am_force_true_bypasses_branch_even_with_snapshot(
     _insert_morning_snapshot("today_pre_run", "2026-04-23 22:00:00")
     _install_fake_runner(monkeypatch)
 
-    r = client.post("/api/briefings/morning_pre/run?force=true")
+    r = client.post("/api/briefings/market_briefing_pre/run?force=true")
     assert r.status_code == 200
     body = r.json()
     assert body["run_id"] != "today_pre_run"
@@ -195,13 +195,13 @@ def test_force_true_post_9am_run_does_not_leak_to_force_false(
     _install_fake_runner(monkeypatch)
 
     # 1) force=true 실시간 실행 — post-9am run 이 in-memory cache 에 박힘
-    r1 = client.post("/api/briefings/morning_pre/run?force=true")
+    r1 = client.post("/api/briefings/market_briefing_pre/run?force=true")
     assert r1.status_code == 200
     force_true_run_id = r1.json()["run_id"]
     assert force_true_run_id != "today_pre_run"
 
     # 2) 같은 시점 force=false — post-9am run 이 새면 안 된다
-    r2 = client.post("/api/briefings/morning_pre/run")
+    r2 = client.post("/api/briefings/market_briefing_pre/run")
     assert r2.status_code == 200
     body2 = r2.json()
     assert body2["run_id"] == "today_pre_run", (

@@ -27,7 +27,7 @@ dependencies = [
     # === 데이터 ===
     "pandas>=2.2",
     "numpy>=1.26",
-    # === 시장 데이터 (morning_pre 필수 — 미국지수/환율/금리/원자재/야간선물) ===
+    # === 시장 데이터 (market_briefing_pre 필수 — 미국지수/환율/금리/원자재/야간선물) ===
     "yfinance>=0.2",
     "fredapi>=0.5",
     # === 유틸 ===

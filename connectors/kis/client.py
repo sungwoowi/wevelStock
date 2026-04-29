@@ -25,9 +25,15 @@ log = get_logger(__name__)
 REAL_BASE = "https://openapi.koreainvestment.com:9443"
 PAPER_BASE = "https://openapivts.koreainvestment.com:29443"
 
-# Rate limit: KIS 실전서버는 초당 거래건수 제한이 매우 엄격함
-# 1초 간격으로 안전하게 호출 (초당 1회)
-_CALL_INTERVAL = 1.0  # seconds
+# Rate limit: KIS 실전서버는 초당 거래건수 제한이 매우 엄격함.
+# 1.0초 간격으로는 가끔 "초당 거래건수 초과" 응답이 발생 (특히 무거운 path).
+# 1.1초로 약간의 안전 마진을 두고, 그래도 실패하면 _get() 에서 1회 retry.
+_CALL_INTERVAL = 1.1  # seconds
+
+# Rate limit 응답을 받았을 때 retry 전 추가 대기. KIS 의 초당 카운터가
+# 다음 초로 넘어가도록 충분히 기다림.
+_RATE_LIMIT_BACKOFF = 1.5  # seconds
+_MAX_RATE_LIMIT_RETRY = 1  # 호출당 최대 retry 횟수
 
 
 class KISClient:
@@ -101,7 +107,7 @@ class KISClient:
         self._last_call = asyncio.get_event_loop().time()
 
     async def _get(self, path: str, tr_id: str, params: dict) -> dict:
-        """Make authenticated GET request."""
+        """Make authenticated GET request. Retries once on rate-limit error."""
         token = await self._ensure_token()
         headers = {
             "authorization": f"Bearer {token}",
@@ -110,19 +116,38 @@ class KISClient:
             "tr_id": tr_id,
             "content-type": "application/json; charset=utf-8",
         }
-        await self._rate_limit()
         assert self._client is not None
-        resp = await self._client.get(
-            f"{self._base}{path}", headers=headers, params=params
-        )
-        data = resp.json()
-        if data.get("rt_cd") != "0":
+
+        data: dict = {}
+        for attempt in range(_MAX_RATE_LIMIT_RETRY + 1):
+            await self._rate_limit()
+            resp = await self._client.get(
+                f"{self._base}{path}", headers=headers, params=params
+            )
+            data = resp.json()
+            if data.get("rt_cd") == "0":
+                return data
+
+            msg = data.get("msg1", "") or ""
+            if "초당 거래건수" in msg and attempt < _MAX_RATE_LIMIT_RETRY:
+                log.warning(
+                    "kis_rate_limited_retry",
+                    path=path,
+                    tr_id=tr_id,
+                    attempt=attempt + 1,
+                    msg=msg,
+                )
+                await asyncio.sleep(_RATE_LIMIT_BACKOFF)
+                continue
+
             log.warning(
                 "kis_api_error",
                 path=path,
                 tr_id=tr_id,
-                msg=data.get("msg1", "unknown"),
+                msg=msg or "unknown",
             )
+            return data
+
         return data
 
     # ------------------------------------------------------------------
@@ -189,9 +214,14 @@ class KISClient:
     ) -> list[dict[str, Any]]:
         """Get top stocks by trading volume or trade amount.
 
-        KIS FID_COND_SCR_DIV_CODE:
-        - 20174 = 거래대금 상위
-        - 20170 = 거래량 상위
+        실제 정렬 기준은 ``FID_BLNG_CLS_CODE``:
+        - 0: 평균거래량
+        - 1: 거래증가율
+        - 2: 평균거래회전율
+        - 3: 거래금액 (= 거래대금) ← rank_type="amount"
+        - 4: 평균거래금액회전율
+
+        ``FID_COND_SCR_DIV_CODE`` (20171) 는 화면 ID 로 정렬과 무관.
 
         KIS FID_INPUT_ISCD:
         - 0000 = 전체
@@ -201,7 +231,9 @@ class KISClient:
 
         KIS OpenAPI는 한 호출당 30개 상한. 페이징 미지원.
         """
-        scr_code = "20174" if rank_type == "amount" else "20170"
+        # 정렬 기준 (FID_BLNG_CLS_CODE) — KIS docs 기준
+        blng_map = {"amount": "3", "volume": "0"}
+        fid_blng = blng_map.get(rank_type, "3")
         iscd_map = {"all": "0000", "kospi": "0001", "kosdaq": "1001"}
         iscd = iscd_map.get(market_scope, "0000")
         market_label = {"all": "unknown", "kospi": "kospi", "kosdaq": "kosdaq"}[market_scope]
@@ -211,10 +243,10 @@ class KISClient:
             tr_id="FHPST01710000",
             params={
                 "FID_COND_MRKT_DIV_CODE": "J",
-                "FID_COND_SCR_DIV_CODE": scr_code,
+                "FID_COND_SCR_DIV_CODE": "20171",
                 "FID_INPUT_ISCD": iscd,
                 "FID_DIV_CLS_CODE": "0",
-                "FID_BLNG_CLS_CODE": "0",
+                "FID_BLNG_CLS_CODE": fid_blng,
                 "FID_TRGT_CLS_CODE": "111111111",
                 "FID_TRGT_EXLS_CLS_CODE": "000000",
                 "FID_INPUT_PRICE_1": "0",
@@ -386,6 +418,7 @@ class KISClient:
                 "fin_invest_net_amount_m": _i(item.get("ivtr_ntby_tr_pbmn")),
                 "insurance_net_qty": _i(item.get("insu_ntby_qty")),
                 "pension_net_qty": _i(item.get("fund_ntby_qty")),  # 기금(연기금)
+                "pension_net_amount_m": _i(item.get("fund_ntby_tr_pbmn")),
                 "etc_corp_net_qty": _i(item.get("etc_corp_ntby_vol")),
                 "total_net_qty": _i(item.get("ntby_qty")),
             }
@@ -416,6 +449,9 @@ class KISClient:
                 ),
                 "fin_invest_net_amount_m_sum": sum(
                     i.get("fin_invest_net_amount_m", 0) for i in items
+                ),
+                "pension_net_amount_m_sum": sum(
+                    i.get("pension_net_amount_m", 0) for i in items
                 ),
                 "top_foreign_buys": sorted(
                     [i for i in items if i.get("foreign_net_amount_m", 0) > 0],

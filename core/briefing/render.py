@@ -211,3 +211,230 @@ def render_morning_pre(
             text = DEGRADED_PREFIX + text
         out.append(text)
     return out
+
+
+def _fmt_won_million(million_won: Any) -> str:
+    """백만원 단위 정수 → 한국식 표기 (억/조).
+
+    예) 940771 → "+9,408억", 2715000 → "+27.15조", -150000 → "-1,500억"
+    """
+    if million_won is None:
+        return "?"
+    try:
+        eok = float(million_won) / 100.0  # 100 백만 = 1 억
+    except (TypeError, ValueError):
+        return "?"
+    sign = "+" if eok >= 0 else ""
+    if abs(eok) >= 10000:
+        return f"{sign}{eok / 10000:,.2f}조"
+    return f"{sign}{eok:,.0f}억"
+
+
+def _fmt_trade_amount(million_won: Any) -> str:
+    """거래대금 백만원 정수 → 조 단위 표기."""
+    if million_won is None:
+        return "?"
+    try:
+        jo = float(million_won) / 1_000_000.0  # 100만 백만 = 1 조
+    except (TypeError, ValueError):
+        return "?"
+    return f"{jo:,.2f}조"
+
+
+def render_market_overview(data: dict) -> str:
+    """market_briefing 'market_overview' 파트 — KOSPI/KOSDAQ 지수 + 거래대금."""
+    indices = data.get("indices") or {}
+    fetched_at = data.get("fetched_at") or indices.get("fetched_at") or ""
+    # ISO 의 시간 부분만 (예: 2026-04-30T09:30:25+09:00 → 09:30:25)
+    time_str = ""
+    if fetched_at:
+        time_str = fetched_at.split("T", 1)[-1].split("+", 1)[0]
+
+    lines: list[str] = []
+    lines.append("📊 시장 개요")
+    lines.append(f"출처: KIS API · {time_str} KST" if time_str else "출처: KIS API")
+    lines.append("")
+    lines.append("🇰🇷 국내 지수")
+
+    for key, label in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
+        v = indices.get(key) or {}
+        if "error" in v:
+            lines.append(f"  * {label}: (조회 실패)")
+            continue
+        lines.append(
+            f"  * {label} {_fmt_num(v.get('value'))} "
+            f"({_fmt_pct(v.get('change_pct'))}) "
+            f"| 거래대금 {_fmt_trade_amount(v.get('trade_amount'))}"
+        )
+
+    # KOSPI200 — 코스피 선물의 기초지수
+    k200 = indices.get("kospi200") or {}
+    if k200 and "error" not in k200:
+        lines.append(
+            f"  * KOSPI200 (선물 기초) {_fmt_num(k200.get('value'))} "
+            f"({_fmt_pct(k200.get('change_pct'))})"
+        )
+
+    return "\n".join(lines)
+
+
+def render_supply_sectors(data: dict) -> str:
+    """market_briefing 'supply_sectors' 파트 — 수급 + 강세 섹터."""
+    supply = data.get("supply_demand") or {}
+    sectors = data.get("sectors") or {}
+
+    lines: list[str] = []
+    lines.append("💰 시장 수급 (top30 합산)")
+    for key, label in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
+        s = supply.get(key) or {}
+        lines.append("")
+        lines.append(f"[{label}]")
+        if not s or s.get("count") == 0:
+            lines.append("  (수급 데이터 없음)")
+            continue
+        lines.append(
+            f"  외인 {_fmt_won_million(s.get('foreign_net_amount_m_sum'))} "
+            f"| 기관 {_fmt_won_million(s.get('institution_net_amount_m_sum'))}"
+        )
+        lines.append(
+            f"  투신 {_fmt_won_million(s.get('fin_invest_net_amount_m_sum'))} "
+            f"| 연기금 {_fmt_won_million(s.get('pension_net_amount_m_sum'))}"
+        )
+
+    # 용어 안내 — 투신과 금융투자(증권사 자기매매)는 별개 카테고리
+    lines.append("")
+    lines.append("※ 투신=투자신탁(자산운용사 펀드) · 개인 데이터는 별도 API")
+
+    # 강세 섹터: 조건 충족 (≥threshold%) 우선 + 그 외 등락률 순으로 10개까지 채움.
+    # 주도주 표시 패턴 일치 (🔥 = 조건 충족 / · = 등락률순 채움).
+    lines.append("")
+    all_sectors = sectors.get("all") or []  # 이미 등락률 내림차순 정렬됨
+    strong = sectors.get("strong") or []
+    threshold = sectors.get("min_change_pct", 1.0)
+    total = len(all_sectors)
+
+    strong_tickers = {e.get("ticker") for e in strong}
+    rest = [e for e in all_sectors if e.get("ticker") not in strong_tickers]
+    combined = strong + rest
+    top_n = combined[:10]
+
+    lines.append(
+        f"📊 강세 섹터 (조건 ≥{threshold:g}% 우선 + 등락률 순으로 채움)"
+    )
+    if not top_n:
+        lines.append("  (추적 ETF 없음)")
+    else:
+        for etf in top_n:
+            is_strong = etf.get("ticker") in strong_tickers
+            icon = "⭐" if is_strong else "·"
+            name = etf.get("name") or etf.get("ticker", "?")
+            tag = "조건충족" if is_strong else "등락률순"
+            lines.append(
+                f"  {icon} {name:<22} {_fmt_pct(etf.get('change_pct'))}  ({tag})"
+            )
+        lines.append(
+            f"  (총 {total}개 추적, 조건 충족 {len(strong)}개)"
+        )
+
+    return "\n".join(lines)
+
+
+def _render_stock_row(r: dict, tag: str) -> str:
+    icon = "🔥" if r.get("match") == "meets_criteria" else "·"
+    final_tag = tag if r.get("match") == "meets_criteria" else "거래대금"
+    name = r.get("name") or r.get("ticker", "?")
+    return f"  {icon} {name:<14} {_fmt_pct(r.get('change_pct'))}  ({final_tag})"
+
+
+def render_leading_stocks(data: dict) -> str:
+    """market_briefing 'leading_stocks' 파트 — KOSPI/KOSDAQ 주도주.
+
+    KOSPI 는 시총20위 (대형주) / 시총20위 외 (중소형) 으로 별도 그룹 표시.
+    대형주는 변동 적은 우량주가 위쪽을 차지해 진짜 주도주(중소형 강세) 가
+    묻히는 것을 방지.
+    """
+    leading = data.get("leading_stocks") or {}
+    kospi = leading.get("kospi") or []
+    kosdaq = leading.get("kosdaq") or []
+
+    # KOSPI 분할: 대형주 (top20) vs 중소형 (mid_small)
+    kospi_top20 = [r for r in kospi if r.get("cap_tier") == "top20"]
+    kospi_mid = [r for r in kospi if r.get("cap_tier") != "top20"]
+
+    def _split_count(rows: list[dict]) -> tuple[int, int]:
+        matched = sum(1 for r in rows if r.get("match") == "meets_criteria")
+        return matched, len(rows) - matched
+
+    lines: list[str] = []
+    lines.append("🚀 주도주")
+
+    # KOSPI 대형주
+    lines.append("")
+    matched, fill = _split_count(kospi_top20)
+    lines.append(
+        f"[KOSPI 대형주 (시총20위)] 조건충족 {matched} / 거래대금채움 {fill}"
+    )
+    if not kospi_top20:
+        lines.append("  (해당 종목 없음)")
+    else:
+        for r in kospi_top20:
+            lines.append(_render_stock_row(r, "top20+2%"))
+
+    # KOSPI 중소형
+    lines.append("")
+    matched, fill = _split_count(kospi_mid)
+    lines.append(
+        f"[KOSPI 중소형 (시총20위 외)] 조건충족 {matched} / 거래대금채움 {fill}"
+    )
+    if not kospi_mid:
+        lines.append("  (거래대금 상위 30 풀에 미포함 — 강세 중소형은 별도 등락률 API 필요)")
+    else:
+        for r in kospi_mid:
+            lines.append(_render_stock_row(r, "외부+5%"))
+
+    # KOSDAQ
+    lines.append("")
+    matched, fill = _split_count(kosdaq)
+    lines.append(
+        f"[KOSDAQ] 조건충족 {matched} / 거래대금채움 {fill}"
+    )
+    if not kosdaq:
+        lines.append("  (해당 종목 없음)")
+    else:
+        for r in kosdaq:
+            lines.append(_render_stock_row(r, "5%+"))
+
+    lines.append("")
+    lines.append("선별 조건 (거래대금 상위 30 종목 풀에서 추출):")
+    lines.append("  · KOSPI 대형주 (시총20위): 등락률 ≥ 2%")
+    lines.append("  · KOSPI 중소형 (시총20위 외): 등락률 ≥ 5%")
+    lines.append("  · KOSDAQ: 등락률 ≥ 5%")
+    lines.append("  · 조건 충족 우선, 부족 시 거래대금 상위로 채움")
+    lines.append("  🔥 조건 충족 / · 거래대금 순")
+
+    return "\n".join(lines)
+
+
+_MARKET_BRIEFING_RENDERERS = {
+    "market_overview": render_market_overview,
+    "supply_sectors": render_supply_sectors,
+    "leading_stocks": render_leading_stocks,
+}
+
+
+def render_market_briefing(
+    parts: list[BriefingPart],
+    status: BriefingStatus = "ok",
+) -> list[str]:
+    """market_briefing 브리핑 전체 → 3분할 텍스트 리스트 (order 순).
+
+    LLM 호출이 없으므로 status 는 항상 "ok" 가정 (시그니처 호환 위해 받음).
+    봇 핸들러가 BriefingResponse.note 를 별도로 처리해 prefix 부착.
+    """
+    out: list[str] = []
+    for p in sorted(parts, key=lambda x: x.order):
+        renderer = _MARKET_BRIEFING_RENDERERS.get(p.key)
+        if renderer is None:
+            continue
+        out.append(renderer(p.data))
+    return out

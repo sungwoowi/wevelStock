@@ -193,11 +193,43 @@ async def briefing_run(
             cache_hit=True,
         )
 
+    # market_briefing: 장 시작 전 (09:00 KST 이전) — 거부 대신 fallback 응답.
+    # 사용자 의도 (2026-04-30): 새벽·휴장에도 가장 최근 시장 정보를 받고 싶음.
+    #
+    # fallback1) DB 의 가장 최근 market_briefing_now run 을 재사용 (KIS 호출 0)
+    # fallback2) DB miss 면 정상 흐름으로 떨어져 KIS 새 run 생성
+    #            (KIS 는 새벽이라도 직전 영업일 종가 반환).
+    #
+    # `force=True` 는 fallback 우회 + 새 KIS run 강제 (사용자가 직전 보관본의
+    # 데이터 누락·갱신 등을 의심해 명시적 새 호출 요청한 경우).
+    # 어느 쪽이든 응답 build 시점에서 note="market_closed" 부착 (아래 build 로직).
+    # cache 레이어 앞에 배치 — 직전 force=true 로 생성된 post-09:00 run 이
+    # 60s cache 에 남아 09:00 이전 호출에 새는 것 방지.
+    if pipeline_id == "market_briefing_now" and not force:
+        now_kst = _now_kst()
+        if now_kst.hour < 9:
+            latest = get_latest_parts("market_briefing_now")
+            if latest is not None:
+                snap_run_id, snap_parts = latest
+                log.info(
+                    "market_briefing_fallback_db",
+                    run_id=snap_run_id,
+                    now_kst=now_kst.isoformat(),
+                )
+                return BriefingResponse.build(
+                    pipeline_id=pipeline_id,
+                    run_id=snap_run_id,
+                    parts=snap_parts,
+                    cache_hit=True,
+                    note="market_closed",
+                )
+            # DB miss → 정상 흐름 (cache → runner) 로 떨어짐. note 는 build 시 부착.
+
     # 장전 브리핑은 09:00 KST 이후엔 당일 아침 보관본 재전송 — LLM 재실행 방지.
     # `force=true` 는 우회 (수동 LLM 실행. 서버 다운 등으로 아침 cron 놓친 경우).
     # cache 레이어 앞에 배치 — force=true 로 방금 생성한 post-09:00 run 이
     # 60s cache 에 남아 force=false 호출에 새는 것 방지.
-    if pipeline_id == "morning_pre" and not force:
+    if pipeline_id == "market_briefing_pre" and not force:
         now_kst = _now_kst()
         if now_kst.hour >= 9:
             today_midnight_kst = now_kst.replace(
@@ -213,7 +245,7 @@ async def briefing_run(
                 "%Y-%m-%d %H:%M:%S"
             )
             snapshot = get_last_run_before(
-                "morning_pre", cutoff_utc, since_iso=today_start_utc
+                "market_briefing_pre", cutoff_utc, since_iso=today_start_utc
             )
             if snapshot is None:
                 raise HTTPException(
@@ -295,12 +327,25 @@ async def briefing_run(
 
         status = _determine_status(_extract_analyze_metadata(pipeline_result))
 
+        # market_briefing 시각별 note:
+        #   < 09:00         → "market_closed"        (휴장·새벽 — fallback DB miss 경로)
+        #   09:00 ~ 09:19   → "market_briefing_early" (장 개시 직후 신뢰도 낮음)
+        #   09:20 ~         → None (정상)
+        note: str | None = None
+        if pipeline_id == "market_briefing_now":
+            now_kst = _now_kst()
+            if now_kst.hour < 9:
+                note = "market_closed"
+            elif now_kst.hour == 9 and now_kst.minute < 20:
+                note = "market_briefing_early"
+
         response = BriefingResponse.build(
             pipeline_id=pipeline_id,
             run_id=run_id,
             parts=parts,
             status=status,
             cache_hit=False,
+            note=note,
         )
         _cache_set(key, response)
         return response

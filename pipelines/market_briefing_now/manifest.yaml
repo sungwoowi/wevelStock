@@ -1,0 +1,42 @@
+id: market_briefing_now
+name: "장중 시장 관찰"
+
+# On-demand only. 사용자가 텔레그램 /briefing_now 또는 API 로 호출 시에만 실행.
+# (`docs/specs/BRIEFING-TIMEBASED-002...md` Phase 2 — schedule 없음)
+schedule: []
+
+knowledge:
+  shared_canon: false
+  rag_enabled: false
+
+stages:
+  - id: collect_kr_market
+    module: stages.collect_kr_market
+    type: collect
+    timeout_sec: 60
+
+  - id: persist
+    module: stages.persist
+    type: act
+    depends_on: [collect_kr_market]
+    timeout_sec: 15
+
+  - id: notify
+    module: stages.notify
+    type: act
+    depends_on: [persist]
+    timeout_sec: 20
+
+parts:
+  - key: market_overview
+    label: 시장개요
+    order: 1
+  - key: supply_sectors
+    label: 수급+강세섹터
+    order: 2
+  - key: leading_stocks
+    label: 주도주
+    order: 3
+
+contract_version: "1.0"
+status: active

@@ -2,7 +2,7 @@
 
 /briefing_pre       — 장전 브리핑 (09:00 이후엔 아침 보관본 재전송)
 /briefing_pre_force — 09:00 이후에도 LLM 실시간 실행 (복구용, ~30s)
-/briefing_now       — 강제 새 run (~30s, Phase 2 에서 market_briefing 로 의미 전환 예정)
+/briefing_now       — 장중 실시간 시장 관찰 (market_briefing, KIS raw 데이터, ~30s)
 /help               — 명령어 목록
 
 chat_id 인증: `.env` 의 `TELEGRAM_CHAT_ID` 와 일치하지 않으면 **응답 없음**
@@ -18,7 +18,7 @@ from fastapi import HTTPException
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from core.briefing import render_morning_pre
+from core.briefing import render_market_briefing, render_morning_pre
 from core.contracts.briefing_part import BriefingResponse
 from core.logging import get_logger
 from server.api.briefings_on_demand import briefing_run
@@ -30,7 +30,7 @@ HELP_TEXT = (
     "🤖 wevelStock 브리핑 봇\n\n"
     "/briefing_pre — 오늘 장전 브리핑 (09:00 이후엔 아침 보관본 재전송)\n"
     "/briefing_pre_force — 09:00 이후에도 LLM 실시간 실행 (서버 다운 등 복구용, ~30s)\n"
-    "/briefing_now — 지금 기준으로 새 브리핑 실행 (~30s, v1 호환)\n"
+    "/briefing_now — 장중 실시간 시장 관찰 — KIS 시세 (~30s)\n"
     "/help — 이 메시지"
 )
 
@@ -54,12 +54,19 @@ def _authorized(update: Update) -> bool:
     return str(chat.id) == expected
 
 
+_PIPELINE_RENDERERS = {
+    "market_briefing_pre": render_morning_pre,
+    "market_briefing_now": render_market_briefing,
+}
+
+
 async def _send_briefing(update: Update, resp: BriefingResponse) -> None:
     """BriefingResponse → render → 3분할 sendMessage. `note` 있으면 첫 분할에 prefix."""
     chat = update.effective_chat
     if chat is None:
         return
-    texts = render_morning_pre(resp.parts, status=resp.status)
+    renderer = _PIPELINE_RENDERERS.get(resp.pipeline_id, render_morning_pre)
+    texts = renderer(resp.parts, status=resp.status)
     total = len(texts)
     prefix = _build_note_prefix(resp)
     for idx, text in enumerate(texts, 1):
@@ -76,25 +83,36 @@ def _build_note_prefix(resp: BriefingResponse) -> str:
         # run_id 는 `YYYY-MM-DDTHH:MM:SS...#manual-XXXX` 형식. 11~16 자리가 HH:MM
         hhmm = resp.run_id[11:16] if len(resp.run_id) >= 16 else "?"
         return f"⏰ 장 시작 전 데이터 기준 ({hhmm} 생성)"
+    if resp.note == "market_closed":
+        # run_id 의 날짜 부분 (YYYY-MM-DD) 을 추출
+        date_part = resp.run_id[:10] if len(resp.run_id) >= 10 else "?"
+        return (
+            f"🔕 지금은 개장 시간이 아닙니다 — 가장 최근 시장 정보입니다 "
+            f"({date_part} 기준)"
+        )
+    if resp.note == "market_briefing_early":
+        return (
+            "⚠️ 장 시작 직후 (09:00~09:19) — 거래량 적어 지표 신뢰도 낮습니다"
+        )
     return ""
 
 
 async def cmd_briefing_now(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """강제 새 run — 중간 "생성 중…" 메시지 먼저 보내고 완료 후 전송."""
+    """장중 실시간 시장 관찰 — market_briefing 강제 새 run (KIS raw 데이터)."""
     if not _authorized(update):
         return
     if update.message is not None:
         await update.message.reply_text(GENERATING_TEXT)
     try:
         resp = await briefing_run(
-            "morning_pre", force=True, cache=False, notify=False
+            "market_briefing_now", force=True, cache=False, notify=False
         )
     except HTTPException as e:
         log.warning("cmd_briefing_now_error", status=e.status_code, detail=str(e.detail))
         if update.message is not None:
-            await update.message.reply_text(f"새 브리핑 실행 실패: {e.detail}")
+            await update.message.reply_text(f"브리핑 실행 실패: {e.detail}")
         return
     await _send_briefing(update, resp)
 
@@ -109,7 +127,7 @@ async def cmd_briefing_pre(
         await update.message.reply_text(CHECKING_PRE_TEXT)
     try:
         resp = await briefing_run(
-            "morning_pre", force=False, cache=False, notify=False
+            "market_briefing_pre", force=False, cache=False, notify=False
         )
     except HTTPException as e:
         if e.status_code == 404 and update.message is not None:
@@ -135,7 +153,7 @@ async def cmd_briefing_pre_force(
         await update.message.reply_text(GENERATING_TEXT)
     try:
         resp = await briefing_run(
-            "morning_pre", force=True, cache=False, notify=False
+            "market_briefing_pre", force=True, cache=False, notify=False
         )
     except HTTPException as e:
         log.warning(

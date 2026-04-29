@@ -66,7 +66,7 @@ async def _setup_bot_commands(app: Application) -> None:
             [
                 BotCommand("briefing_pre", "장전 브리핑 (09:00 이후엔 아침 보관본)"),
                 BotCommand("briefing_pre_force", "09:00 이후 LLM 실시간 실행 (~30s)"),
-                BotCommand("briefing_now", "지금 기준으로 새 브리핑 실행 (~30s)"),
+                BotCommand("briefing_now", "장중 실시간 시장 관찰 — KIS 시세 (~30s)"),
                 BotCommand("help", "명령어 목록"),
             ]
         )
