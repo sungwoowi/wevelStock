@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: BRIEFING-TIMEBASED-002 **Phase 1 전체 완성** (M1~M6 + 부가 M3.5 force 재정의). pytest **44 passed**. 봇 `/briefing_pre` (기본=보관본) + `/briefing_pre_force` (09:00 이후 LLM 우회) 2 명령 + 이중 발송 방지 (`notify=false` 쿼리) 완료. 다음 세션은 **Phase 2** (`/briefing_now` + `market_briefing` 신규) 또는 canon 주입.
+**현재 위치**: BRIEFING-TIMEBASED-002 **Phase 2 전체 완성** + 파이프라인 ID 리네이밍. pytest **64 passed**. `market_briefing_now` 신규 (LLM 없는 raw 데이터 발송), 봇 `/briefing_now` 정식 가동, 09:00 이전 fallback (DB latest 우선·`force=true` 우회), KIS volume_rank 정렬 버그 fix (`FID_BLNG_CLS_CODE` 0→3), `morning_pre`→`market_briefing_pre` / `market_briefing`→`market_briefing_now` / `morning_briefing` 삭제. 다음 세션은 **KOSDAQ limit 확대** 또는 **canon 4 파일 주입** 또는 **Phase 3 close_briefing+RAG**.
 
-**마지막 작업일**: 2026-04-25
-**마지막 세션 로그**: [2026-04-25_phase1-complete.md](c_worked/2026-04-25_phase1-complete.md)
-**Git**: `main` 이번 세션 2 커밋 FF 머지. GitHub 원격 미연결
+**마지막 작업일**: 2026-04-30
+**마지막 세션 로그**: [2026-04-30_phase2-market-briefing-now.md](c_worked/2026-04-30_phase2-market-briefing-now.md)
+**Git**: `main` 이번 세션 2 커밋 + push (사용자 명시 요청)
 
 ---
 
@@ -21,21 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. BRIEFING-TIMEBASED-002 Phase 2 — `/briefing_now` + `market_briefing` 신규
-- **왜**: Phase 1 은 "장 시작 전" 만 담당. "장중 실시간 관찰" 은 별도 파이프라인이 SPEC 설계. 현재 `cmd_briefing_now` 는 v1 호환(morning_pre force) 상태 — Phase 2 에서 market_briefing force 로 의미 전환 필요.
-- **SPEC**: [docs/specs/BRIEFING-TIMEBASED-002-timebased-briefings.md](specs/BRIEFING-TIMEBASED-002-timebased-briefings.md) Phase 2 섹션
-- **범위**: `pipelines/market_briefing/` 신규 + KOSPI/KOSDAQ 지수·수급·섹터·주도주 collectors 3 종 + 최소 LLM 요약 (목표 비용 $0.0005) + `cmd_briefing_now` 재작성 + 09:00 이전 거부 / 09:00~09:19 경고 prefix validation
-- **예상**: **4~6h, 독립 세션**.
+### 1. KOSDAQ 주도주 limit=5 → 7~10 증가
+- **왜**: KIS 거래대금 정렬 fix 후 KOSDAQ 5%+ 충족 종목이 5개 초과 자주 발생 (2026-04-30 검증 시 채비/LS머트리얼즈/제룡산업/서진시스템/세명전기/제일일렉트릭/고영 등 7개+). 현 limit=5 라 짤림. KOSPI 도 동일 검토.
+- **범위**: `collectors/kr_leading_stocks.py::fetch_kr_leading_stocks` 의 `kospi_limit/kosdaq_limit` 기본값 + 텔레그램 메시지 길이 4096 자 한계 확인 + 테스트 케이스 갱신
+- **예상**: **30분**
 
 ### 2. knowledge/canon/ 4 파일 주입 인터뷰
-- **왜**: 실 LLM scenario 가 일반론 수준 ("선물 하락 + 미국 혼조세로 하락 출발 가능성"). canon 이 채워져야 "이 사용자의 에이전트" 로 진화. Phase 3 (RAG) 진입 전 채우면 RAG 효과 즉시 체감.
+- **왜**: 실 LLM scenario (`market_briefing_pre` analyze) 가 일반론 수준. canon 이 채워져야 "이 사용자의 에이전트" 로 진화. Phase 3 (RAG) 진입 전 채우면 RAG 효과 즉시 체감.
 - **범위**: `knowledge/canon/investment-principles.md` / `macro-framework.md` / `sector-insights.md` / `failure-lessons.md` 4 파일 TODO. 주제별 Q&A → MD 편집. **코드 변경 0**.
 - **예상**: **1.5~2h**.
 
-### 3. 남은 팀 레지스트리 완전 청산
-- **왜**: `core/registry.py` + `core/memory/rollup.py::rollup_all_teams` + 스케줄러 no-op 잡 3종 + `GET /api/teams` + `scripts/{validate,scaffold}.py` + `pyproject.toml` L65·L69 + `core/config/schema.py::TeamsConfig` 가 여전히 teams/ 를 전제. 신규 pipelines/ 기반과 섞여 개발자 혼란 + `teams/registry.yaml: missing` warning 지속.
-- **범위**: 8+ 파일 재작성/삭제, 서버 부팅 + 스케줄러 회귀 테스트 필수.
-- **예상**: **2~4h, 회귀 리스크로 독립 세션 권장**.
+### 3. Phase 3 — `market_briefing_close` 신규 + RAG
+- **왜**: SPEC L134~ Phase 3 — 장 마감 후 (`/briefing_close`) 예상 vs 실제 채점 + RAG 해석. 적중률 누적 → 도메인 고도화 Agent 의 입력. 3종 브리핑 사이클 완성.
+- **범위**: `pipelines/market_briefing_close/` 신규 (5 stages 중 `load_today_briefings` 신규) + `core/knowledge/{ingest,retrieve}.py` 완성 + canon → Chroma 인덱싱 + `cmd_briefing_close` 봇 핸들러 + 15:30 validation + render
+- **예상**: **4~6h, 독립 세션**.
 
 ---
 
@@ -56,31 +55,52 @@
 ## 🧩 마지막 세션이 남긴 맥락 (바로 쓸 수 있도록)
 
 ### 완성된 자산
-- `pipelines/morning_pre/` — 8 stages, 실 LLM 실증 완료. **notify stage 가 `skip_notify` flag 존중** (M6)
-- `core/briefing/parts_store.py` — **`get_last_run_before(pipeline_id, cutoff_iso, since_iso=None)` 신규** ([since, cutoff) 범위 조회, Phase 1 M1)
-- `core/briefing/render.py` — 파이프라인별 렌더러 공용
-- `core/contracts/briefing_part.py` — `briefing-part-v1`. **`BriefingResponse.note: str | None`** (Phase 1 M2)
-- `server/api/briefings_on_demand.py` — 4 엔드포인트 + in-memory 60s TTL + DB 60s cache guard. **09:00 분기 (cache 앞, `and not force`) + `force` default False 재정의 (cache/snapshot 우회 + LLM 실시간) + `notify` 쿼리** (Phase 1 M3/M3.5/M6)
-- `server/telegram/` — long-polling + `/briefing_pre` (기본=보관본) + `/briefing_pre_force` (09:00 우회) + `/briefing_now` (v1 호환) + `/help` 4 명령. **`⏰ 장 시작 전 데이터 기준 (HH:MM 생성)` prefix + `CHECKING_PRE_TEXT` 안내 + `notify=False`** (Phase 1 M4/M6)
-- `collectors/` — us_markets(+usdkrw) / kr_futures(EWY proxy) / news_rss / fear_greed
+- `pipelines/market_briefing_pre/` (← morning_pre) — 8 stages, 실 LLM 실증 완료. notify stage `skip_notify` 존중
+- `pipelines/market_briefing_now/` (신규) — 3 stages (collect_kr_market → persist → notify), LLM 없는 raw 발송, KIS 22콜 ~26s
+- `collectors/kr_{indices,sectors,leading_stocks,supply_demand}.py` — KOSPI/KOSDAQ/KOSPI200 + 15종 섹터 ETF + 거래대금 풀 30 + 외인/기관/투신/연기금 (KIS 단일)
+- `connectors/kis/client.py` — token 자동관리 + rate limit 1.1s + retry. **`volume_rank` 정렬 정확** (`FID_BLNG_CLS_CODE=3` 거래금액). `foreign-institution-total` summary 에 `pension_net_amount_m_sum` 포함
+- `core/briefing/parts_store.py` — `get_last_run_before(pipeline_id, cutoff_iso, since_iso=None)` (Phase 1 M1)
+- `core/briefing/render.py` — `render_morning_pre` + `render_market_briefing` (파트 3종: 시장개요+KOSPI200/수급+강세섹터/주도주). 백만원→억/조 단위 변환 helpers
+- `core/contracts/briefing_part.py` — `BriefingResponse.note: str | None`
+- `server/api/briefings_on_demand.py` — 4 엔드포인트 + cache guards. **`market_briefing_pre` 09:00 보관본 분기** + **`market_briefing_now` 09:00 fallback (force=true 우회) + `market_closed`/`market_briefing_early` note**
+- `server/telegram/` — `/briefing_pre` + `/briefing_pre_force` + `/briefing_now` (장중 KIS raw, force=True notify=False) + `/help`. `_PIPELINE_RENDERERS` dispatch + 3 prefix 케이스 (`before_market_open`/`market_closed`/`market_briefing_early`)
 - `core/db/schema.sql` v3 — briefing_parts (pipeline_id/run_id/part_key 유니크, ON CONFLICT REPLACE)
-- `pipelines/_base.py::pipeline_prompts_dir()` — Phase 0 helper
-- `justfile` 최상단 `export VIRTUAL_ENV` — 모든 worktree 메인 `.venv` 공유
-- `core/config/loader.py` — `.env` 자동 탐색 + DB path 메인 root 절대화
-- `conftest.py` — 2중 test isolation (skip_dotenv + notify autouse fake)
-- **pytest 44 passed** (test_parts_store 신규 7 + test_briefing_validation 신규 5 + test_briefings_on_demand 확장)
-- SPEC 2종: **BRIEFING-ON-DEMAND-001** (v1 완료) + **BRIEFING-TIMEBASED-002** (Phase 1 완료 / Phase 2~3 설계)
+- **pytest 64 passed** (test_market_briefing 신규 9 + test_briefings_on_demand market_briefing_now 6 추가)
+- SPEC 2종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** (Phase 1·2 완료, Phase 3 설계만)
 
 ### 미완 또는 의도적 공백
-- **Phase 2 (`/briefing_now` + market_briefing) 미착수** — 다음 Top 1. `cmd_briefing_now` 가 여전히 morning_pre force 호출 (v1 호환, Phase 2 에서 market_briefing 으로 의미 전환)
-- **Phase 3 (`/briefing_close` + RAG) 미착수** — Phase 2 완료 후
+- **KOSDAQ 주도주 limit=5 짤림** — 다음 Top 1. KIS volume_rank fix 후 5%+ 충족 종목이 자주 5+
 - **knowledge/canon/*.md 4 파일 TODO** — 다음 Top 2
-- **남은 팀 레지스트리 청산** — 다음 Top 3. 회귀 리스크로 독립 세션
-- `core/knowledge/retrieve.py` skeleton, ingest/embed 0
-- 종목명→ticker 정확도 본격 개선 대기
-- 스케줄러 run_id suffix `#sched-*` 미적용
-- "Unknown command" 원인 규명 — 텔레그램 클라이언트 캐시 추정, 내일 봇 채팅 재진입으로 자연 해소 예상
-- GitHub 원격 미연결
+- **Phase 3 (`market_briefing_close` + RAG) 미착수** — 다음 Top 3
+- **남은 팀 레지스트리 청산** (`core/registry.py`, `rollup.py`, scaffold scripts 등) — 별도 회귀 리스크 큰 세션
+- **개인 수급 표시 안 됨** — KIS 별도 API 필요. 현재 외인/기관/투신/연기금 4종
+- **KOSPI200 선물 정확 가격 안 받음** — 지수(2001) 로 대체. 선물옵션 API 별도
+- **docs SPEC/STRUCTURE/pipeline-restructure-plan/wrap-up.md 의 morning_pre 텍스트 갱신 안 됨** — 코드 동작 무관, 다음 wrap-up 시
+- 함수명 `render_morning_pre` 의도적 유지 (내부 함수명, 사용자 명시 안 함)
+- GitHub 원격 = 사용자 push 명시 시점에 새로 연결 (이번 세션)
+
+### 꼭 알아둘 판단
+
+**기초·불변 원칙**
+- **파이프라인 구조 = "시간대별 독립 폴더"**. 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
+- **수동 관심(`watch_positions`)과 AI 시뮬(`sim_positions` + `sim_trades`) 스키마 분리**
+- **텔레그램은 3분할 렌더링**. 연속성 문제 없음
+- **`docs/a_wanted/user_want_spec.md` 매 세션 초반 필수 읽기**. "뇌 이식 + 자동 수집 + 연속 판단" 이 본질
+- **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
+- **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
+
+**이번 세션에 굳힌 판단 (2026-04-30)**
+- **`market_briefing_now` 는 LLM 없이 raw 데이터만 발송**: 장중 9:30/12:00/14:00 등 빈번 호출 → LLM 비용·지연 회피. 객관 사실 (지수·수급·섹터·주도주) 표시로 충분. analyze stage 미생성
+- **KIS `volume_rank` 정렬 = `FID_BLNG_CLS_CODE`** (0:평균거래량 / 3:거래금액). docs 의 `FID_COND_SCR_DIV_CODE` 는 화면 ID 일 뿐. 다른 KIS 순위 API 도 비슷한 quirk 가능 → 직접 검증 필수
+- **봇 `cmd_briefing_now` 는 항상 force=True**: 09:00 이전이라도 사용자가 명시 호출하면 새 KIS run. fallback 분기에 `not force` 추가로 차별화
+- **briefing_parts retention = A 방향** (시계열 누적 + 90일 cleanup cron). last-wins 단순화 안 함 (Phase 3 channel close_briefing 이 시계열 입력 필요). 별도 작은 SPEC 백로그
+- **파이프라인 ID 명명 = `market_briefing_{pre,now,close}` 시간대 일관**: `morning_pre`→`market_briefing_pre`, `morning_briefing` 삭제, `market_briefing`→`market_briefing_now`. DB row + 코드 string + 봇 핸들러 일괄 마이그레이션
+
+**직전 세션들에 굳힌 판단** (계속 유효)
+- **레거시 청산 = "명백한 ImportError" vs "동작 중 no-op" 구분**: 후자는 회귀 리스크 → 별도 세션
+- **DB cache guard = cross-process dedup 정답**: 재기동/다중 인스턴스 시 DB 공유 시각 기반만 신뢰
+- **정확한 용어 요구**: VIX≠공포탐욕(CNN FGI), 투신(투자신탁)≠금융투자(증권사 자기매매). 영문 약어는 괄호에 한국어 병기
+- **서버 `--reload` 비신뢰**: 수정 시마다 수동 재시작
 
 ### 꼭 알아둘 판단
 
