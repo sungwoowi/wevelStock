@@ -425,6 +425,54 @@ class KISClient:
             for item in items
         ]
 
+    async def market_investor_total(self, market: str) -> dict[str, Any]:
+        """Whole-market investor net flow (today, cumulative).
+
+        Uses inquire-investor-time-by-market (FHPTJ04030000) — returns one
+        aggregated row per market with all investor categories. Unit: 백만원.
+
+        market: "kospi" | "kosdaq"
+        """
+        if market == "kospi":
+            mkt_code, sector_code = "KSP", "0001"
+        elif market == "kosdaq":
+            mkt_code, sector_code = "KSQ", "1001"
+        else:
+            raise ValueError(f"market must be 'kospi' or 'kosdaq', got {market!r}")
+
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/inquire-investor-time-by-market",
+            tr_id="FHPTJ04030000",
+            params={
+                "FID_INPUT_ISCD": mkt_code,
+                "FID_INPUT_ISCD_2": sector_code,
+            },
+        )
+        if data.get("rt_cd") != "0":
+            return {"error": data.get("msg1", "unknown"), "market": market}
+
+        rows = data.get("output1") or data.get("output") or []
+        if not rows:
+            return {"market": market, "no_data": True}
+        row = rows[0]
+
+        def _i(v: str | int | None) -> int:
+            if v in (None, "", "00000000"):
+                return 0
+            try:
+                return int(v)
+            except (ValueError, TypeError):
+                return 0
+
+        return {
+            "market": market,
+            "individual_net_amount_m": _i(row.get("prsn_ntby_tr_pbmn")),
+            "foreign_net_amount_m": _i(row.get("frgn_ntby_tr_pbmn")),
+            "institution_net_amount_m": _i(row.get("orgn_ntby_tr_pbmn")),
+            "fin_invest_net_amount_m": _i(row.get("scrt_ntby_tr_pbmn")),
+            "pension_net_amount_m": _i(row.get("fund_ntby_tr_pbmn")),
+        }
+
     async def market_investor_summary(self) -> dict[str, Any]:
         """Market-level investor flow summary.
 

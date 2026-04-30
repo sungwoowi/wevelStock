@@ -26,6 +26,7 @@ class PersistStage(Stage):
         market = ctx.get_stage_data("collect_kr_market") or {}
         indices = market.get("indices") or {}
         supply = market.get("supply_demand") or {}
+        futures_supply = market.get("futures_supply_demand") or {}
         leading = market.get("leading_stocks") or {}
         sectors = market.get("sectors") or {}
 
@@ -45,6 +46,7 @@ class PersistStage(Stage):
                 order=_PARTS_META[1][2],
                 data={
                     "supply_demand": supply,
+                    "futures_supply_demand": futures_supply,
                     "sectors": sectors,
                 },
             ),

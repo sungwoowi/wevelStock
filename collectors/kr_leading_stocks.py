@@ -105,7 +105,7 @@ async def _fetch_inner(
         "source": "kis",
         "fetched_at": datetime.now(_KST).isoformat(timespec="seconds"),
         "note": (
-            "KOSPI 10 + KOSDAQ 5. 조건(top20+2% / 외부+5% / 코스닥+5%) 우선, "
+            "KOSPI 10 + KOSDAQ 7. 조건(top20+2% / 외부+5% / 코스닥+5%) 우선, "
             "부족 시 거래대금 상위로 채움. match 필드 확인."
         ),
     }
@@ -115,7 +115,7 @@ async def fetch_kr_leading_stocks(
     kis: KISClient | None = None,
     *,
     kospi_limit: int = 10,
-    kosdaq_limit: int = 5,
+    kosdaq_limit: int = 7,
 ) -> dict[str, Any]:
     """Fetch KOSPI/KOSDAQ leading stocks per user criteria.
 

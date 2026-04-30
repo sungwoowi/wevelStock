@@ -1,21 +1,21 @@
-"""Korean market supply/demand — foreign / institution net flow per market.
+"""Korean market supply/demand — whole-market investor net flow per market.
 
-Uses KIS `market_investor_summary()` which aggregates foreign-institution-top
-ranking for KOSPI (0001) and KOSDAQ (1001). Sums are over top-30 by net
-amount, not the entire market — labeled accordingly.
+Uses KIS `market_investor_total()` (inquire-investor-time-by-market,
+FHPTJ04030000) which returns one cumulative row per market covering ALL
+investor categories — not a top-N aggregate. 5 categories surfaced:
+개인 / 외인 / 기관 / 금투 / 연기금.
 
 Returned shape:
 {
-    "kospi":  {
-        "foreign_net_amount_m_sum":     int,  # 백만원
-        "institution_net_amount_m_sum": int,
-        "fin_invest_net_amount_m_sum":  int,
-        "top_foreign_buys":  [up to 5],
-        "top_foreign_sells": [up to 5],
-        "count": 30,
+    "kospi": {
+        "individual_net_amount_m":  int,  # 개인  (백만원)
+        "foreign_net_amount_m":     int,  # 외인
+        "institution_net_amount_m": int,  # 기관 (합계, 금투+투신+보험+연기금+기타)
+        "fin_invest_net_amount_m":  int,  # 금투 (증권사 자기매매)
+        "pension_net_amount_m":     int,  # 연기금 (KIS fund)
     },
     "kosdaq": { ... same shape ... },
-    "note":   "상위 30개 합산 기준. 시장 전체 정확한 합계 아님.",
+    "note":   "시장 전체 누적 (KIS inquire-investor-time-by-market).",
     "source": "kis",
     "fetched_at": "...",
 }
@@ -35,29 +35,22 @@ _KST = ZoneInfo("Asia/Seoul")
 
 
 async def _fetch_inner(kis: KISClient) -> dict[str, Any]:
-    summary = await kis.market_investor_summary()
-    # `market_investor_summary` already shapes per-market aggregates.
-    # Lift the inner aggregated dicts up so the consumer sees flat shape.
+    kospi = await kis.market_investor_total("kospi")
+    kosdaq = await kis.market_investor_total("kosdaq")
     return {
-        "kospi": {
-            **summary.get("kospi", {}).get("aggregated", {}),
-            "top_30_raw": summary.get("kospi", {}).get("top_30_raw", []),
-        },
-        "kosdaq": {
-            **summary.get("kosdaq", {}).get("aggregated", {}),
-            "top_30_raw": summary.get("kosdaq", {}).get("top_30_raw", []),
-        },
-        "note": summary.get("note", ""),
+        "kospi": kospi,
+        "kosdaq": kosdaq,
+        "note": "시장 전체 누적 (KIS inquire-investor-time-by-market).",
         "source": "kis",
         "fetched_at": datetime.now(_KST).isoformat(timespec="seconds"),
     }
 
 
 async def fetch_kr_supply_demand(kis: KISClient | None = None) -> dict[str, Any]:
-    """Fetch KOSPI/KOSDAQ foreign+institution net-flow summary.
+    """Fetch KOSPI/KOSDAQ whole-market investor flow (5 categories).
 
-    Two KIS calls (foreign-institution-total for KOSPI + KOSDAQ).
-    With 1s rate limit ~ 2s.
+    Two KIS calls (inquire-investor-time-by-market for KOSPI + KOSDAQ).
+    With 1.1s rate limit ~ 2.2s.
     """
     if kis is None:
         async with KISClient() as own:
@@ -67,7 +60,7 @@ async def fetch_kr_supply_demand(kis: KISClient | None = None) -> dict[str, Any]
 
     log.info(
         "kr_supply_demand_collected",
-        kospi_foreign_m=result["kospi"].get("foreign_net_amount_m_sum"),
-        kosdaq_foreign_m=result["kosdaq"].get("foreign_net_amount_m_sum"),
+        kospi_foreign_m=result["kospi"].get("foreign_net_amount_m"),
+        kosdaq_foreign_m=result["kosdaq"].get("foreign_net_amount_m"),
     )
     return result

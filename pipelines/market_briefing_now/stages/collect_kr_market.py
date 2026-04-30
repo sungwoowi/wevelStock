@@ -5,6 +5,7 @@ KIS API 의 1초 rate limit 때문에 client 단위 직렬 호출. 4 collector �
 """
 from __future__ import annotations
 
+from collectors.kr_futures_supply_demand import fetch_kr_futures_supply_demand
 from collectors.kr_indices import fetch_kr_indices
 from collectors.kr_leading_stocks import fetch_kr_leading_stocks
 from collectors.kr_sectors import fetch_kr_sectors
@@ -21,12 +22,18 @@ class CollectKrMarketStage(Stage):
     stage_type = "collect"
 
     async def run(self, ctx: StageContext) -> StageResult:
+        futures_supply: dict = {}
         try:
             async with KISClient() as kis:
                 indices = await fetch_kr_indices(kis)
                 supply = await fetch_kr_supply_demand(kis)
                 leading = await fetch_kr_leading_stocks(kis)
                 sectors = await fetch_kr_sectors(kis)
+            try:
+                futures_supply = await fetch_kr_futures_supply_demand()
+            except Exception as e:  # noqa: BLE001
+                # KRX 비공식 endpoint 실패는 fatal 아님. 빈 dict 로 두고 진행.
+                log.warning("kr_futures_supply_failed", error=str(e))
         except Exception as e:  # noqa: BLE001
             log.error("kr_market_collect_failed", error=str(e))
             return StageResult(
@@ -48,6 +55,7 @@ class CollectKrMarketStage(Stage):
             data={
                 "indices": indices,
                 "supply_demand": supply,
+                "futures_supply_demand": futures_supply,
                 "leading_stocks": leading,
                 "sectors": sectors,
             },

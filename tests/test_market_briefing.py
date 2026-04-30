@@ -46,20 +46,30 @@ def _mock_market_data() -> dict:
         },
         "supply_demand": {
             "kospi": {
-                "count": 30,
-                "foreign_net_amount_m_sum": 940771,
-                "institution_net_amount_m_sum": 157237,
-                "fin_invest_net_amount_m_sum": 101400,
-                "pension_net_amount_m_sum": 23500,
+                "market": "kospi",
+                "individual_net_amount_m": 1182435,
+                "foreign_net_amount_m": -1455933,
+                "institution_net_amount_m": 283792,
+                "fin_invest_net_amount_m": 508920,
+                "pension_net_amount_m": 35039,
             },
             "kosdaq": {
-                "count": 30,
-                "foreign_net_amount_m_sum": 128603,
-                "institution_net_amount_m_sum": 42542,
-                "fin_invest_net_amount_m_sum": 28700,
-                "pension_net_amount_m_sum": 8400,
+                "market": "kosdaq",
+                "individual_net_amount_m": 128603,
+                "foreign_net_amount_m": -42542,
+                "institution_net_amount_m": -28700,
+                "fin_invest_net_amount_m": -15000,
+                "pension_net_amount_m": 8400,
             },
             "source": "kis",
+        },
+        "futures_supply_demand": {
+            "trade_date": "20260430",
+            "individual_net_amount_b": -41,
+            "foreign_net_amount_b": 445,
+            "institution_net_amount_b": -400,
+            "fetched_at_krx": "2026.04.30 PM 11:05:36",
+            "source": "krx",
         },
         "leading_stocks": {
             "kospi": [
@@ -121,7 +131,11 @@ def _market_parts() -> list[BriefingPart]:
             key="supply_sectors",
             label="수급+강세섹터",
             order=2,
-            data={"supply_demand": md["supply_demand"], "sectors": md["sectors"]},
+            data={
+                "supply_demand": md["supply_demand"],
+                "futures_supply_demand": md["futures_supply_demand"],
+                "sectors": md["sectors"],
+            },
         ),
         BriefingPart(
             key="leading_stocks",
@@ -208,14 +222,27 @@ def test_render_market_briefing_returns_three_strings() -> None:
     assert "출처: KIS API" in texts[0]
     assert "09:30:25" in texts[0]
 
-    # part 2 (수급 + 섹터) — KOSPI/KOSDAQ 분리 헤더 + 외인/기관/투신/연기금 + 섹터
+    # part 2 (수급 + 섹터) — KOSPI/KOSDAQ 분리 헤더 + 5주체(개인/외인/기관/금투/연기금) + 섹터
     assert "[KOSPI]" in texts[1]
     assert "[KOSDAQ]" in texts[1]
     assert "외인" in texts[1]
-    assert "+9,408억" in texts[1]
+    assert "-1.46조" in texts[1]  # KOSPI 외인 시장 전체 -1,455,933백만 = -1.456조
+    assert "개인" in texts[1]
+    assert "기관" in texts[1]
+    assert "금융투자" in texts[1]
     assert "연기금" in texts[1]
-    assert "투신" in texts[1]
-    assert "투자신탁" in texts[1]
+    # 세로 나열 순서 검증: 개인 → 외인 → 기관 → 금융투자 → 연기금
+    kospi_idx = texts[1].index("[KOSPI]")
+    kosdaq_idx = texts[1].index("[KOSDAQ]")
+    section = texts[1][kospi_idx:kosdaq_idx]
+    order = [section.index(label) for label in ["개인", "외인", "기관", "금융투자", "연기금"]]
+    assert order == sorted(order), f"순서 위반: {order}"
+    # KOSPI200 선물 수급 (KRX, 3주체) — [KOSPI200 선물] 헤더로 통일
+    assert "[KOSPI200 선물]" in texts[1]
+    assert "+4,450억" in texts[1]  # 외인 +445 십억 = +4,450억
+    # ※ 안내는 선물 블록 뒤로 이동
+    assert texts[1].index("[KOSPI200 선물]") < texts[1].index("※ 기관=")
+    assert "시장 전체" in texts[1]
     assert "KODEX 2차전지산업" in texts[1]
     assert "+2.02%" in texts[1]
 

@@ -284,26 +284,39 @@ def render_supply_sectors(data: dict) -> str:
     sectors = data.get("sectors") or {}
 
     lines: list[str] = []
-    lines.append("💰 시장 수급 (top30 합산)")
+    lines.append("💰 시장 수급 (시장 전체 누적)")
     for key, label in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
         s = supply.get(key) or {}
         lines.append("")
         lines.append(f"[{label}]")
-        if not s or s.get("count") == 0:
+        if not s or s.get("no_data") or s.get("error"):
             lines.append("  (수급 데이터 없음)")
             continue
-        lines.append(
-            f"  외인 {_fmt_won_million(s.get('foreign_net_amount_m_sum'))} "
-            f"| 기관 {_fmt_won_million(s.get('institution_net_amount_m_sum'))}"
-        )
-        lines.append(
-            f"  투신 {_fmt_won_million(s.get('fin_invest_net_amount_m_sum'))} "
-            f"| 연기금 {_fmt_won_million(s.get('pension_net_amount_m_sum'))}"
-        )
+        lines.append(f"  개인   {_fmt_won_million(s.get('individual_net_amount_m'))}")
+        lines.append(f"  외인   {_fmt_won_million(s.get('foreign_net_amount_m'))}")
+        lines.append(f"  기관   {_fmt_won_million(s.get('institution_net_amount_m'))}")
+        lines.append(f"  금융투자 {_fmt_won_million(s.get('fin_invest_net_amount_m'))}")
+        lines.append(f"  연기금  {_fmt_won_million(s.get('pension_net_amount_m'))}")
 
-    # 용어 안내 — 투신과 금융투자(증권사 자기매매)는 별개 카테고리
+    # 선물 수급 (KOSPI200 선물, KRX backend, 3주체)
+    futures = data.get("futures_supply_demand") or {}
+    if futures and not futures.get("error"):
+        ind_b = futures.get("individual_net_amount_b")
+        frgn_b = futures.get("foreign_net_amount_b")
+        org_b = futures.get("institution_net_amount_b")
+        if ind_b is not None or frgn_b is not None or org_b is not None:
+            # 십억원 → 백만원 환산 (1 십억 = 1,000 백만) 후 기존 helper 사용
+            def _b(v: int | None) -> str:
+                return _fmt_won_million((v or 0) * 1000)
+            lines.append("")
+            lines.append("[KOSPI200 선물]")
+            lines.append(f"  개인   {_b(ind_b)}")
+            lines.append(f"  외인   {_b(frgn_b)}")
+            lines.append(f"  기관   {_b(org_b)}")
+
+    # 용어 안내 — 기관은 합계, 그 안에 금융투자/투신/보험/연기금/기타 포함
     lines.append("")
-    lines.append("※ 투신=투자신탁(자산운용사 펀드) · 개인 데이터는 별도 API")
+    lines.append("※ 기관=금융투자+투신+보험+연기금+기타 합계 · 금융투자=증권사 자기매매")
 
     # 강세 섹터: 조건 충족 (≥threshold%) 우선 + 그 외 등락률 순으로 10개까지 채움.
     # 주도주 표시 패턴 일치 (🔥 = 조건 충족 / · = 등락률순 채움).
