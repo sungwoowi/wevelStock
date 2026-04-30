@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: BRIEFING-TIMEBASED-002 **Phase 2 전체 완성** + 파이프라인 ID 리네이밍. pytest **64 passed**. `market_briefing_now` 신규 (LLM 없는 raw 데이터 발송), 봇 `/briefing_now` 정식 가동, 09:00 이전 fallback (DB latest 우선·`force=true` 우회), KIS volume_rank 정렬 버그 fix (`FID_BLNG_CLS_CODE` 0→3), `morning_pre`→`market_briefing_pre` / `market_briefing`→`market_briefing_now` / `morning_briefing` 삭제. 다음 세션은 **KOSDAQ limit 확대** 또는 **canon 4 파일 주입** 또는 **Phase 3 close_briefing+RAG**.
+**현재 위치**: `market_briefing_now` 시장수급 신뢰성 rework 완료 + KRX 선물수급 신규 + ETF 매핑 fix + KOSDAQ limit 7 확대. pytest **60 passed**. KIS `foreign-institution-total` (top30 양수편향) → `inquire-investor-time-by-market` (FHPTJ04030000, 시장 전체 5주체) 교체. KRX 정보데이터시스템 backend (`data.krx.co.kr/comm/bldAttendant/getJsonData.cmd`) 직접 호출하는 `KRXClient` 신규 — KOSPI200 선물 3주체 수급 추가. 봇 `/briefing_now` 시각 검증 통과. 다음 세션은 **canon 4 파일 인터뷰** 또는 **선물 수급 5주체 확장 (KRX MDCSTAT)** 또는 **Phase 3 close+RAG**.
 
 **마지막 작업일**: 2026-04-30
-**마지막 세션 로그**: [2026-04-30_phase2-market-briefing-now.md](c_worked/2026-04-30_phase2-market-briefing-now.md)
-**Git**: `main` 이번 세션 2 커밋 + push (사용자 명시 요청)
+**마지막 세션 로그**: [2026-04-30_market-supply-fix-and-krx-futures-2.md](c_worked/2026-04-30_market-supply-fix-and-krx-futures-2.md)
+**Git**: `main` 이번 세션 2 커밋 (코드 + wrap-up). push 안 됨 (사용자 명시 시)
 
 ---
 
@@ -21,15 +21,15 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. KOSDAQ 주도주 limit=5 → 7~10 증가
-- **왜**: KIS 거래대금 정렬 fix 후 KOSDAQ 5%+ 충족 종목이 5개 초과 자주 발생 (2026-04-30 검증 시 채비/LS머트리얼즈/제룡산업/서진시스템/세명전기/제일일렉트릭/고영 등 7개+). 현 limit=5 라 짤림. KOSPI 도 동일 검토.
-- **범위**: `collectors/kr_leading_stocks.py::fetch_kr_leading_stocks` 의 `kospi_limit/kosdaq_limit` 기본값 + 텔레그램 메시지 길이 4096 자 한계 확인 + 테스트 케이스 갱신
-- **예상**: **30분**
-
-### 2. knowledge/canon/ 4 파일 주입 인터뷰
+### 1. knowledge/canon/ 4 파일 주입 인터뷰
 - **왜**: 실 LLM scenario (`market_briefing_pre` analyze) 가 일반론 수준. canon 이 채워져야 "이 사용자의 에이전트" 로 진화. Phase 3 (RAG) 진입 전 채우면 RAG 효과 즉시 체감.
 - **범위**: `knowledge/canon/investment-principles.md` / `macro-framework.md` / `sector-insights.md` / `failure-lessons.md` 4 파일 TODO. 주제별 Q&A → MD 편집. **코드 변경 0**.
-- **예상**: **1.5~2h**.
+- **예상**: **1.5~2h, 사용자 인터뷰 시간 필요**.
+
+### 2. 선물 수급 5주체 확장 (KRX 상세통계)
+- **왜**: 현재 KOSPI200 선물 수급은 KRX 메인 위젯 (MDCMAIN00103) 응답이라 3주체 (개인/외인/기관) 만. 현물처럼 5주체 (개인/외인/기관/금투/연기금) 일관성 원하면 KRX 상세통계 페이지 (MDCSTAT 시리즈) 의 다른 bld 필요.
+- **범위**: 사용자가 `data.krx.co.kr` [파생상품 → 통계 → 투자자별 거래실적] 페이지에서 DevTools `getJsonData.cmd` payload 캡쳐 → `connectors/krx/client.py` 메서드 추가 + `collectors/kr_futures_supply_demand.py` 응답 5주체 확장 + render 갱신
+- **예상**: **1h, 사용자 캡쳐 도움 필요**.
 
 ### 3. Phase 3 — `market_briefing_close` 신규 + RAG
 - **왜**: SPEC L134~ Phase 3 — 장 마감 후 (`/briefing_close`) 예상 vs 실제 채점 + RAG 해석. 적중률 누적 → 도메인 고도화 Agent 의 입력. 3종 브리핑 사이클 완성.
@@ -56,28 +56,29 @@
 
 ### 완성된 자산
 - `pipelines/market_briefing_pre/` (← morning_pre) — 8 stages, 실 LLM 실증 완료. notify stage `skip_notify` 존중
-- `pipelines/market_briefing_now/` (신규) — 3 stages (collect_kr_market → persist → notify), LLM 없는 raw 발송, KIS 22콜 ~26s
-- `collectors/kr_{indices,sectors,leading_stocks,supply_demand}.py` — KOSPI/KOSDAQ/KOSPI200 + 15종 섹터 ETF + 거래대금 풀 30 + 외인/기관/투신/연기금 (KIS 단일)
-- `connectors/kis/client.py` — token 자동관리 + rate limit 1.1s + retry. **`volume_rank` 정렬 정확** (`FID_BLNG_CLS_CODE=3` 거래금액). `foreign-institution-total` summary 에 `pension_net_amount_m_sum` 포함
-- `core/briefing/parts_store.py` — `get_last_run_before(pipeline_id, cutoff_iso, since_iso=None)` (Phase 1 M1)
-- `core/briefing/render.py` — `render_morning_pre` + `render_market_briefing` (파트 3종: 시장개요+KOSPI200/수급+강세섹터/주도주). 백만원→억/조 단위 변환 helpers
+- `pipelines/market_briefing_now/` — 3 stages (collect_kr_market → persist → notify), LLM 없는 raw 발송. KIS 22콜 + KRX 1콜 ~28s
+- `collectors/kr_{indices,sectors,leading_stocks,supply_demand,futures_supply_demand}.py` — KOSPI/KOSDAQ/KOSPI200 + 15종 섹터 ETF + 거래대금 풀 30 + 시장 전체 5주체 수급(KIS) + KOSPI200 선물 3주체 수급(KRX). ETF 매핑 487240/0080G0/463250 fix
+- `connectors/kis/client.py` — token 자동관리 + rate limit 1.1s + retry. `volume_rank` 정렬 정확 (`FID_BLNG_CLS_CODE=3`). **`market_investor_total(market)` 신규** (FHPTJ04030000, 시장 전체 5주체)
+- `connectors/krx/client.py` (신규) — `data.krx.co.kr/comm/bldAttendant/getJsonData.cmd` POST 헤더 (Referer/UA/X-Requested-With) helper. `k200_futures_investor_today()` (KOSPI200 선물 3주체)
+- `core/briefing/parts_store.py` — `get_last_run_before(pipeline_id, cutoff_iso, since_iso=None)`
+- `core/briefing/render.py` — `render_morning_pre` + `render_market_briefing`. **수급 5주체 세로 나래비 (개인→외인→기관→금융투자→연기금)** + **`[KOSPI200 선물]` 3주체 블록** + 안내 라인 후행 배치. 백만원→억/조 단위 helpers
 - `core/contracts/briefing_part.py` — `BriefingResponse.note: str | None`
-- `server/api/briefings_on_demand.py` — 4 엔드포인트 + cache guards. **`market_briefing_pre` 09:00 보관본 분기** + **`market_briefing_now` 09:00 fallback (force=true 우회) + `market_closed`/`market_briefing_early` note**
-- `server/telegram/` — `/briefing_pre` + `/briefing_pre_force` + `/briefing_now` (장중 KIS raw, force=True notify=False) + `/help`. `_PIPELINE_RENDERERS` dispatch + 3 prefix 케이스 (`before_market_open`/`market_closed`/`market_briefing_early`)
-- `core/db/schema.sql` v3 — briefing_parts (pipeline_id/run_id/part_key 유니크, ON CONFLICT REPLACE)
-- **pytest 64 passed** (test_market_briefing 신규 9 + test_briefings_on_demand market_briefing_now 6 추가)
+- `server/api/briefings_on_demand.py` — 4 엔드포인트 + cache guards
+- `server/telegram/` — `/briefing_pre` + `/briefing_pre_force` + `/briefing_now` + `/help`
+- `core/db/schema.sql` v3 — briefing_parts
+- **pytest 60 passed** (test_market_briefing 픽스처/assert 갱신, 새 부분 검증 포함)
 - SPEC 2종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** (Phase 1·2 완료, Phase 3 설계만)
 
 ### 미완 또는 의도적 공백
-- **KOSDAQ 주도주 limit=5 짤림** — 다음 Top 1. KIS volume_rank fix 후 5%+ 충족 종목이 자주 5+
-- **knowledge/canon/*.md 4 파일 TODO** — 다음 Top 2
+- **knowledge/canon/*.md 4 파일 TODO** — 다음 Top 1
+- **선물 수급 3주체 → 5주체 확장** — KRX 상세통계 (MDCSTAT) bld 캡쳐 필요. 다음 Top 2
 - **Phase 3 (`market_briefing_close` + RAG) 미착수** — 다음 Top 3
-- **남은 팀 레지스트리 청산** (`core/registry.py`, `rollup.py`, scaffold scripts 등) — 별도 회귀 리스크 큰 세션
-- **개인 수급 표시 안 됨** — KIS 별도 API 필요. 현재 외인/기관/투신/연기금 4종
+- **`market_investor_summary`/`foreign_institution_top` dead code** — 호출처 제거됐지만 코드 유지. 별도 청산 세션
+- **남은 팀 레지스트리 청산** (`core/registry.py`, `rollup.py`, scaffold scripts 등) — 회귀 리스크 큰 별도 세션
 - **KOSPI200 선물 정확 가격 안 받음** — 지수(2001) 로 대체. 선물옵션 API 별도
 - **docs SPEC/STRUCTURE/pipeline-restructure-plan/wrap-up.md 의 morning_pre 텍스트 갱신 안 됨** — 코드 동작 무관, 다음 wrap-up 시
-- 함수명 `render_morning_pre` 의도적 유지 (내부 함수명, 사용자 명시 안 함)
-- GitHub 원격 = 사용자 push 명시 시점에 새로 연결 (이번 세션)
+- 함수명 `render_morning_pre` 의도적 유지 (내부 함수명)
+- `.claude/settings.json` modified 미커밋 — 이번 세션과 무관, 사용자 확인 후 처리
 
 ### 꼭 알아둘 판단
 
@@ -89,16 +90,19 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-04-30)**
-- **`market_briefing_now` 는 LLM 없이 raw 데이터만 발송**: 장중 9:30/12:00/14:00 등 빈번 호출 → LLM 비용·지연 회피. 객관 사실 (지수·수급·섹터·주도주) 표시로 충분. analyze stage 미생성
-- **KIS `volume_rank` 정렬 = `FID_BLNG_CLS_CODE`** (0:평균거래량 / 3:거래금액). docs 의 `FID_COND_SCR_DIV_CODE` 는 화면 ID 일 뿐. 다른 KIS 순위 API 도 비슷한 quirk 가능 → 직접 검증 필수
-- **봇 `cmd_briefing_now` 는 항상 force=True**: 09:00 이전이라도 사용자가 명시 호출하면 새 KIS run. fallback 분기에 `not force` 추가로 차별화
-- **briefing_parts retention = A 방향** (시계열 누적 + 90일 cleanup cron). last-wins 단순화 안 함 (Phase 3 channel close_briefing 이 시계열 입력 필요). 별도 작은 SPEC 백로그
-- **파이프라인 ID 명명 = `market_briefing_{pre,now,close}` 시간대 일관**: `morning_pre`→`market_briefing_pre`, `morning_briefing` 삭제, `market_briefing`→`market_briefing_now`. DB row + 코드 string + 봇 핸들러 일괄 마이그레이션
+**이번 세션에 굳힌 판단 (2026-04-30 2nd)**
+- **시장 전체 vs 종목 단위 KIS 투자자 API 구분**: `inquire-investor` (종목 1개) ≠ `inquire-investor-time-by-market` (시장 전체 누적, FHPTJ04030000, 단일 row, 5주체) ≠ `foreign-institution-total` (외인 매수 상위 30 랭킹, 양수 편향). **시장 전체 합계 = `time-by-market` 만 신뢰**
+- **KIS OpenAPI 가 선물 시장 투자자별 수급 미제공** → KRX 정보데이터시스템 backend 활용. `data.krx.co.kr/comm/bldAttendant/getJsonData.cmd` POST + Referer/UA 헤더. 화면별 `bld` 파라미터가 핵심 식별자, 응답엔 시장 정보 없어 payload 검증 필수
+- **ETF 매핑 검증법**: KIS `inquire-price` 의 거래량/거래대금이 장중인데 1,000주 미만이면 매핑 의심 신호. KIS 응답의 `bstp_kor_isnm` 은 분류명만 (예: "ETF(파생결합/액티브분류)") 이라 종목 식별 불가 → 사용자/외부 확인 필수
+- **수급 표시 5주체 세로 나래비 + 풀어쓰기**: 개인→외인→기관→금융투자→연기금. "금투" 같은 약자 X, "금융투자" 풀어쓰기. 선물도 `[KOSPI200 선물]` 헤더로 현물과 통일
 
 **직전 세션들에 굳힌 판단** (계속 유효)
-- **레거시 청산 = "명백한 ImportError" vs "동작 중 no-op" 구분**: 후자는 회귀 리스크 → 별도 세션
-- **DB cache guard = cross-process dedup 정답**: 재기동/다중 인스턴스 시 DB 공유 시각 기반만 신뢰
+- **`market_briefing_now` 는 LLM 없이 raw 데이터만 발송**: 장중 빈번 호출 → LLM 비용·지연 회피
+- **KIS `volume_rank` 정렬 = `FID_BLNG_CLS_CODE`** (0:평균거래량 / 3:거래금액). docs 의 `FID_COND_SCR_DIV_CODE` 는 화면 ID 일 뿐. KIS 응답 정렬·필드 의미는 의심하고 직접 검증
+- **봇 `cmd_briefing_now` 는 항상 force=True**: 09:00 이전이라도 사용자가 명시 호출하면 새 KIS run. fallback 분기에 `not force` 추가로 차별화
+- **briefing_parts retention = A 방향** (시계열 누적 + 90일 cleanup cron). 별도 작은 SPEC 백로그
+- **파이프라인 ID 명명 = `market_briefing_{pre,now,close}` 시간대 일관**
+- **DB cache guard = cross-process dedup 정답**
 - **정확한 용어 요구**: VIX≠공포탐욕(CNN FGI), 투신(투자신탁)≠금융투자(증권사 자기매매). 영문 약어는 괄호에 한국어 병기
 - **서버 `--reload` 비신뢰**: 수정 시마다 수동 재시작
 
