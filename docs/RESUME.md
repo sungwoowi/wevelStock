@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: `market_briefing_now` 시장수급 신뢰성 rework 완료 + KRX 선물수급 신규 + ETF 매핑 fix + KOSDAQ limit 7 확대. pytest **60 passed**. KIS `foreign-institution-total` (top30 양수편향) → `inquire-investor-time-by-market` (FHPTJ04030000, 시장 전체 5주체) 교체. KRX 정보데이터시스템 backend (`data.krx.co.kr/comm/bldAttendant/getJsonData.cmd`) 직접 호출하는 `KRXClient` 신규 — KOSPI200 선물 3주체 수급 추가. 봇 `/briefing_now` 시각 검증 통과. 다음 세션은 **canon 4 파일 인터뷰** 또는 **선물 수급 5주체 확장 (KRX MDCSTAT)** 또는 **Phase 3 close+RAG**.
+**현재 위치**: **5-Layer 도메인 아키텍처 합의** (모바일 토론, 코드 변경 0). 학습부 5 / 분석가 5 / 전략가 3 / 계좌관리자 1 / 출력 채널. 사용자가 풀어 던진 5 학습부 (원칙·실전·장기생존·종목분석·뉴스) + 투자성격군별 조언의 큰 그림을 7라운드 인터뷰로 정형화. plugin 패턴 + manifest list 기반 + 분산투자=계좌관리자 흡수 + 분화는 trigger 시 합의. 다음 세션 = **M1 폴더 구조화** (PC 복귀 시 1.5~2h).
 
-**마지막 작업일**: 2026-04-30
-**마지막 세션 로그**: [2026-04-30_market-supply-fix-and-krx-futures-2.md](c_worked/2026-04-30_market-supply-fix-and-krx-futures-2.md)
-**Git**: `main` 이번 세션 2 커밋 (코드 + wrap-up). push 안 됨 (사용자 명시 시)
+**마지막 작업일**: 2026-05-03
+**마지막 세션 로그**: [2026-05-03_5layer-domain-architecture.md](c_worked/2026-05-03_5layer-domain-architecture.md)
+**Git**: `main` 이번 세션 wrap-up 1 커밋 (코드 변경 0). push 안 됨 (사용자 명시 시)
 
 ---
 
@@ -21,20 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. knowledge/canon/ 4 파일 주입 인터뷰
-- **왜**: 실 LLM scenario (`market_briefing_pre` analyze) 가 일반론 수준. canon 이 채워져야 "이 사용자의 에이전트" 로 진화. Phase 3 (RAG) 진입 전 채우면 RAG 효과 즉시 체감.
-- **범위**: `knowledge/canon/investment-principles.md` / `macro-framework.md` / `sector-insights.md` / `failure-lessons.md` 4 파일 TODO. 주제별 Q&A → MD 편집. **코드 변경 0**.
-- **예상**: **1.5~2h, 사용자 인터뷰 시간 필요**.
+### 1. M1 — Layer 1+2 폴더 구조화 (PC 복귀 시)
+- **왜**: 5-Layer 모델 합의 후 첫 코드 작업. `knowledge/canon/` flat 4 파일 → 5 학습부 계층 폴더로 재구조화. 모든 후속 마일스톤의 "주소 체계" — 이거 없으면 M2~M6 다 임시 위치.
+- **범위**: `knowledge/canon/{principles,mechanics,long-term,stock-analysis,news}/` 5 폴더 신설 + 기존 4 placeholder 파일 마이그레이션 + 분석가 페르소나 디렉토리 위치 결정 (`teams/` 활용 vs 신규 `agents/analysts/`) + `manifest.yaml` **list 기반** 스키마 (`analysts: [...]` / `reads: [...]`) + `core/knowledge/compose.py` `load_shared_canon()` 5 학습부 폴더 재귀 읽기. pytest 60 passed 유지. 자료 채우기는 M2.
+- **예상**: **1.5~2h, PC 복귀 후 단발**.
 
-### 2. 선물 수급 5주체 확장 (KRX 상세통계)
-- **왜**: 현재 KOSPI200 선물 수급은 KRX 메인 위젯 (MDCMAIN00103) 응답이라 3주체 (개인/외인/기관) 만. 현물처럼 5주체 (개인/외인/기관/금투/연기금) 일관성 원하면 KRX 상세통계 페이지 (MDCSTAT 시리즈) 의 다른 bld 필요.
-- **범위**: 사용자가 `data.krx.co.kr` [파생상품 → 통계 → 투자자별 거래실적] 페이지에서 DevTools `getJsonData.cmd` payload 캡쳐 → `connectors/krx/client.py` 메서드 추가 + `collectors/kr_futures_supply_demand.py` 응답 5주체 확장 + render 갱신
-- **예상**: **1h, 사용자 캡쳐 도움 필요**.
+### 2. M2 — 학습부 자료 채우기 (모바일/PC 둘 다 가능)
+- **왜**: M1 빈 뼈대만 만들고 자료 0이면 LLM analyze 일반론 그대로. 학습부에 사용자 시각이 들어가야 "이 사용자의 에이전트" 로 진화.
+- **범위**: 5 학습부 중 우선순위 (추천: **장기생존부** = 거시 시각이 다른 학습부의 기반). 인터뷰 1~2h/파일. 코드 변경 0, markdown Q&A. 모바일에서도 가능.
+- **예상**: **1~2h/파일, 5 파일 한 번에 다 안 함**.
 
-### 3. Phase 3 — `market_briefing_close` 신규 + RAG
-- **왜**: SPEC L134~ Phase 3 — 장 마감 후 (`/briefing_close`) 예상 vs 실제 채점 + RAG 해석. 적중률 누적 → 도메인 고도화 Agent 의 입력. 3종 브리핑 사이클 완성.
-- **범위**: `pipelines/market_briefing_close/` 신규 (5 stages 중 `load_today_briefings` 신규) + `core/knowledge/{ingest,retrieve}.py` 완성 + canon → Chroma 인덱싱 + `cmd_briefing_close` 봇 핸들러 + 15:30 validation + render
-- **예상**: **4~6h, 독립 세션**.
+### 3. M3 — 분석가 5명 페르소나 분화 + 5-Layer docs 등재
+- **왜**: 현재 `analyst.md` 1개 페르소나 → 5 분석가 (원칙수호자·매매코치·거시분석가·종목분석가·뉴스큐레이터) 로 분화. 각 페르소나가 본인 학습부만 read 하도록 binding. 동시에 5-Layer 모델을 docs (STRUCTURE.md/RUNTIME.md/CLAUDE.md) 정식 등재.
+- **범위**: `analyst.md` split → 5 persona.md + 각 manifest 의 `reads` 매핑 + analyze stage 가 5번 호출하도록 진화 (Layer 3 strategist 합성은 M4 별도) + 5-Layer 모델 docs 정식 등재.
+- **예상**: **2~3h, PC 단발**. M2 어느 정도 차야 페르소나 분화 효과 체감.
 
 ---
 
@@ -70,15 +70,18 @@
 - SPEC 2종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** (Phase 1·2 완료, Phase 3 설계만)
 
 ### 미완 또는 의도적 공백
-- **knowledge/canon/*.md 4 파일 TODO** — 다음 Top 1
-- **선물 수급 3주체 → 5주체 확장** — KRX 상세통계 (MDCSTAT) bld 캡쳐 필요. 다음 Top 2
-- **Phase 3 (`market_briefing_close` + RAG) 미착수** — 다음 Top 3
+- **5-Layer 모델 코드 미반영** — 합의만 됨, M1 (폴더 구조화) 부터 진입. 다음 Top 1
+- **knowledge/canon/*.md 4 파일 → 5 학습부 마이그레이션 미실행** — M1 산출 후 M2 인터뷰
+- **분석가 5명 페르소나 분화 (analyst.md 1개 → 5개)** — M3 단계
+- **전략가 3명 합성 / 계좌관리자 / 출력 채널 확장** — M4~M6, 한참 후
+- **선물 수급 3주체 → 5주체 확장** — KRX MDCSTAT bld 캡쳐 필요, 백로그
+- **Phase 3 (`market_briefing_close` + RAG) 미착수** — 5-Layer M3 이후 자연스럽게 진입
 - **`market_investor_summary`/`foreign_institution_top` dead code** — 호출처 제거됐지만 코드 유지. 별도 청산 세션
 - **남은 팀 레지스트리 청산** (`core/registry.py`, `rollup.py`, scaffold scripts 등) — 회귀 리스크 큰 별도 세션
 - **KOSPI200 선물 정확 가격 안 받음** — 지수(2001) 로 대체. 선물옵션 API 별도
-- **docs SPEC/STRUCTURE/pipeline-restructure-plan/wrap-up.md 의 morning_pre 텍스트 갱신 안 됨** — 코드 동작 무관, 다음 wrap-up 시
+- **docs STRUCTURE.md / RUNTIME.md / CLAUDE.md 의 5-Layer 모델 정식 등재 안 됨** — M1+M3 코드 작업과 묶어서
 - 함수명 `render_morning_pre` 의도적 유지 (내부 함수명)
-- `.claude/settings.json` modified 미커밋 — 이번 세션과 무관, 사용자 확인 후 처리
+- `.claude/settings.json` modified / `bash.exe.stackdump` / `rag_docs/` — 이번 세션과 무관, 사용자 확인 후 처리
 
 ### 꼭 알아둘 판단
 
@@ -90,11 +93,18 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-04-30 2nd)**
+**이번 세션에 굳힌 판단 (2026-05-03)**
+- **5-Layer 도메인 모델 합의**: 학습부 5 / 분석가 5 (1:1 매핑) / 전략가 3 (단타·스윙·중장기 horizon) / 계좌관리자 1 (4 계좌 + 자산배분 흡수) / 출력 채널. starting count, plugin 패턴 위에서 trigger 시 분화
+- **분산투자 = 계좌관리자 흡수** (Layer 3 X, Layer 4 의 한 모드). 자산배분은 종목 추천이 아니라 계좌 단위 메타 결정
+- **분석가 ↔ 학습부 1:1 매핑**: 각 분석가는 본인 영역 학습부만 읽음. manifest 는 **list 기반** (`analysts: [...]` / `reads: [...]`) 으로 시작 → 미래 1:N 확장 무비용
+- **분화는 trigger 시**: 빈 그릇 미리 만들지 X. 운용 중 사용자가 "결함" 느낄 때 학습부/분석가/전략가 분화 (예: 종목분석가 → 기본+기술, 트레이딩 → 단타+스윙)
+- **비용은 신경 X (제대로 구축 우선)**: 추정 월 1~3만원 (Sonnet 4 + cache). LLM 호출마다 토큰·비용 기록 hook 만 둬서 자가 보고
+
+**직전 세션 판단 (2026-04-30 2nd)**
 - **시장 전체 vs 종목 단위 KIS 투자자 API 구분**: `inquire-investor` (종목 1개) ≠ `inquire-investor-time-by-market` (시장 전체 누적, FHPTJ04030000, 단일 row, 5주체) ≠ `foreign-institution-total` (외인 매수 상위 30 랭킹, 양수 편향). **시장 전체 합계 = `time-by-market` 만 신뢰**
-- **KIS OpenAPI 가 선물 시장 투자자별 수급 미제공** → KRX 정보데이터시스템 backend 활용. `data.krx.co.kr/comm/bldAttendant/getJsonData.cmd` POST + Referer/UA 헤더. 화면별 `bld` 파라미터가 핵심 식별자, 응답엔 시장 정보 없어 payload 검증 필수
-- **ETF 매핑 검증법**: KIS `inquire-price` 의 거래량/거래대금이 장중인데 1,000주 미만이면 매핑 의심 신호. KIS 응답의 `bstp_kor_isnm` 은 분류명만 (예: "ETF(파생결합/액티브분류)") 이라 종목 식별 불가 → 사용자/외부 확인 필수
-- **수급 표시 5주체 세로 나래비 + 풀어쓰기**: 개인→외인→기관→금융투자→연기금. "금투" 같은 약자 X, "금융투자" 풀어쓰기. 선물도 `[KOSPI200 선물]` 헤더로 현물과 통일
+- **KIS OpenAPI 가 선물 시장 투자자별 수급 미제공** → KRX 정보데이터시스템 backend 활용. `data.krx.co.kr/comm/bldAttendant/getJsonData.cmd` POST + Referer/UA 헤더. 화면별 `bld` 파라미터가 핵심 식별자
+- **ETF 매핑 검증법**: KIS `inquire-price` 의 거래량/거래대금이 장중인데 1,000주 미만이면 매핑 의심 신호. KIS 응답의 `bstp_kor_isnm` 은 분류명만이라 종목 식별 불가 → 사용자/외부 확인 필수
+- **수급 표시 5주체 세로 나래비 + 풀어쓰기**: 개인→외인→기관→금융투자→연기금. "금투" 약자 X. 선물도 `[KOSPI200 선물]` 헤더로 현물과 통일
 
 **직전 세션들에 굳힌 판단** (계속 유효)
 - **`market_briefing_now` 는 LLM 없이 raw 데이터만 발송**: 장중 빈번 호출 → LLM 비용·지연 회피
@@ -105,26 +115,6 @@
 - **DB cache guard = cross-process dedup 정답**
 - **정확한 용어 요구**: VIX≠공포탐욕(CNN FGI), 투신(투자신탁)≠금융투자(증권사 자기매매). 영문 약어는 괄호에 한국어 병기
 - **서버 `--reload` 비신뢰**: 수정 시마다 수동 재시작
-
-### 꼭 알아둘 판단
-
-**기초·불변 원칙**
-- **파이프라인 구조는 "시간대별 독립 폴더"**. 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
-- **수동 관심(`watch_positions`)과 AI 시뮬(`sim_positions` + `sim_trades`) 스키마 분리**
-- **텔레그램은 3분할 렌더링** (LLM 1회만 호출). 연속성 문제 없음
-- **`docs/a_wanted/user_want_spec.md` 매 세션 초반 필수 읽기**. "뇌 이식 + 자동 수집 + 연속 판단" 이 본질
-
-**이번 세션에 굳힌 판단 (2026-04-25)**
-- **`force` 의미 = "cache/snapshot 우회 + LLM 실시간 실행"**: default False 로 뒤집음. 기본은 09:00 이후 보관본 모드, `force=true` 는 서버 다운·공휴일 등 복구 경로. 봇 2 명령어 (`/briefing_pre`, `/briefing_pre_force`) 분리.
-- **09:00 분기는 cache 레이어 앞에 배치**: force=true 방금 run 이 60s cache 에 남아도 force=false 다음 호출은 보관본 분기 탐. 누수 원천 차단 (M3.5).
-- **파이프라인 notify stage + 봇 `_send_briefing` 이중 발송은 v1 설계 결함**: `/run?notify=false` + `input_data={"skip_notify": True}` 로 해결. 봇은 항상 notify=False, scheduled cron 만 notify=True. 한 호출당 6건 → 3건 (M6).
-- **Explore subagent 는 범위 불분명할 때만**: 파일 경로 알려진 탐색엔 직접 Read/Grep 병렬 (체감 속도 + 사용자 가시성). 피드백 → `feedback_small_milestones.md`.
-
-**직전 세션들에 굳힌 판단** (계속 유효)
-- **레거시 청산은 "명백한 ImportError" vs "동작 중 no-op" 구분**: 전자 단순 삭제 안전, 후자는 서버 부팅·스케줄러 회귀 리스크 → 별도 세션 필요 (다음 Top 3).
-- **DB cache guard = cross-process dedup 정답**: in-memory TTL 은 프로세스 로컬. 재기동/다중 인스턴스 시 DB 공유 시각 기반만 신뢰.
-- **정확한 용어 요구**: VIX ≠ 공포탐욕(CNN FGI). 영문 약어는 괄호에 한국어 병기.
-- **서버 `--reload` 비신뢰**: 수정 시마다 수동 재시작.
 
 ---
 
