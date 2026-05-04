@@ -58,6 +58,29 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 9. **동적 설정**: config/runtime.yaml 수정은 재시작 없이 반영 (watchdog 감지). 하드코딩 금지.
 10. **Telegram 미설정 시 파일 폴백**: `data/notifications/*.jsonl` 에 기록하여 로컬 개발 지원.
 
+## 운영 환경 (Environment)
+- 플랫폼: **Windows**. 패키지 매니저는 `winget` (NOT brew). PowerShell 실행 정책 조정 필요할 수 있음.
+- 도구: `uv` (Python), `just` (task runner), `npm` (Node — pnpm은 Windows에서 EPERM 빈발).
+
+## 워크트리 (Worktree) 규칙
+- 워크트리는 메인 레포의 `.env` 와 venv 를 **공유**. 격리된 venv 만들지 말 것.
+- 파이프라인 실행 전 공유 venv 에 의존성이 설치되어 있는지 항상 확인.
+- 코드 수정 후 서버 프로세스 **재시작**. hot reload 신뢰하지 말 것 — stale 프로세스가 옛 코드로 응답해 중복 LLM 호출이 발생한 사고 전적 있음.
+
+## 테스트 안전 (Testing Safety)
+- 테스트는 **절대로 외부 API (Telegram, KIS, Gemini, Anthropic) 실호출 금지**. mock 필수.
+- pytest 호출 시 `TESTING=1` 환경변수 명시 — `.claude/hooks/pytest_safety.ps1` PreToolUse hook 이 미지정 시 차단.
+  - PowerShell: `$env:TESTING='1'; pytest ...`
+  - POSIX bash: `TESTING=1 pytest ...`
+- 테스트/`conftest.py` 가 `TESTING=1` 시 실 API 호출을 mock 처리하도록 보장.
+- 중복 LLM 호출 방지: `llm_call_cache` 테이블 DB 캐시 활용.
+- 사고 전적: 테스트가 mock 없이 실 BOT_TOKEN 으로 사용자 카톡에 스팸 발송한 적 있음 (BRIEFING-ON-DEMAND-001 v1).
+
+## Claude 도구 사용 규율 (Tool Usage Discipline)
+- 단순 파일 read 에 Explore/Task 서브에이전트 쓰지 말 것 — Read 직접 호출.
+- LLM 파이프라인 검증 시 캐시된 응답을 보려면 `/resend`, 새 호출이 필요하면 `/run?force=true`. 혼동 금지.
+- 사용자가 작업 중간에 개념적 질문을 던지면 **곧장 구현 계속하지 말고 의도 먼저 확인**.
+
 ## 런타임 아키텍처 핵심
 - **단일 Python 프로세스** = FastAPI + APScheduler + asyncio 병렬 파이프라인 실행
 - 파이프라인 실행: `asyncio.gather(*[pipeline.run() for pipeline in active_pipelines])`

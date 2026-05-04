@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "warp@claude-code-warp": true
+  },
   "permissions": {
     "allow": [
       "Read(**)",
@@ -12,6 +15,19 @@
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(ls*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/pytest_safety.ps1"
+          }
+        ]
+      }
     ]
   }
 }
