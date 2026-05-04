@@ -280,76 +280,74 @@ CREATE TABLE llm_call_cache (
 
 ## 📚 Knowledge Layer 동작
 
+> 5-Layer 도메인 모델의 **Layer 1 (학습부)** 구체화. 분석가(Layer 2) 의 persona.md 와 함께 LLM 호출 system prompt 에 동시 주입.
+
 ### 2계층 구조
 
-**Layer 1: Canon** — 항상 주입
-- 파일: `teams/<team>/knowledge/compiled.md`
-- 크기: 5-10K 토큰 (신중히 엄선)
-- 내용: 팀의 핵심 판단 프레임워크
+**Layer 1: Canon (5 학습부)** — 항상 주입
+- 위치: `knowledge/canon/<learning_dept>/*.md` (재귀 로드)
+- 5 학습부 폴더: `principles/`, `mechanics/`, `long-term/`, `stock-analysis/`, `news/`
+- 각 폴더 안의 모든 `.md` 가 자동 합쳐짐 (`README.md` 만 자동 제외)
+- 분석가와 학습부는 1:1 매핑 (분석가 manifest 의 `reads:` 로 본인 학습부만 주입하는 N:M 모드는 추후 확장; 현재는 5 학습부 통째 주입)
+- 크기: 5 학습부 합쳐 ~5-15K 토큰 목표 (신중히 엄선)
 - **Anthropic Prompt Caching 대상** → 비용 90% 절감
 
-**Layer 2: Reference RAG** — 필요시 검색
-- Chroma DB: `teams/<team>/knowledge/vector-index/`
+**Layer 2: Reference RAG** — 필요시 검색 (Phase 3)
+- Chroma DB: `knowledge/reference/vector-index/`
 - 청크: 500-1000 토큰, 출처·태그 메타 포함
 - 매 호출 시 현재 상황과 유사한 **Top-3** retrieval
 
 ### 자료 투입 파이프라인
 
 ```bash
-# 사용자가 자료 드롭
-cp expert_report.pdf teams/macro-analysis/knowledge/sources/
+# 사용자가 자료 드롭 (학습부 단위)
+cp macro_report.pdf knowledge/reference/long-term/
 
-# 인덱싱 (Chroma 저장)
-just knowledge-ingest macro-analysis
+# 인덱싱 (Chroma 저장 — Phase 3)
+just knowledge-ingest long-term
   → core/knowledge/ingest.py 가:
     1. PDF → text (pypdf)
     2. 500-1000 토큰 청크로 분할
     3. Embedding (text-embedding-3-small 또는 로컬)
     4. Chroma 저장
 
-# Canon 재컴파일 (선택)
-just knowledge-compile macro-analysis
-  → core/knowledge/compile.py 가:
-    1. 모든 sources/ 읽기
-    2. LLM에게 "팀 관점에서 핵심 프레임워크 추출" 요청
-    3. compiled.md 생성 (버전 올림)
+# Canon 직접 편집 (M2 인터뷰 산출)
+편집: knowledge/canon/long-term/<topic>.md
+  → 다음 LLM 호출부터 자동 반영 (load_shared_canon 재귀 읽기)
 ```
 
 ### 런타임 주입 흐름
 
 ```python
-# core/knowledge/compose.py
-async def build_system_prompt(team_id, query=None):
-    persona = read(f"teams/{team_id}/persona.md")
-    canon = read(f"teams/{team_id}/knowledge/compiled.md")
-    
-    retrieved = []
-    if query and team.knowledge.reference.enabled:
-        retrieved = await retrieve(team_id, query, top_k=3)
-    
-    # Anthropic Prompt Caching 구조
-    return [
-        {"type": "text", "text": persona, "cache_control": {"type": "ephemeral"}},
+# core/knowledge/compose.py — build_pipeline_prompt
+async def build_pipeline_prompt(*, context_id, persona_path, ...):
+    canon = load_shared_canon()           # knowledge/canon/**/*.md 재귀
+    persona = read(persona_path)          # agents/analysts/<id>/persona.md (M3)
+    memory = load_context(context_id, ...)
+
+    return [  # Anthropic Prompt Caching 구조
         {"type": "text", "text": canon,   "cache_control": {"type": "ephemeral"}},
-        # (memory context 는 여기 추가 — loader가 주입)
-        {"type": "text", "text": format_retrieved(retrieved)},  # 매번 다름
+        {"type": "text", "text": persona, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": memory,  "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": retrieved},  # 매번 다름 (Phase 3)
     ]
 ```
 
-### manifest.yaml 선언
+`load_shared_canon()` 동작:
+1. `knowledge/canon/` 아래 모든 `.md` 를 `rglob` 으로 재귀 수집
+2. 파일명이 `README.md` 인 것은 scaffolding 표시용으로 자동 제외
+3. 상대경로 정렬로 결정론적 순서
+4. 빈 파일은 skip
+
+### manifest.yaml 선언 (분석가 — M3)
 
 ```yaml
+# agents/analysts/<analyst_id>/manifest.yaml (M3 신설)
+id: principle_guardian
+reads: [principles]                  # 본인 학습부 (1:N 확장 시 list)
 knowledge:
-  enabled: true
-  canon:
-    version: 3
-    path: knowledge/compiled.md
-    token_budget: 8000
-  reference:
-    enabled: true
-    chunk_size: 800
-    retrieval_top_k: 3
-    embedding_model: text-embedding-3-small
+  shared_canon: true                 # 5 학습부 통째 주입 (현재 default)
+  rag_enabled: false                 # Phase 3 활성
 ```
 
 ---

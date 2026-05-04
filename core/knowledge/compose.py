@@ -34,7 +34,10 @@ def _read_file(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 def load_shared_canon() -> str:
-    """Load all MD files from knowledge/canon/ as a combined canon string.
+    """Load all MD files from knowledge/canon/ (recursively) as a combined canon string.
+
+    Walks 5 학습부 sub-folders (principles/, mechanics/, long-term/, stock-analysis/,
+    news/) plus any future siblings. README.md files are scaffolding-only and excluded.
 
     These represent the user's core investment knowledge — always injected
     into every LLM call regardless of pipeline.
@@ -42,8 +45,14 @@ def load_shared_canon() -> str:
     canon_dir = KNOWLEDGE_DIR / "canon"
     if not canon_dir.exists():
         return ""
+    md_files = sorted(
+        canon_dir.rglob("*.md"),
+        key=lambda p: p.relative_to(canon_dir).as_posix(),
+    )
     parts: list[str] = []
-    for md_file in sorted(canon_dir.glob("*.md")):
+    for md_file in md_files:
+        if md_file.name.lower() == "readme.md":
+            continue
         content = _read_file(md_file).strip()
         if content:
             parts.append(content)

@@ -58,6 +58,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# === Cygwin/MSYS bash 크래시 덤프 (Windows) ===
+*.stackdump
+
 # === Claude Code 로컬 설정 (사용자별 권한 등) ===
 .claude/settings.local.json
 .claude/worktrees/

@@ -1,16 +1,32 @@
 # wevelStock — AI 에이전트 협업 주식 분석 시스템 (루트 컨텍스트)
 
 ## 프로젝트 개요
-멀티팀 AI 주식 분석 & 매매가이드 시스템. 각 팀이 독립 분석 → 오케스트레이터가 종합 → 최종 투자 가이드 생성.
-크로스 플랫폼(Mac + Windows). DB: SQLite. API: 한국투자증권(KIS) OpenAPI 예정.
-현재 토대 구축 단계 — 첫 두 팀(principles, daily-briefing) + server 런타임 + 1페이지 데모 완성이 목표.
+5-Layer AI 에이전트 주식 분석 & 매매가이드 시스템. 학습부 → 분석가 → 전략가 → 계좌관리자 → 출력 채널의 단방향 흐름.
+크로스 플랫폼(Mac + Windows). DB: SQLite. API: 한국투자증권(KIS) + KRX.
 
-## 최상위 구조 (6개 역할)
+## 5-Layer 도메인 모델 (불변 골격)
+| Layer | 역할 | 시작 수 | 폴더 |
+|---|---|---|---|
+| 1. 학습부 | 분석가가 읽을 자료 | 5 | `knowledge/canon/<learning_dept>/` |
+| 2. 분석가 | 자료 → 판단 (학습부 1:1) | 5 | `agents/analysts/<analyst_id>/persona.md` (M3 신설) |
+| 3. 전략가 | horizon별 종합 (단타·스윙·중장기) | 3 | `agents/strategists/<strategist_id>/persona.md` (M4) |
+| 4. 계좌관리자 | 4 계좌 + 자산배분 | 1 | `agents/account_manager/persona.md` (M5) |
+| 5. 출력 채널 | 브리핑 / 추천 / 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
+
+학습부 5 = 원칙부(`principles/`) · 실전부(`mechanics/`) · 장기생존부(`long-term/`) · 종목분석부(`stock-analysis/`) · 뉴스부(`news/`).
+plugin 패턴: 새 학습부/분석가/전략가는 폴더 + manifest 드롭만으로 추가. 분화는 운용 중 trigger 시.
+
+## 최상위 구조
 ```
-teams/        — 🤖 AI 에이전트 팀 (분석/판단). 각 팀은 manifest.yaml에 schedule 선언.
-mcp-servers/  — 🔌 외부 세계 연결 (KIS, FRED, Telegram 발송). 별도 MCP 프로세스.
-server/       — 🖥️ 상주 런타임 (FastAPI + APScheduler + 오케스트레이터). 프로세스 1개.
-webapp/       — 🌐 UI (Next.js, 순수 프론트엔드). server/api를 fetch로 호출.
+pipelines/    — 🔀 시간대별 실행 단위 (Layer 5 의 한 형태). manifest.yaml 에 stages + schedule.
+agents/       — 🧠 페르소나 보관소 (Layer 2~4). M3 부터 점진 신설.
+knowledge/    — 📚 학습부 (Layer 1). canon/<learning_dept>/.
+collectors/   — 📥 공용 수집 모듈 (KIS/KRX/yfinance 호출).
+checkers/     — ✅ 순수 규칙 체커 (LLM 없음).
+connectors/   — 🔌 외부 API 어댑터 (KIS/KRX/...).
+mcp-servers/  — 🔌 MCP 프로토콜 서버. 별도 프로세스.
+server/       — 🖥️ 상주 런타임 (FastAPI + APScheduler + 텔레그램 봇). 프로세스 1개.
+webapp/       — 🌐 UI (Next.js). server/api를 fetch.
 core/         — 🧱 공유 라이브러리 (db/contracts/llm/memory/knowledge/config/notification).
 docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 ```
@@ -21,8 +37,7 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 3. **docs/STRUCTURE.md** — 폴더 규약의 원천. 파일을 어디에 둘지 결정할 때 항상 참조.
 4. **docs/WORKFLOW.md** — SDD 사이클 (SPEC → 코드 → 테스트 → 도메인 문서).
 5. **docs/CONTRACTS.md** — 팀 간 메시지 계약 (StandardOutput 스키마).
-6. **작업 대상 팀의 CLAUDE.md** — teams/<team>/CLAUDE.md 는 해당 팀 맥락.
-7. **작업 대상 SPEC** — frontmatter의 `generates` 에 명시된 경로에만 파일 생성.
+6. **작업 대상 SPEC** — frontmatter의 `generates` 에 명시된 경로에만 파일 생성.
 
 ## 세션 연속성 (중요)
 사용자는 세션 간격(몇 시간~며칠)이 있어 맥락 단절이 일어난다. 다음 규칙으로 연속성 유지:
@@ -31,10 +46,10 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 - 사용자가 이 명령을 안 불러도 **세션 시작 시 최소한 `docs/a_wanted/user_want_spec.md` 와 `docs/RESUME.md` 는 읽고 시작할 것.**
 
 ## 절대 원칙
-1. **팀 간 코드 import 금지**. 팀끼리는 DB 테이블(`team_outputs`)과 표준 JSON 메시지로만 통신.
+1. **파이프라인 간 코드 import 금지**. 통신은 DB 테이블(`team_outputs` / `briefing_parts`)과 계약 JSON 으로만.
 2. **SPEC 없이 코드 쓰지 말 것**. 스펙이 없으면 먼저 `/spec-interview` 로 작성.
 3. **SPEC frontmatter의 `generates` 경로에만 파일 생성**. 다른 위치에 만들면 validate가 실패.
-4. **표준 팀 레이아웃 100% 준수**. CLAUDE.md, manifest.yaml, src/agent.py 는 필수.
+4. **표준 파이프라인 레이아웃 100% 준수**. `__init__.py`, `manifest.yaml`, `stages/` 는 필수.
 5. **파이썬: pathlib 전용**, 문자열 경로 조합 금지. 모든 함수에 타입 힌트.
 6. **크로스 플랫폼**: .sh 금지, .bat 금지, justfile 사용. Windows 경로 고려.
 7. **DB**: SQLite, ON CONFLICT REPLACE (멱등성 보장).
@@ -43,28 +58,28 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 10. **Telegram 미설정 시 파일 폴백**: `data/notifications/*.jsonl` 에 기록하여 로컬 개발 지원.
 
 ## 런타임 아키텍처 핵심
-- **단일 Python 프로세스** = FastAPI + APScheduler + asyncio 병렬 팀 실행
-- 팀 실행: `asyncio.gather(*[team.run() for team in active_teams])`
+- **단일 Python 프로세스** = FastAPI + APScheduler + asyncio 병렬 파이프라인 실행
+- 파이프라인 실행: `asyncio.gather(*[pipeline.run() for pipeline in active_pipelines])`
 - 판단은 LLM이 하되, 데이터 수집·지표 계산은 순수 코드가 한다.
 - 서버가 죽었다 살아나도 맥락 유지: Gap Filler + Memory Layer + Knowledge Layer
-- **Memory Layer** (`core/memory/`): 팀 판단의 시계열 맥락 보존, 일/주/월 롤업, 멱등성 캐시.
-- **Knowledge Layer** (`core/knowledge/`): 팀별 학습 자료 = Canon(compiled.md, 항상 주입) + Reference(Chroma RAG).
+- **Memory Layer** (`core/memory/`): 분석가/전략가 판단의 시계열 맥락 보존, 일/주/월 롤업, 멱등성 캐시.
+- **Knowledge Layer** (`core/knowledge/`): 5 학습부 자료 (`knowledge/canon/<learning_dept>/`) 항상 주입 + Reference(Chroma RAG).
 
-## 팀 간 통신 계약 (요약)
-모든 팀은 StandardOutput JSON을 반환하고 `team_outputs` 테이블에 저장.
+## 분석가/전략가 통신 계약 (요약)
+각 분석가는 StandardOutput JSON 을 반환하고 `team_outputs` 테이블에 저장 (전략가가 종합 시 이 행들을 read).
 ```json
 {
-  "team_id": "principles",
+  "team_id": "principle_guardian",
   "timestamp": "...",
   "target": "global",
   "verdict": "violation" | "compliant" | ...,
   "confidence": 0-100,
   "reasons": ["..."],
-  "data": { /* 팀별 고유 데이터 */ },
+  "data": { /* 분석가별 고유 데이터 */ },
   "contract_version": "1.0"
 }
 ```
-상세는 `docs/CONTRACTS.md` 및 `core/contracts/team_output.py` 참조.
+상세는 `docs/CONTRACTS.md` 및 `core/contracts/team_output.py` 참조. (`team_outputs` 테이블명/계약 키는 legacy 호환을 위해 유지.)
 
 ## 투자 7계명 (불변)
 1. 총 투자비중 80% 이하 유지
@@ -81,24 +96,24 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 - API 호출 간격: 최소 100ms. 초당 최대 20건.
 
 ## 기능 구현 절차 (SDD)
-1. `teams/<team>/specs/` 또는 `docs/specs/` 의 해당 SPEC을 먼저 읽는다.
-2. 대상 팀의 CLAUDE.md, persona.md(있다면), manifest.yaml 을 읽는다.
+1. `docs/specs/` 의 해당 SPEC을 먼저 읽는다.
+2. 대상 파이프라인/분석가의 manifest.yaml + persona.md(있다면) 를 읽는다.
 3. SPEC의 frontmatter `generates` 경로에만 파일을 만든다.
 4. 테스트를 작성한다 (`tests/test_*.py`).
 5. 기존 테스트가 통과하는지 확인한다 (회귀 방지).
 6. `scripts/generate_domain_doc.py` 로 도메인 문서 생성.
 7. `scripts/validate.py` 통과 확인.
-8. 팀의 CHANGELOG.md 에 변경 이력 추가.
 
-## 전략 라우팅 (병렬 운용, 추후 구현)
-- 단타 트레이딩: 기술적분석팀 + 수급팀 → 당일 시그널
-- 스윙 트레이딩: 기술적분석팀 + 수급팀 + 매크로팀 → 수일~수주
-- 자산 투자: 매크로팀 + 기술적분석팀 + 원칙팀 → 장기 보유
+## 전략가 라우팅 (Layer 3, M4 이후 구현)
+- 단타: 종목분석가 + 뉴스큐레이터 → 당일 시그널
+- 스윙: 종목분석가 + 거시분석가 + 매매코치 → 수일~수주
+- 중장기: 거시분석가 + 종목분석가 + 원칙수호자 → 장기 보유
+> 라우팅은 전략가 manifest 의 `analysts: [...]` 로 선언.
 
 ## LLM 호출 규칙 (런타임)
 - 데이터 수집·계산은 코드, 판단·해석은 LLM API 호출.
 - 기본 모델: Claude Sonnet 4 (`ANTHROPIC_API_KEY` 필요).
-- LLM 호출 시 반드시 해당 팀의 persona.md + compiled.md(Canon) 주입.
+- LLM 호출 시 반드시 해당 분석가의 persona.md + 본인 학습부의 canon md 주입 (`load_shared_canon()` 이 5 학습부 재귀 로드).
 - **Anthropic Prompt Caching 활용** (system 부분 캐시로 비용 90% 절감).
 - 호출 결과는 `team_memory` + `llm_call_cache` 테이블에 저장.
 - 멱등성: `input_hash = sha256(input + context_snapshot + model + contract_version)`.

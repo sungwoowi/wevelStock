@@ -19,7 +19,9 @@
 
 | 폴더 | 역할 | 특징 |
 |---|---|---|
-| `pipelines/` | 🔀 시간대별 AI 판단 파이프라인 | 각 파이프라인이 `manifest.yaml`에 stages + schedule 선언 |
+| `pipelines/` | 🔀 시간대별 AI 판단 파이프라인 | 각 파이프라인이 `manifest.yaml`에 stages + schedule 선언 (Layer 5 출력 채널의 한 형태) |
+| `agents/` | 🧠 페르소나 보관소 | 분석가(`analysts/`) · 전략가(`strategists/`) · 계좌관리자(`account_manager/`). 5-Layer 모델 Layer 2~4. M3 부터 점진 신설 |
+| `knowledge/` | 📚 학습부 (Layer 1) | `canon/<learning_dept>/` 5 폴더 = 분석가들이 읽는 자료 |
 | `collectors/` | 📥 공용 데이터 수집 라이브러리 | 파이프라인 간 import 허용되는 무상태 함수 모듈 |
 | `checkers/` | ✅ 공용 규칙/원칙 체커 | 7계명, 손절 체크 등 순수 로직 |
 | `connectors/` | 🔌 외부 API 커넥터 | KIS / yfinance 등 외부 시스템 어댑터 |
@@ -31,13 +33,41 @@
 
 보조 폴더:
 - `config/` — 운영 설정 (동적 리로드 대상)
-- `knowledge/` — 팀 공용 기본 자료 (canon/, reference/)
 - `data/` — 런타임 데이터 (gitignore)
 - `scripts/` — 개발·운용 도구
 - `tests/` — 레포 전역 테스트 (파이프라인 단위는 각 파이프라인 폴더)
 - `.claude/` — Claude Code 설정
 
 **규칙**: 하나의 모듈은 **하나의 폴더 역할**에만 속한다. 어디에 둘지 모호하다면 STRUCTURE.md를 다시 읽는다.
+
+---
+
+## 🧠 5-Layer 도메인 모델
+
+> 시스템은 다섯 레이어로 구성된다. 각 레이어는 plugin 패턴 — 새 학습부/분석가/전략가는 폴더를 드롭하면 된다. starting count 는 5/5/3/1, 분화는 운용 중 trigger 시.
+
+| Layer | 역할 | 시작 수 | 폴더 |
+|---|---|---|---|
+| **1. 학습부** | 분석가가 읽을 자료 | 5 | `knowledge/canon/<learning_dept>/` |
+| **2. 분석가** | 자료 → 판단. 학습부와 1:1 매핑 | 5 | `agents/analysts/<analyst_id>/persona.md` |
+| **3. 전략가** | horizon 별 종합 (단타·스윙·중장기) | 3 | `agents/strategists/<strategist_id>/persona.md` |
+| **4. 계좌관리자** | 4 계좌 + 자산배분 | 1 | `agents/account_manager/persona.md` |
+| **5. 출력 채널** | 시간대 브리핑 / 종목 추천 / 매매 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
+
+### Layer 1 ↔ Layer 2 매핑 (1:1)
+
+| 학습부 (Layer 1) | 폴더 | 분석가 (Layer 2) | analyst_id |
+|---|---|---|---|
+| 원칙부 | `knowledge/canon/principles/` | 원칙수호자 | `principle_guardian` |
+| 실전부 | `knowledge/canon/mechanics/` | 매매코치 | `trade_coach` |
+| 장기생존부 | `knowledge/canon/long-term/` | 거시분석가 | `macro_analyst` |
+| 종목분석부 | `knowledge/canon/stock-analysis/` | 종목분석가 | `stock_analyst` |
+| 뉴스부 | `knowledge/canon/news/` | 뉴스큐레이터 | `news_curator` |
+
+### plugin 패턴 규칙
+- 새 학습부 추가 = `knowledge/canon/<id>/` + `README.md` 드롭. 별도 코드 변경 없이 `load_shared_canon()` 이 재귀로 자동 인식.
+- 새 분석가/전략가 추가 = `agents/<role>/<id>/persona.md` + 해당 manifest 의 `analysts: [...]` / `reads: [...]` 에 등재.
+- 분산투자는 별도 Layer 가 아니라 **Layer 4 계좌관리자의 한 모드** (자산배분 = 계좌 단위 메타 결정).
 
 ---
 
@@ -332,23 +362,37 @@ webapp/
 
 ---
 
-## 📚 knowledge/ — 공용 학습 자료
+## 📚 knowledge/ — 공용 학습 자료 (Layer 1 학습부)
 
 ```
 knowledge/
-├── canon/                     # 항상 주입되는 compiled 지식
-│   ├── investment-principles.md
-│   ├── macro-framework.md
-│   ├── sector-insights.md
-│   └── failure-lessons.md
-└── reference/                 # Chroma RAG 용 원본 (Phase 3 에서 ingest)
+├── canon/                            # 항상 주입되는 compiled 지식 (5 학습부)
+│   ├── principles/                   # 원칙부 → 원칙수호자
+│   │   ├── README.md
+│   │   └── investment-principles.md
+│   ├── mechanics/                    # 실전부 → 매매코치
+│   │   ├── README.md
+│   │   └── failure-lessons.md
+│   ├── long-term/                    # 장기생존부 → 거시분석가
+│   │   ├── README.md
+│   │   └── macro-framework.md
+│   ├── stock-analysis/               # 종목분석부 → 종목분석가
+│   │   ├── README.md
+│   │   └── sector-insights.md
+│   └── news/                         # 뉴스부 → 뉴스큐레이터
+│       └── README.md
+└── reference/                        # Chroma RAG 용 원본 (Phase 3 에서 ingest)
 ```
+
+`core.knowledge.compose.load_shared_canon()` 이 `canon/` 을 **재귀로** (`rglob("*.md")`) 모두 읽어 모든 LLM 호출의 system prompt 에 주입한다. `README.md` 는 scaffolding 표시용이므로 자동 제외.
 
 자료 투입 흐름:
 1. 사용자가 `knowledge/reference/` 에 파일 드롭
 2. `just knowledge-ingest <topic>` → Chroma 인덱싱 (Phase 3)
 3. canon 은 수작업 편집 또는 `just knowledge-compile` 로 재생성
 4. 다음 LLM 호출부터 반영
+
+새 학습부 추가 = `knowledge/canon/<new_id>/` 폴더 드롭만으로 즉시 반영 (plugin 패턴).
 
 ---
 
