@@ -1,0 +1,15 @@
+# 학습부별 외부 source 폴더 매핑
+# scripts/sync_knowledge.py 가 이 파일을 읽어
+#   <source> 의 PDF → reference/<learning_dept>/<sub>/<slug>.md 로 멱등 추출
+#
+# 새 학습부 추가: learning_depts 아래 항목 추가만으로 동작 (plugin 패턴).
+
+learning_depts:
+  wealth_compounding:
+    source: "C:/Users/HOME/OneDrive/Desktop/주식투자/0.주식프로그램학습용/박종훈_팬딩"
+    # 원본 sub 폴더명 → reference/<dept>/ 안에서의 영문 sub 폴더명 매핑
+    # 매핑 없으면 reference/<dept>/<원본 sub 폴더명> 그대로 사용
+    subfolder_map:
+      "": "lectures"           # source 루트의 PDF = 강의 정리본
+      "전자책": "ebooks"
+      "학습자료": "materials"

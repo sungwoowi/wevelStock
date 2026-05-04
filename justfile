@@ -77,6 +77,11 @@ test-cov:
 
 # === 지식 레이어 ===
 
+# 외부 source(OneDrive 등)의 PDF 를 reference/<learning_dept>/ 로 멱등 추출
+# 이미 추출된 파일은 skip — 새 PDF 추가 시 재실행만 하면 됨
+knowledge-sync dept:
+    uv run python -m scripts.sync_knowledge {{dept}}
+
 # 팀 학습 자료 인덱싱
 knowledge-ingest team:
     uv run python -m scripts.knowledge ingest {{team}}
