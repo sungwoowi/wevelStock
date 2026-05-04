@@ -2,7 +2,7 @@
 canon_id: principles.trading_doctrine
 analyst: principle_guardian
 title: 5대 심법 (매매 순간 작동 원칙)
-source: knowledge/reference/principles/투자 심법.md
+source: knowledge/reference/principles/02-투자 심법.md
 distilled_at: 2026-05-04
 ---
 

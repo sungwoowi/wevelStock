@@ -2,7 +2,7 @@
 canon_id: principles.market_regime_rules
 analyst: principle_guardian
 title: 시장 국면별 트레이딩 기준 (상승/조정/하락)
-source: knowledge/reference/principles/거시적 트레이딩 기준.md
+source: knowledge/reference/principles/03-거시적 트레이딩 기준.md
 distilled_at: 2026-05-04
 ---
 

@@ -286,7 +286,8 @@ CREATE TABLE llm_call_cache (
 
 **Layer 1: Canon (5 학습부)** — 항상 주입
 - 위치: `knowledge/canon/<learning_dept>/*.md` (재귀 로드)
-- 5 학습부 폴더: `principles/`, `mechanics/`, `long-term/`, `stock-analysis/`, `news/`
+- 5 학습부 폴더: `principles/`, `mechanics/`, `wealth_compounding/`, `stock-analysis/`, `news/`
+- 분석가 1:1 매핑: 원칙수호자 / 매매코치 / **자산전략가** / 종목분석가 / 뉴스큐레이터
 - 각 폴더 안의 모든 `.md` 가 자동 합쳐짐 (`README.md` 만 자동 제외)
 - 분석가와 학습부는 1:1 매핑 (분석가 manifest 의 `reads:` 로 본인 학습부만 주입하는 N:M 모드는 추후 확장; 현재는 5 학습부 통째 주입)
 - 크기: 5 학습부 합쳐 ~5-15K 토큰 목표 (신중히 엄선)
@@ -301,10 +302,10 @@ CREATE TABLE llm_call_cache (
 
 ```bash
 # 사용자가 자료 드롭 (학습부 단위)
-cp macro_report.pdf knowledge/reference/long-term/
+cp macro_report.pdf knowledge/reference/wealth_compounding/
 
 # 인덱싱 (Chroma 저장 — Phase 3)
-just knowledge-ingest long-term
+just knowledge-ingest wealth_compounding
   → core/knowledge/ingest.py 가:
     1. PDF → text (pypdf)
     2. 500-1000 토큰 청크로 분할
@@ -312,7 +313,7 @@ just knowledge-ingest long-term
     4. Chroma 저장
 
 # Canon 직접 편집 (M2 인터뷰 산출)
-편집: knowledge/canon/long-term/<topic>.md
+편집: knowledge/canon/wealth_compounding/<topic>.md
   → 다음 LLM 호출부터 자동 반영 (load_shared_canon 재귀 읽기)
 ```
 

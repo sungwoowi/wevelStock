@@ -60,7 +60,7 @@
 |---|---|---|---|
 | 원칙부 | `knowledge/canon/principles/` | 원칙수호자 | `principle_guardian` |
 | 실전부 | `knowledge/canon/mechanics/` | 매매코치 | `trade_coach` |
-| 장기생존부 | `knowledge/canon/long-term/` | 거시분석가 | `macro_analyst` |
+| 자산복리부 | `knowledge/canon/wealth_compounding/` | 자산전략가 | `wealth_strategist` |
 | 종목분석부 | `knowledge/canon/stock-analysis/` | 종목분석가 | `stock_analyst` |
 | 뉴스부 | `knowledge/canon/news/` | 뉴스큐레이터 | `news_curator` |
 
@@ -369,19 +369,23 @@ knowledge/
 ├── canon/                            # 항상 주입되는 compiled 지식 (5 학습부)
 │   ├── principles/                   # 원칙부 → 원칙수호자
 │   │   ├── README.md
-│   │   └── investment-principles.md
+│   │   ├── 01-philosophy-7-commandments.md
+│   │   ├── 02-trading-doctrine.md
+│   │   ├── 03-market-regime-rules.md
+│   │   └── 99-operational-safeguards.md
 │   ├── mechanics/                    # 실전부 → 매매코치
 │   │   ├── README.md
 │   │   └── failure-lessons.md
-│   ├── long-term/                    # 장기생존부 → 거시분석가
+│   ├── wealth_compounding/           # 자산복리부 → 자산전략가
 │   │   ├── README.md
-│   │   └── macro-framework.md
+│   │   └── (framework manifesto — M2.5 에서 작성)
 │   ├── stock-analysis/               # 종목분석부 → 종목분석가
 │   │   ├── README.md
 │   │   └── sector-insights.md
 │   └── news/                         # 뉴스부 → 뉴스큐레이터
 │       └── README.md
-└── reference/                        # Chroma RAG 용 원본 (Phase 3 에서 ingest)
+└── reference/                        # Chroma RAG 용 원본 (LLM 비주입, Phase 3 인덱싱)
+    └── <learning_dept>/              # 학습부별 PDF 추출본 / 원자료
 ```
 
 `core.knowledge.compose.load_shared_canon()` 이 `canon/` 을 **재귀로** (`rglob("*.md")`) 모두 읽어 모든 LLM 호출의 system prompt 에 주입한다. `README.md` 는 scaffolding 표시용이므로 자동 제외.

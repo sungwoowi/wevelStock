@@ -2,7 +2,7 @@
 canon_id: principles.philosophy_7_commandments
 analyst: principle_guardian
 title: 투자 7계명 (불변 철학)
-source: knowledge/reference/principles/투자 7계명 원칙.md
+source: knowledge/reference/principles/01-투자 7계명 원칙.md
 distilled_at: 2026-05-04
 ---
 
