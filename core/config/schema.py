@@ -96,8 +96,8 @@ class MemoryConfig(BaseModel):
 
 
 class KnowledgeEmbedConfig(BaseModel):
-    provider: Literal["openai", "local"] = "openai"
-    model: str = "text-embedding-3-small"
+    provider: Literal["openai", "local"] = "local"
+    model: str = "BAAI/bge-m3"
 
 
 class KnowledgeRetrievalConfig(BaseModel):

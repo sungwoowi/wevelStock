@@ -82,21 +82,17 @@ test-cov:
 knowledge-sync dept:
     uv run python -m scripts.sync_knowledge {{dept}}
 
-# 팀 학습 자료 인덱싱
-knowledge-ingest team:
-    uv run python -m scripts.knowledge ingest {{team}}
+# 학습부 RAG 인덱싱 (knowledge/reference/<dept>/ → data/chroma/<dept>/, 멱등 upsert)
+knowledge-ingest dept:
+    uv run python -m scripts.knowledge ingest {{dept}}
 
-# 팀 Canon 재컴파일
-knowledge-compile team:
-    uv run python -m scripts.knowledge compile {{team}}
+# 학습부 RAG 강제 재인덱싱 (컬렉션 삭제 후 재생성 — 임베딩 모델 변경 시)
+knowledge-reingest dept:
+    uv run python -m scripts.knowledge ingest {{dept}} --force
 
-# 팀 지식 상태 확인
-knowledge-status team:
-    uv run python -m scripts.knowledge status {{team}}
-
-# 청크 검색 (디버깅용)
-knowledge-browse team query:
-    uv run python -m scripts.knowledge browse {{team}} "{{query}}"
+# 청크 검색 (디버깅용, top-5 단편 출력)
+knowledge-browse dept query:
+    uv run python -m scripts.knowledge browse {{dept}} "{{query}}"
 
 # === 린트 ===
 

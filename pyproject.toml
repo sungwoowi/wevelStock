@@ -22,6 +22,7 @@ dependencies = [
     "google-genai>=0.3",
     # === 지식 레이어 (RAG) ===
     "chromadb>=0.4",
+    "sentence-transformers>=3.0",  # 한국어 임베딩 (BGE-m3 default, INFRA-RAG-001)
     "pypdf>=4.0",
     "youtube-transcript-api>=0.6",
     # === 데이터 ===
@@ -51,10 +52,6 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "types-pyyaml",
-]
-# 로컬 임베딩 (오프라인)
-local-embed = [
-    "sentence-transformers>=3.0",
 ]
 
 [build-system]

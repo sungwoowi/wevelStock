@@ -1,90 +1,65 @@
-"""Knowledge-base CLI: ingest / compile / status / browse.
+"""Knowledge RAG CLI — ingest / browse (5-Layer dept-based, INFRA-RAG-001).
 
 Usage:
-    just knowledge-ingest <team>
-    just knowledge-compile <team>
-    just knowledge-status <team>
-    just knowledge-browse <team> "<query>"
+    just knowledge-ingest <dept>            # 멱등 인덱싱
+    just knowledge-ingest <dept> --force    # 컬렉션 재생성
+    just knowledge-browse <dept> "<query>"  # top-5 단편 출력
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
-from pathlib import Path
+import sys
 
-from core.knowledge.ingest import ingest_team
-from core.knowledge.retrieve import retrieve
-from core.registry import get_team
+# Windows PowerShell default cp949 raises on Korean/emoji chunks. Force UTF-8.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-async def _status(team_id: str) -> None:
-    team = get_team(team_id)
-    if team is None or team.path is None:
-        print(f"❌ team not found: {team_id}")
-        return
-    sources = team.path / "knowledge" / "sources"
-    canon = team.path / "knowledge" / "compiled.md"
-    index = team.path / "knowledge" / "vector-index"
-    source_count = sum(1 for _ in sources.rglob("*")) if sources.exists() else 0
-    print(f"Team: {team_id}")
-    print(f"  sources dir  : {sources}  ({source_count} entries)")
-    print(f"  canon        : {canon}  ({'present' if canon.exists() else 'absent'})")
-    print(f"  index        : {index}  ({'present' if index.exists() and any(index.iterdir()) else 'empty'})")
+from core.knowledge.ingest import ingest  # noqa: E402
+from core.knowledge.retrieve import retrieve  # noqa: E402
 
 
-async def _compile(team_id: str) -> None:
-    """Minimal canon compile — concatenates all sources into compiled.md.
-
-    For richer LLM-based compilation, extend this later (see FOUNDATION-PLAN).
-    """
-    team = get_team(team_id)
-    if team is None or team.path is None:
-        print(f"❌ team not found: {team_id}")
-        return
-    sources = team.path / "knowledge" / "sources"
-    canon_path = team.path / "knowledge" / "compiled.md"
-    if not sources.exists():
-        print(f"❌ sources dir missing: {sources}")
-        return
-
-    parts: list[str] = [f"# {team_id} — Canon (auto-compiled)\n"]
-    for p in sorted(sources.rglob("*.md")):
-        parts.append(f"\n## from {p.relative_to(sources)}\n")
-        parts.append(p.read_text(encoding="utf-8").strip())
-    canon_path.write_text("\n".join(parts), encoding="utf-8")
-    print(f"✓ Canon written: {canon_path}")
-
-
-async def _browse(team_id: str, query: str) -> None:
-    results = await retrieve(team_id, query, top_k=5)
+async def _browse(dept: str, query: str, top_k: int) -> None:
+    results = await retrieve(dept, query, top_k=top_k)
     if not results:
-        print("(no results — index empty or chroma unavailable)")
+        print("(no results — index empty, dept missing, or chroma unavailable)")
         return
     for i, r in enumerate(results, 1):
-        print(f"\n[{i}] score={r.score:.3f}  source={r.chunk.source_title or r.chunk.source_id}")
-        print(r.chunk.text[:300])
+        title = r.chunk.source_title or r.chunk.source_id
+        print(f"\n[{i}] score={r.score:.3f}  source={title}")
+        print(f"     subfolder={r.chunk.metadata.get('source_subfolder', '')}")
+        print(r.chunk.text[:300].replace("\n", " "))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Knowledge RAG CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    p_in = sub.add_parser("ingest"); p_in.add_argument("team")
-    p_cm = sub.add_parser("compile"); p_cm.add_argument("team")
-    p_st = sub.add_parser("status"); p_st.add_argument("team")
-    p_br = sub.add_parser("browse"); p_br.add_argument("team"); p_br.add_argument("query")
+
+    p_in = sub.add_parser("ingest", help="index a learning department")
+    p_in.add_argument("dept")
+    p_in.add_argument("--force", action="store_true")
+    p_in.add_argument("--chunk-size", type=int, default=800)
+    p_in.add_argument("--overlap", type=int, default=100)
+
+    p_br = sub.add_parser("browse", help="query a department's index")
+    p_br.add_argument("dept")
+    p_br.add_argument("query")
+    p_br.add_argument("--top-k", type=int, default=5)
+
     args = parser.parse_args()
 
     if args.cmd == "ingest":
-        result = asyncio.run(ingest_team(args.team))
+        result = ingest(
+            args.dept,
+            force=args.force,
+            chunk_size=args.chunk_size,
+            overlap=args.overlap,
+        )
         print(result)
-    elif args.cmd == "compile":
-        asyncio.run(_compile(args.team))
-    elif args.cmd == "status":
-        asyncio.run(_status(args.team))
     elif args.cmd == "browse":
-        asyncio.run(_browse(args.team, args.query))
+        asyncio.run(_browse(args.dept, args.query, args.top_k))
 
 
 if __name__ == "__main__":

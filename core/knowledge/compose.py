@@ -124,6 +124,7 @@ async def build_system_prompt(
 
     if query_for_rag:
         try:
+            # legacy: team_id 가 곧 dept 이름이라고 가정 (호환 경로)
             results = await retrieve(team_id, query_for_rag, top_k=3)
         except Exception as e:  # noqa: BLE001
             log.warning("retrieval_failed", team=team_id, error=str(e))
@@ -167,6 +168,7 @@ async def build_pipeline_prompt(
     include_memory: bool = True,
     token_budget_memory: int = 4000,
     query_for_rag: str | None = None,
+    rag_dept: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
     """Assemble system prompt for a pipeline stage.
@@ -177,6 +179,8 @@ async def build_pipeline_prompt(
       [2] Memory context (recent days + rollups)   — cached
       [3] RAG chunks (dynamic)                     — not cached
       [4] Response rules                           — not cached
+
+    RAG: `query_for_rag` 와 `rag_dept` 둘 다 주어지면 retrieve. 둘 다 없으면 skip.
     """
     blocks: list[dict] = []
 
@@ -217,23 +221,24 @@ async def build_pipeline_prompt(
             })
 
     # [3] RAG chunks (not cached — query-dependent)
-    if query_for_rag:
+    if query_for_rag and rag_dept:
         try:
             from core.knowledge.retrieve import retrieve
-            # Use "shared" collection for pipeline mode
-            results = await retrieve("shared", query_for_rag, top_k=3)
+            results = await retrieve(rag_dept, query_for_rag, top_k=3)
         except Exception as e:  # noqa: BLE001
-            log.warning("retrieval_failed", context=context_id, error=str(e))
+            log.warning("retrieval_failed", context=context_id, dept=rag_dept, error=str(e))
             results = []
-        if results:
-            chunks_text = "\n\n".join(
-                f"### [{r.chunk.source_title or r.chunk.source_id}]\n{r.chunk.text}"
-                for r in results
-            )
-            blocks.append({
-                "type": "text",
-                "text": f"## Retrieved References\n{chunks_text}",
-            })
+    else:
+        results = []
+    if results:
+        chunks_text = "\n\n".join(
+            f"### [{r.chunk.source_title or r.chunk.source_id}]\n{r.chunk.text}"
+            for r in results
+        )
+        blocks.append({
+            "type": "text",
+            "text": f"## Retrieved References\n{chunks_text}",
+        })
 
     # [4] Response rules
     rules = response_rules or (

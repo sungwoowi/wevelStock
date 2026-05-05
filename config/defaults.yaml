@@ -58,8 +58,10 @@ memory:
 knowledge:
   enabled: true
   embedding:
-    provider: openai     # openai | local
-    model: text-embedding-3-small
+    # 한국어 RAG 기본 = BGE-m3 (로컬, 외부 호출 0). INFRA-RAG-001.
+    # OpenAI 사용 시: provider: openai / model: text-embedding-3-small + OPENAI_API_KEY 설정
+    provider: local      # openai | local
+    model: BAAI/bge-m3
   retrieval:
     default_top_k: 3
     score_threshold: 0.0   # 0 = 모든 결과 포함

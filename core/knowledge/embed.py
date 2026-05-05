@@ -1,8 +1,12 @@
-"""Embedding generation — OpenAI or local sentence-transformers.
+"""Chroma EmbeddingFunction 어댑터.
 
-Graceful: if neither is available, returns None and caller skips RAG.
+INFRA-RAG-001 후: ingest/retrieve 가 Chroma collection 생성 시 이 함수의
+반환을 `embedding_function=` 인자로 전달. 그 전엔 Chroma 가 영문 default
+(`all-MiniLM-L6-v2`) 로 fallback 했음 — 한국어 학습부 RAG 의 핵심 wiring.
 """
 from __future__ import annotations
+
+from typing import Any
 
 from core.config import env, get_config
 from core.logging import get_logger
@@ -10,46 +14,42 @@ from core.logging import get_logger
 log = get_logger(__name__)
 
 
-async def embed_texts(texts: list[str]) -> list[list[float]] | None:
-    """Return a list of embedding vectors, or None if backend unavailable."""
+def get_embedding_function() -> Any:
+    """Return a chromadb EmbeddingFunction instance based on runtime config.
+
+    Raises RuntimeError when the configured backend is unusable (missing
+    dependency or API key) — silent fallback would mean the user thinks
+    한국어 RAG 가 동작한다고 믿지만 실제로 영문 임베딩이 깔리는 사고를 부른다.
+    """
     cfg = get_config().knowledge.embedding
-    if cfg.provider == "openai":
-        return await _embed_openai(texts, cfg.model)
+
     if cfg.provider == "local":
-        return _embed_local(texts, cfg.model)
-    return None
-
-
-async def _embed_openai(texts: list[str], model: str) -> list[list[float]] | None:
-    key = env("OPENAI_API_KEY_FOR_EMBEDDING") or env("OPENAI_API_KEY")
-    if not key:
-        log.warning("no_openai_embedding_key")
-        return None
-    try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                "https://api.openai.com/v1/embeddings",
-                headers={"Authorization": f"Bearer {key}"},
-                json={"model": model, "input": texts},
+        try:
+            from chromadb.utils.embedding_functions import (  # type: ignore[import-not-found]
+                SentenceTransformerEmbeddingFunction,
             )
-            if resp.status_code != 200:
-                log.warning("openai_embed_failed", status=resp.status_code)
-                return None
-            data = resp.json()
-            return [item["embedding"] for item in data["data"]]
-    except Exception as e:  # noqa: BLE001
-        log.warning("openai_embed_error", error=str(e))
-        return None
+        except ImportError as e:
+            raise RuntimeError(
+                "chromadb.utils.embedding_functions unavailable — "
+                "ensure chromadb>=0.4 installed"
+            ) from e
+        log.info("embedding_function_init", provider="local", model=cfg.model)
+        return SentenceTransformerEmbeddingFunction(model_name=cfg.model)
 
+    if cfg.provider == "openai":
+        try:
+            from chromadb.utils.embedding_functions import (  # type: ignore[import-not-found]
+                OpenAIEmbeddingFunction,
+            )
+        except ImportError as e:
+            raise RuntimeError("chromadb OpenAI EF unavailable") from e
+        key = env("OPENAI_API_KEY_FOR_EMBEDDING") or env("OPENAI_API_KEY")
+        if not key:
+            raise RuntimeError(
+                "OPENAI_API_KEY (or OPENAI_API_KEY_FOR_EMBEDDING) required "
+                "for knowledge.embedding.provider=openai"
+            )
+        log.info("embedding_function_init", provider="openai", model=cfg.model)
+        return OpenAIEmbeddingFunction(api_key=key, model_name=cfg.model)
 
-def _embed_local(texts: list[str], model_name: str) -> list[list[float]] | None:
-    try:
-        from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
-    except ImportError:
-        log.warning("sentence_transformers_not_installed")
-        return None
-    model = SentenceTransformer(model_name)
-    vectors = model.encode(texts, convert_to_numpy=True)
-    return vectors.tolist()
+    raise ValueError(f"unknown embedding provider: {cfg.provider}")

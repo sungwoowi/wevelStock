@@ -44,7 +44,9 @@ data/snapshots/
 # === 시드 데이터는 커밋 ===
 !data/seed/
 
-# === 팀별 벡터 인덱스 (Chroma) ===
+# === 학습부별 벡터 인덱스 (Chroma) ===
+data/chroma/
+# legacy team 벡터 인덱스 (제거 대상, INFRA-RAG-001 후 미사용)
 teams/*/knowledge/vector-index/
 
 # === 컴파일된 Canon 은 커밋 (프레임워크 변천사 추적) ===

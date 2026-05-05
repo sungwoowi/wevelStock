@@ -3685,6 +3685,7 @@ dependencies = [
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
     { name = "rich" },
+    { name = "sentence-transformers" },
     { name = "structlog" },
     { name = "tenacity" },
     { name = "typer" },
@@ -3699,9 +3700,6 @@ dev = [
     { name = "mypy" },
     { name = "ruff" },
     { name = "types-pyyaml" },
-]
-local-embed = [
-    { name = "sentence-transformers" },
 ]
 test = [
     { name = "pytest" },
@@ -3735,7 +3733,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "sentence-transformers", marker = "extra == 'local-embed'", specifier = ">=3.0" },
+    { name = "sentence-transformers", specifier = ">=3.0" },
     { name = "structlog", specifier = ">=24.1" },
     { name = "tenacity", specifier = ">=8.2" },
     { name = "typer", specifier = ">=0.12" },
@@ -3745,7 +3743,7 @@ requires-dist = [
     { name = "yfinance", specifier = ">=0.2" },
     { name = "youtube-transcript-api", specifier = ">=0.6" },
 ]
-provides-extras = ["test", "dev", "local-embed"]
+provides-extras = ["test", "dev"]
 
 [[package]]
 name = "yfinance"
