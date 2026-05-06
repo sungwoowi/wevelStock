@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **R4 자산복리부 canon 완료** — `01-framework-manifesto.md` (통화 3 + 사이클 5 명제, Ray Dalio 5단계 통합) + `02-survival-imperatives.md` (행동 룰 6개, I6 = 사용자 추가 3년 평균가 시그널). 박종훈 표현 그대로 손글, 톤 = "절대 imperative 아닌 메타 판단 가이드". canon 자동 주입 char 수 **15,772 → 19,166** (자산전략가 정체성 굳음). 박종훈 자료의 framework 압축 + RAG 디테일 회수 두 축 모두 가동 가능. **다음 세션 = M3 분석가 5명 페르소나 분화** — 자산전략가의 `reads: [wealth_compounding]` 첫 가동.
+**현재 위치**: **M3 자산전략가 1명 추론부 조회 인터페이스 가동** — `agents/analysts/wealth_strategist/{persona.md, manifest.yaml}` + `core/inference/run_analyst.py` + CLI(`just chat`/`just ask`) + FastAPI endpoint + Next.js webapp 데모 페이지. 핵심 함수 1개를 4 인터페이스가 wrap. 자산전략가 first call 성공 (canon M1·M2·M3 / C1·C3·C4·C5 / I2~I6 정확 인용, "펀치 카드"·"공포의 톱니바퀴" 박종훈 표현 그대로). 사용자 직접 검증 결과 **응답이 원론·반복 패턴** — canon 19K 압도 + 시장 데이터 부재가 원인. **다음 세션 = 응답 품질 개선 (페르소나 톤 + 시장 데이터 주입) → 나머지 4명 분석가 분화**.
 
 **마지막 작업일**: 2026-05-06
-**마지막 세션 로그**: [2026-05-06_r4-canon-manifesto.md](c_worked/2026-05-06_r4-canon-manifesto.md)
-**Git**: `main` push 완료. 최신: `docs: wrap-up 2026-05-06 R4 canon manifesto + imperatives` (이번 세션). 이전 5: `feat(knowledge): R4 자산복리부 canon` / `9698878` R3 RAG / `e23edbd` M1 / `1f0d556` M2 원칙부 / `37b640d` R1 wealth_compounding.
+**마지막 세션 로그**: [2026-05-06_m3-wealth-strategist-trial.md](c_worked/2026-05-06_m3-wealth-strategist-trial.md)
+**Git**: `main` push 완료. 최신: `docs: wrap-up 2026-05-06 M3 자산전략가 추론부 trial` (이번 세션). 이전: `feat(inference): M3 자산전략가 추론부 조회 인터페이스` / `eca07ef` R4 wrap-up / `feat(knowledge): R4 자산복리부 canon` / `9698878` R3 RAG / `e23edbd` M1 / `1f0d556` M2 원칙부.
 
 ---
 
@@ -21,20 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. M3 — 분석가 5명 페르소나 분화 + 매매일지 SPEC (PC, 2~3h)
-- **왜**: R4 canon 19K chars 가 비어있는 단일 `analyst.md` 위에 깔리는 중 — 분석가가 자기 학습부를 인식 못 함. 자산전략가의 `reads: [wealth_compounding]` 가 첫 가동되어야 R3 의 `rag_dept` 인자가 의미를 가짐. user_want_spec 의 "agent 간 긴밀한 소통" 본질에 직결.
-- **범위**: `analyst.md` 1 → 5 `agents/analysts/<id>/persona.md` split (원칙수호자·매매코치·자산전략가·종목분석가·뉴스큐레이터) + manifest 의 `reads` 매핑 + analyze stage 5번 호출 + 매매일지 SPEC `BRIEFING-JOURNAL-001` 골격 (user_want_spec "AI 매매일지 + 피드백" 첫 진입).
-- **예상**: **2~3h PC 단발**. R4 직후 진입 자연 — framework 8명제 + 행동 룰 6개가 자산전략가 persona 의 핵심 입력.
+### 1. 분석가 응답 원론·반복 패턴 개선 (PC, 1.5~2.5h)
+- **왜**: 사용자 직접 검증 결과 응답이 framework 명제 인용만 반복 — canon 19K 압도 + persona "framework 우선" 톤 + 시장 데이터 부재 + temp 0.4 결합 효과. 실전 투자에 도움이 될지 의구심. user_want_spec "분석팀에 도움이 되는 raw data" 본질 직결.
+- **범위**: 단계 1 (5분) — persona 톤 직설화 + response_rules 의 cited 강제 제거 + temp 0.4 → 0.7 → 같은 질문 재시도. 단계 2 (1~1.5h) — `collectors/` (KIS/KRX 환율·지수·VIX·수급) 스냅샷을 user 또는 system 컨텍스트에 자동 첨부 → framework × 실시간 데이터 결합. 단계 1 만으로 부족하면 단계 2 진입.
+- **예상**: **1.5~2.5h PC**. 자산전략가 1명만 가지고 진행. 패턴 성공 시 다음 4명에도 동일 적용.
 
-### 2. 종목분석부 자료 ingest (PC, 1~2h)
-- **왜**: `rag_docs/logchart/` 차트 교육 자료 (5 md + 엘리엇 매뉴얼 + xlsx, ~288KB) 가 즉시 가용. R3 plugin 패턴 두 번째 검증 — 자산복리부 외 첫 학습부.
-- **범위**: 케이스 A 흐름 — `rag_docs/logchart/` → `knowledge/reference/stock-analysis/` 이전 + `config/knowledge_sources.yaml` 한 줄 추가 + `just knowledge-sync stock-analysis` + `just knowledge-ingest stock-analysis`.
-- **예상**: 1~2h. M3 와 병행 가능 (자료 ingest 와 페르소나 분화는 서로 독립).
+### 2. 나머지 4명 분석가 분화 (PC, 2~3h)
+- **왜**: 1명 검증된 패턴 (`agents/analysts/<id>/persona.md` + `manifest.yaml`) 을 4명에 복사. 매매코치 추가하면 자산전략가와 응답 톤 비교로 분화 의미 즉시 입증 (자산전략가 = 거시·원론 / 매매코치 = 실전·시그널).
+- **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set. 각 manifest 의 `reads:` 가 학습부별 다름. canon 19K 자동 주입은 5명 모두 공통.
+- **예상**: 2~3h. Top 1 패턴 안정 후 진입.
 
-### 3. 다른 학습부 자료 채우기 (실전부·뉴스부, 가변 시간)
-- **왜**: 5 학습부 중 원칙부·자산복리부·종목분석부 채워지면 실전부·뉴스부만 남음. M2 패턴 plugin 검증됨.
-- **범위**: 자료 출처·OneDrive 경로 결정부터 필요 (logchart 같은 즉시 가용 자료 없음). `knowledge_sources.yaml` 항목 + sync + ingest.
-- **예상**: 가변. 자료 가용성에 따라 dept 별 1~2h.
+### 3. 종목분석부 자료 ingest + JSONL 매월 폴더 도입 (PC, 1.5h)
+- **왜**: `rag_docs/logchart/` (~288KB) 즉시 가용 — 종목분석가 `reads:[stock-analysis]` 의 RAG 기반. 동시에 분석가 5명 분화 직전 = JSONL 폭발 임계점 (5K 파일) 진입 — 매월 폴더 + 90일 retention cron 도입 적기.
+- **범위**: (a) `rag_docs/logchart/` → `knowledge/reference/stock-analysis/` + `config/knowledge_sources.yaml` + `just knowledge-sync` + `just knowledge-ingest`. (b) `data/analyst_queries/<id>/<YYYY-MM>/` 폴더 분리 + retention cron 추가.
+- **예상**: 1.5h. Top 2 와 묶어 하면 자연스러움.
 
 ---
 
@@ -72,24 +72,34 @@
 - **`data/chroma/wealth_compounding/`** — 25 sources / 787 chunks 인덱싱 완료. 검증 4건 정확. 첫 인덱싱 ~55분, 멱등 재실행 17.7s (170배)
 - **`scripts/knowledge.py`** — `ingest`/`browse` 단순 CLI + Windows utf-8 reconfigure
 - **`docs/specs/INFRA-RAG-001-knowledge-rag.md`** — RAG SPEC + 한국어 임베딩 비교표 + 결정 근거
-- **pytest 60 passed** (M1, M2, R1, R3, R4 회귀 모두 통과)
+- **`agents/analysts/wealth_strategist/{persona.md, manifest.yaml}`** (M3) — Layer 2 첫 분석가. R4 canon 톤 그대로 + `reads:[wealth_compounding]` + max_tokens 4000 + temp 0.4
+- **`core/inference/run_analyst.py`** (M3) — 분석가 단일 호출 핵심 함수. 멀티턴 messages 배열 수용 + `build_pipeline_prompt` + `call_llm` + metadata (system char/RAG chunks/cache tokens/cost/latency). CLI/REPL/FastAPI/webapp 4 인터페이스 모두 wrap
+- **`scripts/{chat_analyst,ask_analyst}.py` + `just {chat,ask}` 레시피** (M3) — REPL 멀티턴 + 단일 턴 CLI. stdin/stdout utf-8 reconfigure + surrogate normalize + JSONL 자동 저장 (`data/analyst_queries/<id>/<dt>.jsonl`) + 누적 토큰 200K 가시화
+- **`server/api/analyst_chat.py`** (M3) — `POST /api/analysts/{id}/chat` 멀티턴 endpoint + `GET /api/analysts/{id}` 메타. main.py router include
+- **`webapp/src/app/analyst-chat/page.tsx` + 메인 페이지 카드** (M3) — textarea + Ctrl+Enter + 멀티턴 누적 + 매 턴 metadata 박스 + `/clear` + 누적 토큰·비용. Next.js build 성공 (2.63 kB)
+- **pytest 60 passed** (M1, M2, R1, R3, R4, M3 회귀 모두 통과)
 - SPEC 3종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001**
 
 ### 미완 또는 의도적 공백
-- **분석가 5명 페르소나 분화 (analyst.md 1 → 5)** — M3 단계 + 매매일지 SPEC 첫 골격. **canon 19K chars 가 자동 주입되는 첫 분석가가 자산전략가**
-- **`KnowledgeChunk.team_id` 필드** 가 dept 값을 담음 (legacy 호환). M3 분석가 분화 SPEC 에서 `dept_id` 로 rename
-- **`compose.py`의 legacy `build_system_prompt` / `load_canon` / `load_persona`** — `get_team` 의존, 호출처 0. M3 또는 cleanup 세션에서 삭제
-- **분석가 manifest `reads:` 와 RAG dept 자동 매핑** — M3 정식 정의 (R3 에서는 인자만 추가, R4 에서도 첫 가동 안 함)
-- **박종훈 Vol 2/3 OCR 미실행** (4 파일 0 chars, 이미지 PDF) — `ocrmypdf` + tesseract 도입 백로그. Vol 1 만으로 framework 핵심 충분
-- **영문 글자 사이 공백 정규화** — RAG 검증 결과 BGE-m3 가 공백 무시하고 정확 매칭. 후순위
-- **다른 학습부 자료 (실전·종목분석·뉴스) 미채움** — 종목분석부는 `rag_docs/logchart/` 즉시 가용 (Top 3 의 #2)
+- **분석가 응답 원론·반복 패턴** — M3 검증 결과: canon 19K 압도 + persona "framework 우선" 톤 + 시장 데이터 부재 + temp 0.4 결합. **다음 세션 Top 1**
+- **나머지 4명 분석가 분화** (원칙수호자·매매코치·종목분석가·뉴스큐레이터) — Top 1 패턴 안정 후 동일 패턴 복사 (Top 2)
+- **JSONL 매월 폴더 분리 + 90일 retention cron** — 5K 파일 임계점 도달 전 도입 (분석가 5명 분화 직전, Top 3 와 묶음)
+- **자동 컴팩트 (50+ turn 대화 압축)** — 1 conversation 50 turn 넘으면 요약 호출로 messages 압축. 백로그
+- **텔레그램 `/ask` 명령 wrap** — `core/inference/run_analyst()` 에 텔레그램 핸들러 1개 wrap 만 추가하면 모바일 사용 가능. 1명 검증 후
+- **배치 자동 트리거 (T2) + team_outputs DB 저장** — 시장 컨텍스트 자동 주입 + 일정 주기 분석가 호출 → DB 누적. user_want_spec 의 자동 흐름. 후속 단계
+- **`KnowledgeChunk.team_id` 필드** 가 dept 값을 담음 (legacy 호환). 별도 cleanup 세션에서 `dept_id` 로 rename
+- **`compose.py`의 legacy `build_system_prompt` / `load_canon` / `load_persona`** — `get_team` 의존, 호출처 0. cleanup 세션에서 삭제
+- **chat REPL stdin pipe 자동화** — PowerShell here-string 한국어 인코딩 깨짐. 사용자 콘솔 직접 입력은 OK (stdin reconfigure 적용됨). 자동 검증 필요 시 별도 스크립트로 우회
+- **ANTHROPIC_API_KEY 있어도 Gemini auto-fallback 발생** — config provider 흐름 검증 필요할 수도. 비용 더 저렴해서 일단 무관
+- **박종훈 Vol 2/3 OCR 미실행** (4 파일 0 chars, 이미지 PDF) — `ocrmypdf` + tesseract 도입 백로그
+- **다른 학습부 자료 (실전·종목분석·뉴스) 미채움** — 종목분석부는 `rag_docs/logchart/` 즉시 가용 (Top 3)
 - **전략가 3 / 계좌관리자 / 출력 채널 확장** — M4~M6, 한참 후
 - **선물 수급 3주체 → 5주체 확장** — KRX MDCSTAT bld 캡쳐, 백로그
-- **Phase 3 `market_briefing_close`** — 5-Layer M3 이후 자연 진입
+- **Phase 3 `market_briefing_close`** — 5-Layer M3 완료 후 자연 진입
 - **dead code 청산** (`market_investor_summary`/`foreign_institution_top`/`core/registry.py`/`rollup.py`) — 회귀 리스크 큰 별도 세션
 - **KOSPI200 선물 정확 가격** — 지수(2001) 대체. 선물옵션 API 별도
-- **`rag_docs/logchart/` (untracked, ~288KB)** — 차트 교육 자료. 종목분석부 학습부 첫 자료 후보, 케이스 A 흐름 (Top 3 의 #2)
-- **`docs/KNOWLEDGE-WORKFLOW.md` 5케이스 가이드** — 자료 추가 흐름차트 미작성 (R3 의 5케이스 정리만 c_worked 에 있음)
+- **`rag_docs/logchart/` (untracked, ~288KB)** — 차트 교육 자료. 종목분석부 학습부 첫 자료 후보 (Top 3)
+- **`docs/KNOWLEDGE-WORKFLOW.md` 5케이스 가이드** — 자료 추가 흐름차트 미작성
 
 ### 꼭 알아둘 판단
 
@@ -101,37 +111,29 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-05-06 R4)**
+**이번 세션에 굳힌 판단 (2026-05-06 M3)**
+- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름 (CLI/REPL/FastAPI/webapp). 기존 `market_briefing_pre`/`market_briefing_now` 알림 파이프라인 안에 분석가 끼워넣지 않음
+- **인터페이스 = 핵심 함수 1개 wrap**: `core/inference/run_analyst.py` 가 manifest+persona+canon+RAG+memory+messages → Anthropic 호출 → metadata 한 묶음. CLI(`just chat`/`just ask`), REPL, FastAPI endpoint, webapp 페이지 모두 wrap. 텔레그램·MCP 도 같은 패턴
+- **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용. 같은 패턴 복사가 안전
+- **메모리 두 차원 분리**: 대화 메모리 (한 conversation 안 multi-turn messages, REPL 누적 + JSONL 디스크) vs 에이전트 시계열 메모리 (`core/memory/` SQLite, system prompt 자동 주입). API 서버는 stateless — 모든 대화 통제권 = 로컬
+- **JSONL retention 단계 점진 도입**: A (그대로, 1년 22MB) → B (매월 폴더 + 90일 retention, 5K 파일 임계 = 분석가 5명 분화 직전) → C (SQLite 마이그, 50K 임계). 검증 단계엔 A 면 충분
+- **응답 원론·반복 패턴 발견**: canon 19K 압도 + persona "framework 우선" 톤 + 시장 데이터 부재 + temp 0.4 → 추상 명제 인용 반복. 단기 (톤·temp) → 중기 (시장 데이터 자동 주입) 두 갈래로 풀 것
+
+**직전 세션 판단 (2026-05-06 R4)**
 - **canon = 사용자가 받아들인 framework 만 압축**, 박종훈 자료 전체가 아님. 540K tokens 통째로 canon 에 못 박음 → 토큰 비용 + 사용자 시각 매몰. 디테일은 RAG 가 동적 회수
-- **framework manifesto (01) vs survival imperatives (02) 분리**: 01 = "어떻게 보는가" (불변 세계관), 02 = "어떻게 행동하는가" (상황 의존, 메타 가이드). **충돌 시 framework 우선**. 02 톤 = "절대 imperative 가 아닌 메타 판단 가이드", 룰 깰 때 이유 명시
-- **3축 분할 X — 위기 인식이 통화·사이클 framework 에 흡수**. 분할 너무 잘면 분석가 우선순위 흐려짐. 명제 압축 단위는 인식틀 단위로
+- **framework manifesto (01) vs survival imperatives (02) 분리**: 01 = "어떻게 보는가" (불변 세계관), 02 = "어떻게 행동하는가" (상황 의존, 메타 가이드). **충돌 시 framework 우선**
+- **3축 분할 X — 위기 인식이 통화·사이클 framework 에 흡수**. 분할 너무 잘면 분석가 우선순위 흐려짐
 - **박종훈 표현 그대로** (사용자 선호) — 압축 시 의역하지 말 것. 출처 표현 유지가 사용자 정체성 형성에 정합
-- **Ray Dalio 빅 사이클 5단계 통합** — 박종훈 J커브 단독 framework 의 비관 편향을 균형. 5단계 위치 인식이 자산전략가 의사결정의 가장 큰 입력
-- **I6 사용자 추가 룰** (3년 달러 평균가 시그널) — 사용자가 진술한 박종훈 룰을 02 에 명시. RAG 회수가 아닌 canon 에 박힐 만큼 자주 쓰는 룰
+- **Ray Dalio 빅 사이클 5단계 통합** — 박종훈 J커브 단독 framework 의 비관 편향을 균형
+- **I6 사용자 추가 룰** (3년 달러 평균가 시그널) — RAG 회수가 아닌 canon 에 박힐 만큼 자주 쓰는 룰
 
 **직전 세션 판단 (2026-05-06 R3)**
-- **R3 RAG 5-Layer 동작**: ingest 입력 `knowledge/reference/<dept>/`, 인덱스 `data/chroma/<dept>/`, collection name = dept. 학습부 = collection 1:1
-- **한국어 임베딩 = BGE-m3 (로컬, 외부 호출 0)**: Chroma `embedding_function=` 명시 wiring 필수. 안 하면 영문 default 로 fallback (이전 코드의 잠복 버그였음). 첫 인덱싱 ~55분 CPU, 멱등 재실행 17.7s (170배)
-- **연산 멱등성 = 파일 sha256 hash 비교**: `<rel_path>::0` 청크 metadata 의 `file_hash` 와 비교 → 일치 시 skip. legacy 인덱스는 자동 backfill
-- **자료 추가 흐름 5케이스**: (A) 새 학습부 = yaml 한 줄 + sync + ingest, (B) 기존 학습부 정기 = sync + ingest, (C) 사용자 손글 framework = `canon/<dept>/` 직접 작성, (D) 외부 PDF framework 성격 = sync 후 손글 canon, (E) 외부 PDF 디테일 = sync + ingest (reference 만)
+- **R3 RAG 5-Layer 동작**: ingest 입력 `knowledge/reference/<dept>/`, 인덱스 `data/chroma/<dept>/`, collection name = dept
+- **한국어 임베딩 = BGE-m3 (로컬, 외부 호출 0)**: Chroma `embedding_function=` 명시 wiring 필수. 첫 인덱싱 ~55분, 멱등 재실행 17.7s (170배)
+- **연산 멱등성 = 파일 sha256 hash 비교**: `file_hash` metadata. legacy 인덱스 자동 backfill
+- **자료 추가 흐름 5케이스**: (A) 새 학습부 / (B) 기존 정기 / (C) 손글 canon / (D) PDF framework 성격 / (E) PDF 디테일
 - **canon 자동화 절대 금지**: canon = 분석가 정체성. 자동 컴파일하면 정제·압축 품질 폭망 — 손글 유지
-- **Windows 콘솔 cp949 함정**: `sys.stdout.reconfigure(encoding='utf-8', errors='replace')` 패턴 적용
-
-**직전 세션 판단 (2026-05-04)**
-- **자산복리부(`wealth_compounding`) + 자산전략가(`wealth_strategist`) 명명**: "장기생존부" 가 단순 장기투자와 혼동 → 본질 = 10년·20년+ 생존 + 복리 자산 증식. 거시 framework 도 이 학습부 안에 흡수 (별도 거시분석가 X)
-- **canon vs reference 분리 (옵션 D 채택)**: canon = 사용자 손글 압축 framework (1~2 파일, ~2~5K tokens, 매 호출 주입). reference = PDF 추출본 (LLM 비주입, RAG 인덱싱 대상). 자료가 늘어도 정제본은 잘 안 바뀜 — 갱신은 reference sync 만
-- **자료 ≠ 추론 품질**: 자료 × 페르소나 × 피드백 = 곱셈. 자료에만 매몰되지 말고 페르소나·피드백 루프도 같은 무게로
-- **RAG 우선순위 ↑ (M2.5)**: 박종훈 자료 540K tokens (Sonnet 200K의 270%) 가 RAG 의존. 기존 Phase 3 후순위 → R3 즉시 진입
-- **NotebookLM/Gemini Gems 부적합**: 자동화 시스템에는 페르소나·메모리·스케줄·매매일지 통제가 본질. 우리 시스템 = 5 차원 곱셈 → 시중 솔루션과 비교 불가
-- **sync 멱등 흐름이 정답**: OneDrive PDF 추가 → `just knowledge-sync <dept>` 1회. 디자인 PDF 한글 글자 공백은 휴리스틱 자동 감지·정규화. 사용자 부담 X
-- **박종훈 자료 동적 추가**: 강의 진행 중, ~10+ PDF 추가 예정. canon 정제본 미세 갱신 X, reference sync + RAG 재인덱싱이 정상 흐름
-- **평가 질문엔 hedging 금지**: 시스템·자료·결정 평가 시 직설적 결론 먼저, "다만/그러나" 우려 깔지 말 것
-
-**직전 세션 판단 (2026-05-03)**
-- **5-Layer 도메인 모델 합의**: 학습부 5 / 분석가 5 (1:1 매핑) / 전략가 3 (단타·스윙·중장기) / 계좌관리자 1 (4 계좌 + 자산배분 흡수) / 출력 채널. plugin 패턴, 분화는 trigger 시
-- **분산투자 = 계좌관리자 흡수** (Layer 3 X, Layer 4 모드)
-- **manifest list 기반** (`analysts: [...]` / `reads: [...]`) 시작 → 미래 1:N 확장 무비용
-- **비용 신경 X**: 추정 월 1~3만원 (Sonnet 4 + cache). 토큰·비용 hook 만 둠
+- **Windows 콘솔 cp949 함정**: stdin/stdout/stderr 모두 `reconfigure(encoding='utf-8', errors='replace')`
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
