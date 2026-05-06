@@ -20,6 +20,22 @@ export default function Home() {
         </p>
       </header>
 
+      <a
+        href="/analyst-chat"
+        className="block border border-emerald-900 bg-emerald-950/30 hover:bg-emerald-950/50 rounded-md p-4 transition"
+      >
+        <div className="text-xs uppercase tracking-wider text-emerald-500">
+          Layer 2 — 추론부 데모
+        </div>
+        <div className="text-base font-medium mt-1">
+          자산전략가에 자유 질문 (멀티턴 채팅)
+        </div>
+        <div className="text-xs text-neutral-400 mt-1">
+          canon (19K chars) + RAG 회수 (박종훈 강의) + persona 결합 응답.
+          누적 토큰·캐시 hit·비용 가시화.
+        </div>
+      </a>
+
       <DemoRunner />
 
       <div className="grid md:grid-cols-2 gap-4">

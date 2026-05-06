@@ -40,6 +40,7 @@ data/reports/
 data/memory/
 data/notifications/
 data/snapshots/
+data/analyst_queries/
 
 # === 시드 데이터는 커밋 ===
 !data/seed/

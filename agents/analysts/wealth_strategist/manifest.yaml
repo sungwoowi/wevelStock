@@ -1,0 +1,30 @@
+# 자산전략가 (Wealth Strategist) 분석가 manifest
+# Layer 2 — 학습부 wealth_compounding 1:1 매핑
+
+id: wealth_strategist
+display_name: 자산전략가
+learning_dept: wealth_compounding
+
+# 이 분석가가 RAG 회수에 사용할 학습부. compose.build_pipeline_prompt 의 rag_dept 인자로 자동 매핑.
+reads:
+  - wealth_compounding
+
+# LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
+llm:
+  model: null            # 예: "claude-sonnet-4-5", "claude-opus-4-7"
+  max_tokens: 4000
+  temperature: 0.4
+
+# 응답 규칙 — build_pipeline_prompt 의 response_rules 인자로 주입.
+response_rules: |
+
+  ## Response rules
+  - 자유 자연어 본문으로 답한다 (JSON 강제 X).
+  - 인용한 명제 ID 를 응답 끝에 다음 형식으로 한 줄 추가한다:
+        ---
+        cited: [M2, C3, I6]
+    명제를 인용하지 않았다면 cited: [] 로 표기.
+  - hedging 금지. 결론 먼저, 근거 뒤.
+  - canon 에 답이 없는 질문은 "framework 밖" 이라고 솔직히 답한다.
+
+contract_version: "1.0"

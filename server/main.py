@@ -96,6 +96,7 @@ app.add_middleware(
 )
 
 # Routes
+from server.api import analyst_chat as analyst_chat_route  # noqa: E402
 from server.api import briefings as briefings_route  # noqa: E402
 from server.api import briefings_on_demand as briefings_on_demand_route  # noqa: E402
 from server.api import config as config_route  # noqa: E402
@@ -113,6 +114,7 @@ app.include_router(
     briefings_on_demand_route.router, prefix="/api", tags=["briefings-on-demand"]
 )
 app.include_router(positions_route.router, prefix="/api", tags=["positions"])
+app.include_router(analyst_chat_route.router, prefix="/api", tags=["analysts"])
 
 
 @app.get("/api/health")

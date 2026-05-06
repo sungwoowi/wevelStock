@@ -94,6 +94,16 @@ knowledge-reingest dept:
 knowledge-browse dept query:
     uv run python -m scripts.knowledge browse {{dept}} "{{query}}"
 
+# === 추론부 (Layer 2 분석가 호출) ===
+
+# 분석가와 멀티턴 대화 (REPL). /exit /clear /save 명령. 종료 시 JSONL 자동 저장.
+chat analyst_id:
+    uv run python -m scripts.chat_analyst {{analyst_id}}
+
+# 분석가에 일회성 단발 질문. JSONL 1 turn 저장.
+ask analyst_id query:
+    uv run python -m scripts.ask_analyst {{analyst_id}} "{{query}}"
+
 # === 린트 ===
 
 lint:
