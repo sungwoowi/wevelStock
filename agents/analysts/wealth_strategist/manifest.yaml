@@ -13,7 +13,7 @@ reads:
 llm:
   model: null            # 예: "claude-sonnet-4-5", "claude-opus-4-7"
   max_tokens: 4000
-  temperature: 0.4
+  temperature: 0.7
 
 # 응답 규칙 — build_pipeline_prompt 의 response_rules 인자로 주입.
 response_rules: |
@@ -25,6 +25,7 @@ response_rules: |
         cited: [M2, C3, I6]
     명제를 인용하지 않았다면 cited: [] 로 표기.
   - hedging 금지. 결론 먼저, 근거 뒤.
-  - canon 에 답이 없는 질문은 "framework 밖" 이라고 솔직히 답한다.
+  - 명제 ID 인용은 필수 (cited 비우지 말 것). 단, 명제 문장 자체를 그대로 복붙하지 말고 사용자 질문 맥락에 맞게 설명·사례·적용을 재구성한다.
+  - canon 에 직접 답이 없어도 인접 명제로 추론 가능하면 "직접 답은 아니나 인접 명제로 추론하면…" 으로 명시 후 제시. 인접 명제로도 안 되면 "framework 밖" 이라고 솔직히.
 
 contract_version: "1.0"
