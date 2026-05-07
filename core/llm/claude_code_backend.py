@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import platform
 import shutil
 from typing import Any
@@ -130,9 +131,15 @@ async def call_claude_code(
     system_text = _blocks_to_text(system)
     user_text = _messages_to_text(messages)
 
-    # Windows cmd.exe has an ~8KB command line limit. Long system prompts can
-    # push user prompt off the argv tail. Send user prompt via stdin
-    # (--input-format text) to avoid that.
+    # Windows cmd.exe argv length limit is ~8,191 chars (CreateProcess is 32K).
+    # Long system prompts (e.g. 5-Layer canon ≥ 19K chars) overflow argv and
+    # cmd.exe rejects spawn with localized "입력이 너무 깁니다" / "command line
+    # too long". We detect and fold system into the stdin payload using
+    # [SYSTEM]/[USER] prefix — the model still sees the same content.
+    is_windows = platform.system() == "Windows"
+    cmdline_safe_limit = 7000  # conservative budget under 8191 incl. other args
+    fold_system_into_stdin = is_windows and len(system_text) > cmdline_safe_limit
+
     args: list[str] = [
         *launcher,
         "--print",
@@ -141,12 +148,17 @@ async def call_claude_code(
         "--model", _normalize_model_alias(model),
         "--no-session-persistence",
     ]
-    if system_text.strip():
+    if system_text.strip() and not fold_system_into_stdin:
         args.extend(["--system-prompt", system_text])
     if json_schema is not None:
         args.extend(["--json-schema", json.dumps(json_schema, ensure_ascii=False)])
     if extra_args:
         args.extend(extra_args)
+
+    if fold_system_into_stdin and system_text.strip():
+        stdin_payload = f"[SYSTEM]\n{system_text}\n\n[USER]\n{user_text}"
+    else:
+        stdin_payload = user_text
 
     log.debug(
         "claude_code_spawn",
@@ -155,15 +167,24 @@ async def call_claude_code(
         user_chars=len(user_text),
     )
 
+    # Force keychain OAuth path: claude CLI prefers ANTHROPIC_API_KEY env var
+    # over OAuth when both are present. Pro/Max subscription auth lives in the
+    # OS keychain — strip the env var so claude falls through to it.
+    # (User who genuinely wants API-key auth should use provider="anthropic".)
+    sub_env = os.environ.copy()
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        sub_env.pop(key, None)
+
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=sub_env,
         )
         stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(input=user_text.encode("utf-8")),
+            proc.communicate(input=stdin_payload.encode("utf-8")),
             timeout=timeout_sec,
         )
     except asyncio.TimeoutError as e:

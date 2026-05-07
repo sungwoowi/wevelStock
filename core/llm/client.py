@@ -236,6 +236,7 @@ async def call_llm(
     max_tokens: int | None = None,
     temperature: float | None = None,
     json_schema: dict | None = None,
+    provider: str | None = None,
 ) -> dict:
     """Call the configured LLM with optional cache lookup.
 
@@ -244,6 +245,10 @@ async def call_llm(
         messages: list of {"role": "user"|"assistant", "content": str}
         input_hash: when provided, cache is consulted first and response stored.
         model/max_tokens/temperature: override config defaults.
+        provider: when set ("gemini"|"claude_code"|"anthropic"|"mock"), force that
+                  backend — errors propagate (no auto-fallback). For tone-compare
+                  flows where the caller explicitly chose a backend.
+                  When None: use cfg.provider with primary→fallback→mock chain.
 
     Returns:
         dict with content, tokens_in, tokens_out, model, cost_usd, raw.
@@ -253,18 +258,26 @@ async def call_llm(
     max_tokens = max_tokens or cfg.anthropic.max_tokens
     temperature = temperature if temperature is not None else cfg.anthropic.temperature
 
-    provider = _resolve_provider(cfg)
+    if provider is not None:
+        # Explicit caller choice — honor it. If the chosen backend lacks creds,
+        # _resolve_provider fall-through to mock would mask the choice; here we
+        # let _dispatch_provider raise on missing creds so the caller sees it.
+        resolved_provider = provider
+        allow_fallback = False
+    else:
+        resolved_provider = _resolve_provider(cfg)
+        allow_fallback = True
 
     # Cache lookup — skip in mock mode, and reject stored mock responses even when
     # the provider has since been switched to a real backend.
-    if input_hash and provider != "mock":
+    if input_hash and resolved_provider != "mock":
         cached = get_cached_response(input_hash)
         if cached is not None and not _is_mock_response(cached):
-            log.debug("llm_cache_hit", input_hash=input_hash[:24], provider=provider)
+            log.debug("llm_cache_hit", input_hash=input_hash[:24], provider=resolved_provider)
             return cached
 
     resp = await _dispatch_provider(
-        provider=provider,
+        provider=resolved_provider,
         cfg=cfg,
         system=system,
         messages=messages,
@@ -272,6 +285,7 @@ async def call_llm(
         max_tokens=max_tokens,
         temperature=temperature,
         json_schema=json_schema,
+        allow_fallback=allow_fallback,
     )
 
     # Persist only genuine (non-mock) responses so the cache stays meaningful.
@@ -327,7 +341,16 @@ async def _dispatch_provider(
     max_tokens: int,
     temperature: float,
     json_schema: dict | None = None,
+    allow_fallback: bool = True,
 ) -> dict:
+    """Dispatch to a backend.
+
+    allow_fallback=True  → primary failure cascades to claude_code → mock
+                           (when permitted by cfg.mock_if_no_key). Used for
+                           default/auto provider resolution.
+    allow_fallback=False → caller chose this backend explicitly; errors
+                           propagate without silent provider switch.
+    """
     if provider == "mock":
         return _mock_response(system, messages, model)
 
@@ -348,7 +371,7 @@ async def _dispatch_provider(
             )
         except Exception as e:  # noqa: BLE001
             log.error("llm_call_failed", provider="claude_code", error=str(e))
-            if cfg.mock_if_no_key:
+            if allow_fallback and cfg.mock_if_no_key:
                 resp = _mock_response(system, messages, model)
                 resp["raw"]["error"] = str(e)
                 return resp
@@ -365,20 +388,54 @@ async def _dispatch_provider(
             return await _call_gemini_real(
                 system, messages, gemini_model, max_tokens, temperature
             )
-        except Exception as e:  # noqa: BLE001
-            log.error("llm_call_failed", provider="gemini", error=str(e))
-            if cfg.mock_if_no_key:
-                resp = _mock_response(system, messages, model)
-                resp["raw"]["error"] = str(e)
+        except Exception as gemini_error:  # noqa: BLE001
+            log.error("llm_call_failed", provider="gemini", error=str(gemini_error))
+            if not allow_fallback:
+                raise
+            log.warning(
+                "llm_gemini_failed_falling_back",
+                error=str(gemini_error),
+                fallback="claude_code",
+            )
+            # Fallback chain: gemini → claude_code → mock.
+            # claude_code uses local CLI subprocess (Pro/Max subscription, no API key).
+            from core.llm.claude_code_backend import call_claude_code
+
+            try:
+                resp = await call_claude_code(
+                    system=system,
+                    messages=messages,
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    binary=cfg.claude_code.binary,
+                    timeout_sec=cfg.claude_code.timeout_sec,
+                    extra_args=list(cfg.claude_code.extra_args),
+                    json_schema=json_schema,
+                )
+                resp["raw"]["primary_provider_error"] = str(gemini_error)
+                resp["raw"]["fallback_used"] = "claude_code"
                 return resp
-            raise
+            except Exception as claude_error:  # noqa: BLE001
+                log.error(
+                    "llm_call_failed",
+                    provider="gemini+claude_code",
+                    gemini_error=str(gemini_error),
+                    claude_error=str(claude_error),
+                )
+                if cfg.mock_if_no_key:
+                    resp = _mock_response(system, messages, model)
+                    resp["raw"]["error"] = str(gemini_error)
+                    resp["raw"]["fallback_error"] = str(claude_error)
+                    return resp
+                raise
 
     # provider == "anthropic"
     try:
         return await _call_anthropic_real(system, messages, model, max_tokens, temperature)
     except Exception as e:  # noqa: BLE001
         log.error("llm_call_failed", provider="anthropic", error=str(e))
-        if cfg.mock_if_no_key:
+        if allow_fallback and cfg.mock_if_no_key:
             resp = _mock_response(system, messages, model)
             resp["raw"]["error"] = str(e)
             return resp
