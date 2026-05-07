@@ -1,13 +1,14 @@
 """분석가에 일회성 단발 질문 (CLI).
 
 Usage:
-    uv run python -m scripts.ask_analyst <analyst_id> "<질문>"
-    just ask <analyst_id> "<질문>"
+    uv run python -m scripts.ask_analyst <analyst_id> "<질문>" [--provider gemini|claude_code]
+    just ask <analyst_id> "<질문>" [--provider claude_code]
 
 chat_analyst 의 단일 턴 wrap. JSONL 1 turn 저장 + stdout 응답 + metadata.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -15,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 
 from core.inference import AnalystNotFoundError, run_analyst  # type: ignore[attr-defined]
+
+PROVIDER_CHOICES = ["gemini", "claude_code", "anthropic", "mock"]
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
@@ -34,8 +37,14 @@ def _format_metadata(meta: dict) -> str:
         cache_label = f"hit (read {cache_read:,})"
     elif cache_creation > 0:
         cache_label = f"created ({cache_creation:,})"
+    provider_used = meta.get("provider_used") or "auto"
+    provider_requested = meta.get("provider_requested")
+    provider_label = f"[{provider_used}]"
+    if provider_requested and provider_requested != provider_used:
+        provider_label = f"[{provider_used} ← req:{provider_requested}]"
     line = (
-        f"  [meta] prompt {meta['system_prompt_chars']:,} chars · "
+        f"  [meta] {provider_label} · "
+        f"prompt {meta['system_prompt_chars']:,} chars · "
         f"RAG {meta['rag_chunks_returned']} chunks · "
         f"cache {cache_label} · "
         f"tokens {meta['tokens_in']:,}/{meta['tokens_out']:,} · "
@@ -50,17 +59,25 @@ def _format_metadata(meta: dict) -> str:
     return line
 
 
-async def _ask(analyst_id: str, query: str) -> int:
+async def _ask(analyst_id: str, query: str, *, provider: str | None = None) -> int:
     started_at = datetime.now()
     folder = QUERIES_DIR / analyst_id
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{started_at.strftime('%Y%m%d-%H%M%S')}.jsonl"
 
     try:
-        resp = await run_analyst(analyst_id, [{"role": "user", "content": query}])
+        resp = await run_analyst(
+            analyst_id,
+            [{"role": "user", "content": query}],
+            provider=provider,
+        )
     except AnalystNotFoundError as e:
         print(f"[error] {e}", file=sys.stderr)
         return 2
+    except Exception as e:  # noqa: BLE001
+        # 명시 provider 가 실패한 경우 — fallback 차단됐으므로 여기까지 떨어짐
+        print(f"[error] LLM 호출 실패 (provider={provider or 'auto'}): {e}", file=sys.stderr)
+        return 1
 
     print(resp.text or "(empty response)")
     print()
@@ -85,15 +102,21 @@ async def _ask(analyst_id: str, query: str) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 3:
-        print(
-            'usage: python -m scripts.ask_analyst <analyst_id> "<query>"',
-            file=sys.stderr,
-        )
-        return 2
-    analyst_id = sys.argv[1]
-    query = " ".join(sys.argv[2:])
-    return asyncio.run(_ask(analyst_id, query))
+    parser = argparse.ArgumentParser(
+        prog="ask_analyst",
+        description="분석가에 일회성 단발 질문",
+    )
+    parser.add_argument("analyst_id", help="agents/analysts/<id>/ 디렉토리명")
+    parser.add_argument("query", nargs="+", help="질문 본문")
+    parser.add_argument(
+        "--provider",
+        choices=PROVIDER_CHOICES,
+        default=None,
+        help="LLM backend 강제 지정 (auto fallback X). None=runtime.yaml 기본 + 자동 폴백",
+    )
+    args = parser.parse_args()
+    query = " ".join(args.query)
+    return asyncio.run(_ask(args.analyst_id, query, provider=args.provider))
 
 
 if __name__ == "__main__":

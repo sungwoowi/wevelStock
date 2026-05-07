@@ -131,6 +131,7 @@ async def run_analyst(
     max_tokens: int | None = None,
     temperature: float | None = None,
     include_memory: bool = True,
+    provider: str | None = None,
 ) -> AnalystResponse:
     """단일 분석가 호출. 멀티턴 messages 배열 그대로 수용.
 
@@ -140,6 +141,9 @@ async def run_analyst(
                   단일 턴이면 길이 1, 멀티턴이면 누적
         model/max_tokens/temperature: manifest 값을 override (선택)
         include_memory: core/memory 시계열 메모리 주입 ON/OFF
+        provider: "gemini" | "claude_code" | "anthropic" | "mock" 명시 시 그
+                  backend 강제 호출 (자동 폴백 X — 에러 propagate). None 이면
+                  config.llm.provider + 자동 폴백 체인. 톤 비교용.
 
     Returns:
         AnalystResponse(text, metadata)
@@ -172,6 +176,7 @@ async def run_analyst(
         model=model or spec.model,
         max_tokens=max_tokens or spec.max_tokens,
         temperature=temperature if temperature is not None else spec.temperature,
+        provider=provider,
     )
     latency_s = time.monotonic() - started
 
@@ -181,6 +186,13 @@ async def run_analyst(
     raw = resp.get("raw") or {}
     upstream_error = raw.get("error")
     is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
+
+    # provider_used: 실제 응답을 만든 backend (auto fallback 시 fallback_used 우선)
+    provider_used = (
+        raw.get("fallback_used")
+        or raw.get("provider")
+        or (provider if provider else "auto")
+    )
 
     metadata = {
         "analyst_id": spec.id,
@@ -200,6 +212,8 @@ async def run_analyst(
         "latency_s": round(latency_s, 2),
         "is_mock": is_mock,
         "upstream_error": upstream_error,  # 실 LLM 호출 실패 시 원인 (mock fallback 진단)
+        "provider_requested": provider,  # 사용자 명시 선택 (None = auto)
+        "provider_used": provider_used,  # 실제 응답 backend
     }
 
     log.info(

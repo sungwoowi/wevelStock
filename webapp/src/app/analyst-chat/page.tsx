@@ -5,6 +5,8 @@ import { API_BASE } from "@/lib/api";
 
 type Role = "user" | "assistant";
 type ChatMessage = { role: Role; content: string };
+type ProviderName = "gemini" | "claude_code" | "anthropic" | "mock";
+type ProviderChoice = ProviderName | "auto";
 type ChatMetadata = {
   analyst_id?: string;
   display_name?: string;
@@ -21,6 +23,8 @@ type ChatMetadata = {
   latency_s?: number;
   is_mock?: boolean;
   upstream_error?: string | null;
+  provider_requested?: ProviderName | null;
+  provider_used?: string;
 };
 type AnalystMeta = {
   id: string;
@@ -31,6 +35,18 @@ type AnalystMeta = {
 };
 
 const CONTEXT_LIMIT = 200_000;
+
+type LlmConfigInfo = {
+  provider: ProviderName;
+  model: string;
+  fallback_chain: string[];
+};
+
+const STATIC_PROVIDER_OPTIONS: { value: ProviderChoice; label: string; hint: string }[] = [
+  { value: "auto", label: "자동 (기본)", hint: "runtime.yaml provider + 자동 폴백" },
+  { value: "gemini", label: "Gemini", hint: "Google AI Studio (저렴, 503 가능)" },
+  { value: "claude_code", label: "Claude Code", hint: "Pro/Max 구독 CLI (무료, ~10s 시작)" },
+];
 
 function MetadataBar({ meta }: { meta: ChatMetadata }) {
   if (!meta) return null;
@@ -45,11 +61,18 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
     : meta.upstream_error
     ? "border-red-800"
     : "border-neutral-800";
+  const providerUsed = meta.provider_used || "auto";
+  const providerRequested = meta.provider_requested;
+  const providerLabel =
+    providerRequested && providerRequested !== providerUsed
+      ? `[${providerUsed} ← req:${providerRequested}]`
+      : `[${providerUsed}]`;
   return (
     <div
       className={`text-[11px] font-mono text-neutral-500 border-l-2 ${borderColor} pl-3 mt-1 leading-relaxed`}
     >
-      prompt {meta.system_prompt_chars?.toLocaleString()} chars · RAG{" "}
+      <span className="text-neutral-400">{providerLabel}</span> · prompt{" "}
+      {meta.system_prompt_chars?.toLocaleString()} chars · RAG{" "}
       {meta.rag_chunks_returned} chunks · cache {cacheLabel} · turn tokens{" "}
       {meta.tokens_in?.toLocaleString()}/{meta.tokens_out?.toLocaleString()} ·
       cost ${meta.cost_usd?.toFixed(4)} · {meta.latency_s?.toFixed(1)}s ·{" "}
@@ -76,6 +99,8 @@ export default function AnalystChatPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<ProviderChoice>("auto");
+  const [llmConfig, setLlmConfig] = useState<LlmConfigInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -90,11 +115,32 @@ export default function AnalystChatPage() {
   }, [analystId]);
 
   useEffect(() => {
+    let aborted = false;
+    fetch(`${API_BASE}/api/config/llm`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(`${r.status}`)))
+      .then((c: LlmConfigInfo) => !aborted && setLlmConfig(c))
+      .catch(() => !aborted && setLlmConfig(null));
+    return () => {
+      aborted = true;
+    };
+  }, []);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages, loading]);
+
+  const providerOptions = STATIC_PROVIDER_OPTIONS.map((opt) => {
+    if (opt.value !== "auto" || !llmConfig) return opt;
+    const chain = llmConfig.fallback_chain.join(" → ");
+    return {
+      ...opt,
+      label: `자동 (${llmConfig.model})`,
+      hint: `현재 1순위: ${llmConfig.model} · 폴백: ${chain}`,
+    };
+  });
 
   const cumulativeIn = perTurnMeta.reduce((s, m) => s + (m.tokens_in ?? 0), 0);
   const cumulativeOut = perTurnMeta.reduce((s, m) => s + (m.tokens_out ?? 0), 0);
@@ -114,12 +160,18 @@ export default function AnalystChatPage() {
     setLoading(true);
 
     try {
+      const body: { messages: ChatMessage[]; provider?: ProviderName } = {
+        messages: next,
+      };
+      if (provider !== "auto") {
+        body.provider = provider;
+      }
       const res = await fetch(
         `${API_BASE}/api/analysts/${analystId}/chat`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: next }),
+          body: JSON.stringify(body),
         },
       );
       if (!res.ok) {
@@ -166,7 +218,7 @@ export default function AnalystChatPage() {
             Layer 2 · 자유 질문 → canon + RAG + persona 응답
           </span>
         </h1>
-        <div className="mt-3 flex items-center gap-3 text-sm">
+        <div className="mt-3 flex items-center gap-3 text-sm flex-wrap">
           <label className="text-neutral-400">분석가</label>
           <input
             value={analystId}
@@ -181,6 +233,30 @@ export default function AnalystChatPage() {
           ) : (
             <span className="text-xs text-red-500">분석가 메타 로드 실패</span>
           )}
+        </div>
+        <div className="mt-2 flex items-center gap-3 text-sm flex-wrap">
+          <label className="text-neutral-400">LLM</label>
+          <div className="inline-flex rounded border border-neutral-700 overflow-hidden">
+            {providerOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setProvider(opt.value)}
+                disabled={loading}
+                className={
+                  provider === opt.value
+                    ? "px-3 py-1 text-xs bg-emerald-700 text-white"
+                    : "px-3 py-1 text-xs bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
+                }
+                title={opt.hint}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-neutral-500">
+            {providerOptions.find((o) => o.value === provider)?.hint}
+          </span>
         </div>
       </header>
 

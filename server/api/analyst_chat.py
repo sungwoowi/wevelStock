@@ -31,10 +31,14 @@ class ChatMessage(BaseModel):
     content: str
 
 
+ProviderName = Literal["gemini", "claude_code", "anthropic", "mock"]
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., min_length=1)
     model: str | None = None
     include_memory: bool = True
+    provider: ProviderName | None = None  # 명시 시 그 backend 강제 (auto fallback X)
 
 
 class ChatResponse(BaseModel):
@@ -48,6 +52,9 @@ async def post_analyst_chat(analyst_id: str, payload: ChatRequest) -> ChatRespon
 
     클라이언트가 대화 history (messages) 를 매 요청마다 누적해 보낸다 (서버 stateless).
     분석가의 canon · persona · RAG · 시계열 메모리는 system 블록으로 자동 주입.
+
+    provider 가 명시되면 그 backend 로 강제 호출 (톤 비교용). None 이면
+    config.llm.provider + 자동 폴백 체인.
     """
     messages_dicts = [m.model_dump() for m in payload.messages]
     try:
@@ -56,11 +63,17 @@ async def post_analyst_chat(analyst_id: str, payload: ChatRequest) -> ChatRespon
             messages_dicts,
             model=payload.model,
             include_memory=payload.include_memory,
+            provider=payload.provider,
         )
     except AnalystNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
-        log.error("analyst_chat_failed", analyst=analyst_id, error=str(e))
+        log.error(
+            "analyst_chat_failed",
+            analyst=analyst_id,
+            provider=payload.provider,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail=f"inference failed: {e}") from e
 
     return ChatResponse(text=resp.text, metadata=resp.metadata)

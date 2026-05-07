@@ -1,19 +1,21 @@
 """분석가와 멀티턴 대화 (REPL).
 
 Usage:
-    uv run python -m scripts.chat_analyst <analyst_id>
-    just chat <analyst_id>
+    uv run python -m scripts.chat_analyst <analyst_id> [--provider gemini|claude_code]
+    just chat <analyst_id> [--provider claude_code]
 
 명령:
     /exit  또는 Ctrl+D  종료 (대화가 비어있지 않으면 JSONL 자동 저장)
     /clear              messages 배열 비움 (system canon/persona/RAG 는 유지)
     /save               즉시 강제 저장 (종료 안 함)
 
+provider 는 conversation 단위 락. 다른 backend 비교하려면 새 chat 세션 시작.
 JSONL 보관 위치: data/analyst_queries/<analyst_id>/<YYYYMMDD-HHMMSS>.jsonl
 한 파일 = 한 conversation, 한 줄 = 한 turn (user + assistant + metadata).
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -21,6 +23,8 @@ from datetime import datetime
 from pathlib import Path
 
 from core.inference import AnalystNotFoundError, run_analyst  # type: ignore[attr-defined]
+
+PROVIDER_CHOICES = ["gemini", "claude_code", "anthropic", "mock"]
 
 # Windows 콘솔 cp949 함정 회피 — R3 의 scripts/knowledge.py 패턴 그대로.
 # stdin 도 utf-8 강제 (사용자가 콘솔에서 한국어 직접 입력 시 필수).
@@ -65,8 +69,14 @@ def _format_metadata(meta: dict, cumulative_in: int, cumulative_out: int) -> str
     elif cache_creation > 0:
         cache_label = f"created ({cache_creation:,})"
     cost = meta.get("cost_usd", 0.0)
+    provider_used = meta.get("provider_used") or "auto"
+    provider_requested = meta.get("provider_requested")
+    provider_label = f"[{provider_used}]"
+    if provider_requested and provider_requested != provider_used:
+        provider_label = f"[{provider_used} ← req:{provider_requested}]"
     line = (
-        f"  [meta] prompt {meta['system_prompt_chars']:,} chars · "
+        f"  [meta] {provider_label} · "
+        f"prompt {meta['system_prompt_chars']:,} chars · "
         f"RAG {meta['rag_chunks_returned']} chunks · "
         f"cache {cache_label} · "
         f"turn tokens {meta['tokens_in']:,}/{meta['tokens_out']:,} · "
@@ -91,11 +101,11 @@ def _read_user_input() -> str | None:
     return _strip_surrogates(line)
 
 
-async def _chat_loop(analyst_id: str) -> int:
+async def _chat_loop(analyst_id: str, *, provider: str | None = None) -> int:
     started_at = datetime.now()
     path = _conv_path(analyst_id, started_at)
 
-    print(f"=== chat with {analyst_id} ===")
+    print(f"=== chat with {analyst_id} (provider={provider or 'auto'}) ===")
     print(f"saving to: {path.relative_to(REPO_ROOT)}")
     print("commands: /exit, /clear, /save\n")
 
@@ -127,13 +137,13 @@ async def _chat_loop(analyst_id: str) -> int:
 
         messages.append({"role": "user", "content": stripped})
         try:
-            resp = await run_analyst(analyst_id, messages)
+            resp = await run_analyst(analyst_id, messages, provider=provider)
         except AnalystNotFoundError as e:
             print(f"[error] {e}")
             messages.pop()  # 실패한 user 메시지 롤백
             return 2
         except Exception as e:  # noqa: BLE001
-            print(f"[error] LLM 호출 실패: {e}")
+            print(f"[error] LLM 호출 실패 (provider={provider or 'auto'}): {e}")
             messages.pop()
             continue
 
@@ -172,12 +182,20 @@ async def _chat_loop(analyst_id: str) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("usage: python -m scripts.chat_analyst <analyst_id>", file=sys.stderr)
-        return 2
-    analyst_id = sys.argv[1]
+    parser = argparse.ArgumentParser(
+        prog="chat_analyst",
+        description="분석가와 멀티턴 REPL 대화. provider 는 conversation 단위 락.",
+    )
+    parser.add_argument("analyst_id", help="agents/analysts/<id>/ 디렉토리명")
+    parser.add_argument(
+        "--provider",
+        choices=PROVIDER_CHOICES,
+        default=None,
+        help="LLM backend 강제 지정 (auto fallback X). None=runtime.yaml 기본 + 자동 폴백",
+    )
+    args = parser.parse_args()
     try:
-        return asyncio.run(_chat_loop(analyst_id))
+        return asyncio.run(_chat_loop(args.analyst_id, provider=args.provider))
     except KeyboardInterrupt:
         print("\n(KeyboardInterrupt — 종료)")
         return 130
