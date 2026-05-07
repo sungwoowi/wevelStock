@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **단계 1 자산전략가 톤 직설화 + LLM provider 선택 옵션 가동 완료** — persona.md 응답 원칙 L32 "명제 그대로 인용" → "명제 ID 인용 필수, 적용은 사용자 맥락 재구성" + L34 인접 명제 추론 허용, manifest temp 0.4→0.7. 도중 발견된 인프라 결함 3건 (Gemini 503 silent mock fallback, claude_code Windows cmdline 8K 한계, claude_code 무효 ANTHROPIC_API_KEY 상속) 동시 해결. 사용자 추가 요청으로 명시 provider 선택 (CLI `--provider` 플래그 / API `provider` 필드 / webapp 토글 3개 + `/api/config/llm` 동적 라벨) 까지 확장. 톤 비교 결과: Claude Code 직설·T-style / Gemini 구조적·다각적 분기 확인. **다음 세션 Top 1 = 단계 2 시장 스냅샷 자동 주입**.
+**현재 위치**: **단계 2 시장 스냅샷 자동 주입 가동 완료** — `collectors/snapshot.py` 신규 (7 collector 병렬 + 5분 인메모리 캐시 + partial-failure + cold call stderr 진행 표시), `compose.py` 의 RAG 직전 [3] 블록 자동 주입 (`market_snapshot_md`, `cache_control` 없음 — 5분 갱신), `run_analyst.py` metadata 4키 노출 (`snapshot_age_seconds`/`fetch_seconds`/`cache_hit`/`failures`). 실호출 검증: 응답에 "현재 1,456원이니 사실상 지금이 그 시점" 처럼 framework 명제 + 실 수치 결합 살아남. cache hit 시 `cache_read 14,795 토큰 적중`. **응답 영역 침범 발견** (자산전략가가 7계명·심법·박종훈 모두 인용) — 사용자 결정으로 옵션 B (canon 분기) 는 4명 분석가 분화 (Top 1) 와 묶어 다음 세션 처리. **다음 세션 Top 1 = 4명 분석가 분화 + canon 분기**.
 
 **마지막 작업일**: 2026-05-08
-**마지막 세션 로그**: [2026-05-08_analyst-tone-tweak-and-provider-selection.md](c_worked/2026-05-08_analyst-tone-tweak-and-provider-selection.md)
-**Git**: `main` 3 ahead of origin/main (push 미실시). 최신: `a087744 feat(inference): provider 선택 옵션` / `af4f7e4 feat(llm): provider fallback chain + claude_code 안정화` / `db875e8 feat(wealth_strategist): 톤 직설화 + temp 0.7`. 이전: `2ffd351` 2026-05-07 wrap-up / `6a1d1c8` briefing now cron + UI / `56dd63b` M3 wrap-up / `e9a36f0` M3 추론부.
+**마지막 세션 로그**: [2026-05-08_market-snapshot-injection.md](c_worked/2026-05-08_market-snapshot-injection.md)
+**Git**: 본 세션 후 main push 예정. 최신 (이번 세션): `feat(inference): 시장 스냅샷 자동 주입` + `docs: wrap-up 2026-05-08 단계 2 시장 스냅샷`. 이전: `75cf1a0 docs: wrap-up 2026-05-08 톤 직설화 + provider 선택` / `a087744 feat(inference): provider 선택 옵션` / `af4f7e4 feat(llm): provider fallback chain + claude_code 안정화` / `db875e8 feat(wealth_strategist): 톤 직설화 + temp 0.7` / `2ffd351` 2026-05-07 wrap-up.
 
 ---
 
@@ -21,20 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 단계 2 — 시장 스냅샷 자동 주입 (PC, 1~1.5h)
-- **왜**: 단계 1 (톤 직설화 + temp 0.7) 으로 framework 명제 적용·재구성·인접 추론은 살아남. 그러나 실제 수치 (환율·VIX·수급) 부재 → 응답이 framework 적용에만 머물고 사용자 맥락에 진짜로 결합 안 됨. user_want_spec "오감 + 뇌" 본질 직결.
-- **범위**: `collectors/snapshot.py` 신규 — `async def build_market_snapshot(*, kis, krx, max_age_seconds=300) -> tuple[dict, bool]` (8 collector 병렬 + 5분 인메모리 캐시 + cache_hit 반환). `core/knowledge/compose.py:build_pipeline_prompt` RAG 직전 새 블록. UX = 신선 콜 시 "[시장 스냅샷 수집 중... ~30s]" stderr / 캐시 히트 무표시. CLI/REPL/FastAPI/webapp 4 호출처 자동 적용.
-- **예상**: 1~1.5h PC.
+### 1. 4명 분석가 분화 + canon 분기 (옵션 B) 묶음 (PC, 3~4h)
+- **왜**: 단계 2 검증 끝났고, 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법·박종훈 모두 인용). 5-Layer 1:1 매핑 정합 위해 분화 + canon 분기 함께 처리해야 비대칭 회피. 자산전략가 1명만 좁히면 검증 답변 퀄리티만 깎임 → 묶음 처리가 정합. 매매코치 추가하면 자산전략가와 톤 비교로 분화 의미 즉시 입증.
+- **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. temp 0.7 + 인접 명제 추론 허용 패턴 디폴트.
+- **예상**: 3~4h PC.
 
-### 2. 나머지 4명 분석가 분화 (PC, 2~3h)
-- **왜**: 단계 1 + provider 선택 패턴 검증 끝남. 같은 manifest+persona 패턴으로 4명 복사. 매매코치 추가하면 자산전략가와 응답 톤 비교로 분화 의미 즉시 입증 (자산전략가 = 거시·원론 / 매매코치 = 실전·시그널).
-- **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set. 각 manifest 의 `reads:` 가 학습부별 다름. canon 19K 자동 주입은 5명 모두 공통. temp 0.7 + 인접 명제 추론 허용 패턴 디폴트 적용.
-- **예상**: 2~3h. Top 1 단계 2 안정 후 진입.
-
-### 3. claude_code cost 라벨 + analyst-chat SSR 깜빡임 (PC, 30분)
-- **왜**: Pro/Max 구독은 호출당 추가 비용 0인데 metadata 가 토큰 환산 $0.14 표시 (오해 소지). 이전부터 누적된 SSR 첫 렌더 "분석가 메타 로드 실패" 빨간 텍스트도 묶어서.
-- **범위**: `webapp/src/app/analyst-chat/page.tsx` MetadataBar 에서 `provider_used==claude_code` 면 `$0 (subscription)` 라벨. SSR 가드 (mount 후 첫 fetch 까지 메타 영역 비워두기 또는 placeholder).
+### 2. claude_code cost 라벨 + analyst-chat SSR 깜빡임 (PC, 30분)
+- **왜**: Pro/Max 구독은 호출당 추가 비용 0인데 metadata 가 토큰 환산 $0.16 표시 (오해 소지). 이전부터 누적된 SSR 첫 렌더 "분석가 메타 로드 실패" 빨간 텍스트도 묶어서.
+- **범위**: `webapp/src/app/analyst-chat/page.tsx` MetadataBar 에서 `provider_used==claude_code` 면 `$0 (subscription)` 라벨. SSR 가드 (mount 후 첫 fetch 까지 placeholder).
 - **예상**: 30분 PC.
+
+### 3. 종목분석부 자료 첫 ingest (PC, 1h)
+- **왜**: `rag_docs/logchart/` (untracked, ~288KB) 차트 교육 자료 가용. 종목분석가 분화 시 RAG 즉시 활용. 5 학습부 중 종목분석부가 마지막 미채움.
+- **범위**: `knowledge/reference/stock_analysis/` 로 이동 + `just knowledge-sync stock_analysis` (또는 `knowledge.py ingest`) + 검증 회수.
+- **예상**: 1h PC. Top 1 진입 전 또는 같이 묶음.
 
 ---
 
@@ -86,12 +86,15 @@
 - **LLM provider fallback chain** (2026-05-08) — `core/llm/client.py` `_dispatch_provider` 가 gemini → claude_code → mock 자동 폴백. `provider` kwarg 지정 시 fallback X (명시 backend 만 시도, 에러 propagate)
 - **claude_code Windows·OAuth 안정화** (2026-05-08) — `core/llm/claude_code_backend.py` 가 long system prompt 시 stdin `[SYSTEM]/[USER]` 결합 (cmd.exe 8K argv 우회) + `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` env strip (Pro/Max keychain OAuth 강제)
 - **Provider 선택 옵션 (CLI/API/webapp)** (2026-05-08) — `--provider` 플래그 (`scripts/{ask,chat}_analyst.py`) + `ChatRequest.provider` API 필드 (`server/api/analyst_chat.py`) + webapp LLM 토글 3개 (`webapp/src/app/analyst-chat/page.tsx`) + `GET /api/config/llm` 동적 라벨 endpoint (`server/api/config.py`). 응답 metadata 에 `provider_requested`/`provider_used` 노출
-- **pytest 60 passed** (M1, M2, R1, R3, R4, M3, 2026-05-07~05-08 회귀 모두 통과)
+- **단계 2 시장 스냅샷 자동 주입** (2026-05-08) — `collectors/snapshot.py` 신규 (7 collector 병렬 + 5분 인메모리 캐시 + `asyncio.gather(return_exceptions=True)` partial-failure + cold call stderr 진행 표시 + `MarketSnapshot` dataclass + `render_snapshot_md` 안전 렌더). `compose.build_pipeline_prompt` 의 RAG 직전 [3] 블록 (`market_snapshot_md` kwarg, `cache_control` 없음 — 5분 갱신). `run_analyst` metadata 4키 (`snapshot_age_seconds`/`fetch_seconds`/`cache_hit`/`failures`). 모든 분석가 자동 공유 (옵션 A 풀세트). 5-Layer 분석가 모두 동일 raw 베이스
+- **분석가 응답에 실 수치 결합 검증** (2026-05-08) — Claude Code 호출에서 "현재 1,456원이니 사실상 지금이 그 시점이다", "3년 달러 평균가가 1,370원이고 지금 1,456원이면 이미 평균 위다" 처럼 framework 명제 + I6 시그널 + 실 USDKRW 결합. cache hit (read 14,795 토큰), prompt 25,988 chars, latency 40.1s, $0.16
+- **pytest 68 passed** (기존 60 + 신규 `tests/test_market_snapshot.py` 8 테스트)
 - SPEC 3종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001**
 
 ### 미완 또는 의도적 공백
-- **단계 2 시장 스냅샷 자동 주입** — 단계 1 톤 변화는 살아남았으나 응답이 framework 적용에만 머물고 실 수치 결합 X. **다음 세션 Top 1**. `collectors/snapshot.py` + 5분 캐시 + compose 블록 주입
-- **claude_code cost 표시 misleading** — Pro/Max 구독 추가 비용 0인데 metadata 가 토큰 환산 $0.14 표시. webapp MetadataBar 라벨 보완 필요 (Top 3 와 묶음)
+- **4명 분석가 분화 + canon 분기 (옵션 B) 묶음** — 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법까지). **다음 세션 Top 1**. `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona, manifest}` 4 set + `compose.load_shared_canon()` reads 분기 + run_analyst 패스. 단독 옵션 A (persona 가드) 는 시기상조라 의도적 미적용
+- **claude_code cost 표시 misleading** — Pro/Max 구독 추가 비용 0인데 metadata 가 토큰 환산 $0.16 표시. webapp MetadataBar 라벨 보완 필요 (Top 2 와 묶음)
+- **Layer 3 종합 판단부 (단타·스윙·중장기 전략가 3종)** — CLAUDE.md L100-105 에 이미 설계 (M4 마일스톤). 단타전략가 (종목분석가+뉴스큐레이터) / 스윙전략가 (종목분석가+자산전략가+매매코치) / 중장기전략가 (자산전략가+종목분석가+원칙수호자). 분석가 5명 분화 후 자연 진입
 - **NXT 통합 시세 도입** — KIS API 가 명시 미지원 (`_AL`/`_NX` suffix 빈 응답, GitHub repo 0건). 키움은 suffix 패턴 지원하나 KIS 와 다름. KRX backend + 키움 OpenAPI 등 다중 source 결합 SPEC 필요 — 별도 백로그
 - **daily_briefing legacy 잔재** (`core/registry.py`, `core/config/schema.py`, `config/defaults.yaml` 의 daily_briefing 섹션) — webapp 측 `BriefingCard` 는 2026-05-07 제거됨. server/config 측은 의존성 그래프 큰 cleanup 세션 백로그
 - **analyst-chat SSR 깜빡임** — 첫 렌더 시 "분석가 메타 로드 실패" 빨간 텍스트. hydrate 후 fetch 가 채우는 정상 동작이지만 UX 백로그
@@ -124,35 +127,31 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-05-08 자산전략가 톤 + provider 선택)**
-- **단계 1 (persona 톤·temp) 만으론 부족 — 단계 2 시장 스냅샷 필요**: 톤 직설화·인접 명제 추론은 살아났으나 실 수치 부재로 framework 적용에 머묾. 다음 세션 Top 1
-- **자동 fallback ≠ 명시 선택**: `provider` kwarg None = config + 자동 폴백 / 명시 = 그 backend 만 + 에러 propagate. 사용자가 톤 비교할 때는 명시 모드, 평소엔 자동
-- **gemini → claude_code → mock 폴백 체인**: Gemini 503 (transient) 같은 일시 장애에 ANTHROPIC 키 없어도 Pro/Max 구독으로 응답 보존. raw 에 `fallback_used` 박힘
-- **claude_code 는 OAuth 강제 경로**: subprocess env 에서 `ANTHROPIC_API_KEY`/`AUTH_TOKEN` strip → keychain OAuth fallthrough. API key auth 원하면 `provider=anthropic`. 두 경로 분리
-- **Windows cmd.exe 8K argv 한계 = stdin 결합으로 우회**: 19K canon spawn 시 long system 은 `[SYSTEM]/[USER]` stdin payload 로 보냄. 짧으면 정식 argv 유지
-- **톤 비교 결과**: Claude Code (Sonnet 4.6) 직설·단호·T-style — persona "결론 먼저, hedging 금지" 룰 직결 / Gemini (2.5 Flash) 구조적·다각적·인접 명제 추론 풍부. 용도별 분리 가능
+**이번 세션에 굳힌 판단 (2026-05-08 단계 2 시장 스냅샷)**
+- **canon 통합 vs 분화 모순**: `load_shared_canon()` 5 학습부 통합 (5-Layer 베이스 = "통합 두뇌") 와 `manifest.reads:` 1:1 매핑 (분석가별 영역) 사이 불일치. 4명 분화 + 옵션 B (canon 분기) 로 동시 해소
+- **시기 묶음 처리**: 자산전략가 1명 검증 단계에 옵션 B 단독 도입은 시기상조 — 4명 분화 (Top 2) 와 묶음. 분화 직전엔 임시 봉합 X, 본질 해결을 분화와 함께
+- **Layer 3 = "투자 종합 판단부"**: CLAUDE.md L100-105 이미 설계 (M4). 단타·스윙·중장기 전략가 3종, 분석가 manifest `analysts:` 라우팅. "자산전략가" 명칭은 Layer 2 분석가 (자산 도메인 1명) — Layer 3 의 단타/스윙/중장기 전략가 3종과 다름
+- **시장 스냅샷 = 캐시 분리선 뒤**: canon/persona/memory 는 cache_control ephemeral / snapshot/RAG/rules 는 비캐시. 5분마다 스냅샷 갱신 → 캐시 효율 손해 없음
+- **partial failure = 7계명 #6 정합**: `asyncio.gather(return_exceptions=True)` + `[수집 실패 - 사유]` 표기. 분석가가 데이터 부재를 인지해야 추측 회피
+- **자산전략가 통합 canon 답변 = Gemini Gems 수준 (사용자 평가)**: 임시 봉합으로 가치 있음. 4명 분화 시 영역 분리 답변과 톤 비교 가능
+
+**직전 세션 판단 (2026-05-08 자산전략가 톤 + provider 선택)**
+- **자동 fallback ≠ 명시 선택**: `provider` kwarg None = config + 자동 폴백 / 명시 = 그 backend 만 + 에러 propagate. 톤 비교용은 명시, 평소엔 자동
+- **gemini → claude_code → mock 폴백 체인**: Gemini 503 일시 장애 시 ANTHROPIC 키 없어도 Pro/Max 구독으로 응답 보존. raw 에 `fallback_used` 박힘
+- **claude_code OAuth 강제 경로**: subprocess env 에서 `ANTHROPIC_API_KEY`/`AUTH_TOKEN` strip → keychain OAuth. API key auth 는 `provider=anthropic`
+- **Windows cmd.exe 8K argv 한계 = stdin 우회**: 19K canon spawn 시 long system 은 `[SYSTEM]/[USER]` stdin payload. 짧으면 정식 argv
 
 **직전 세션 판단 (2026-05-07 브리핑 이력 UI + cron + KRX 라벨)**
-- **3차원 분리 (SPEC 정합)**: 추론부 조회 (`run_analyst` + analyst_chat) / 알림 자동 푸시 (`notifications_log` + AlertList) / 브리핑 이력 (`briefing_parts` 시계열 + BriefingPartsCard). 봇 명령 응답은 `notify=False` 흐름이라 알림 X = 브리핑 이력
-- **briefing_parts = run_id 단위 시계열 누적** (일자 단위 upsert X). 같은 날 force 여러 번 = 다른 run_id = 새 row
-- **render dispatcher 1개 함수 → 모든 채널 wrap**: `render_pipeline(pipeline_id, parts, status)` 가 텔레그램 봇·webapp recent endpoint 동시 사용. 신 파이프라인 = `_PIPELINE_RENDERERS` 1줄 추가
-- **KIS prdy_ctrt = KRX 정규장 종가 대비 정확** (검증). KIS API NXT 통합 미지원 → 라벨에 "KRX 정규장" 명시로 혼동 회피
+- **3차원 분리 (SPEC 정합)**: 추론부 조회 (`run_analyst`) / 알림 자동 푸시 (`notifications_log`) / 브리핑 이력 (`briefing_parts` 시계열). 봇 명령 응답은 `notify=False` 라 알림 X = 브리핑 이력
+- **briefing_parts = run_id 단위 시계열 누적** (일자 단위 upsert X). 같은 날 force 여러 번 = 다른 run_id
+- **render dispatcher 1개 함수 → 모든 채널 wrap**: `render_pipeline()` 가 텔레그램 봇·webapp recent endpoint 동시 사용
 
 **직전 세션 판단 (2026-05-06 M3)**
-- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름 (CLI/REPL/FastAPI/webapp). 기존 `market_briefing_pre`/`market_briefing_now` 알림 파이프라인 안에 분석가 끼워넣지 않음
-- **인터페이스 = 핵심 함수 1개 wrap**: `core/inference/run_analyst.py` 가 manifest+persona+canon+RAG+memory+messages → Anthropic 호출 → metadata 한 묶음. CLI(`just chat`/`just ask`), REPL, FastAPI endpoint, webapp 페이지 모두 wrap. 텔레그램·MCP 도 같은 패턴
-- **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용. 같은 패턴 복사가 안전
-- **메모리 두 차원 분리**: 대화 메모리 (한 conversation 안 multi-turn messages, REPL 누적 + JSONL 디스크) vs 에이전트 시계열 메모리 (`core/memory/` SQLite, system prompt 자동 주입). API 서버는 stateless — 모든 대화 통제권 = 로컬
-- **JSONL retention 단계 점진 도입**: A (그대로, 1년 22MB) → B (매월 폴더 + 90일 retention, 5K 파일 임계 = 분석가 5명 분화 직전) → C (SQLite 마이그, 50K 임계). 검증 단계엔 A 면 충분
-- **응답 원론·반복 패턴 발견**: canon 19K 압도 + persona "framework 우선" 톤 + 시장 데이터 부재 + temp 0.4 → 추상 명제 인용 반복. 단기 (톤·temp) → 중기 (시장 데이터 자동 주입) 두 갈래로 풀 것
-
-**직전 세션 판단 (2026-05-06 R4)**
-- **canon = 사용자가 받아들인 framework 만 압축**, 박종훈 자료 전체가 아님. 540K tokens 통째로 canon 에 못 박음 → 토큰 비용 + 사용자 시각 매몰. 디테일은 RAG 가 동적 회수
-- **framework manifesto (01) vs survival imperatives (02) 분리**: 01 = "어떻게 보는가" (불변 세계관), 02 = "어떻게 행동하는가" (상황 의존, 메타 가이드). **충돌 시 framework 우선**
-- **3축 분할 X — 위기 인식이 통화·사이클 framework 에 흡수**. 분할 너무 잘면 분석가 우선순위 흐려짐
-- **박종훈 표현 그대로** (사용자 선호) — 압축 시 의역하지 말 것. 출처 표현 유지가 사용자 정체성 형성에 정합
-- **Ray Dalio 빅 사이클 5단계 통합** — 박종훈 J커브 단독 framework 의 비관 편향을 균형
-- **I6 사용자 추가 룰** (3년 달러 평균가 시그널) — RAG 회수가 아닌 canon 에 박힐 만큼 자주 쓰는 룰
+- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름 (CLI/REPL/FastAPI/webapp)
+- **인터페이스 = 핵심 함수 1개 wrap**: `run_analyst()` 가 manifest+persona+canon+RAG+memory+messages → 호출 → metadata 한 묶음
+- **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용
+- **JSONL retention A (그대로) → B (매월 폴더 + 90일) → C (SQLite)**: 임계는 5K (분화 직전) / 50K
+- **응답 원론·반복 패턴 발견**: canon 19K 압도 + 시장 데이터 부재 + temp 0.4 → 추상 명제 인용 반복. 단기 톤·temp → 중기 시장 스냅샷 (이번 세션 단계 2 로 해소)
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
