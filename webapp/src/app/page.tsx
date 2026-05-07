@@ -1,5 +1,5 @@
 import { AlertList } from "@/components/AlertList";
-import { BriefingCard } from "@/components/BriefingCard";
+import { BriefingPartsCard } from "@/components/BriefingPartsCard";
 import { DemoRunner } from "@/components/DemoRunner";
 import { PrincipleCard } from "@/components/PrincipleCard";
 
@@ -38,10 +38,9 @@ export default function Home() {
 
       <DemoRunner />
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <PrincipleCard />
-        <BriefingCard />
-      </div>
+      <BriefingPartsCard />
+
+      <PrincipleCard />
 
       <AlertList />
 

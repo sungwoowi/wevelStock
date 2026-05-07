@@ -13,7 +13,10 @@ export function AlertList() {
 
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-5">
-      <h2 className="text-lg font-semibold mb-3">최근 알림</h2>
+      <h2 className="text-lg font-semibold">최근 자동 푸시 알림</h2>
+      <p className="text-xs text-neutral-500 mb-3">
+        notifications_log · 파이프라인 notify stage 가 텔레그램에 보낸 자동 알림만 (봇 명령 응답은 위 "브리핑 이력")
+      </p>
       {isLoading && <p className="text-sm text-neutral-500">로딩…</p>}
       {!isLoading && items.length === 0 && (
         <p className="text-sm text-neutral-500">알림 없음</p>

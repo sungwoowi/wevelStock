@@ -1,9 +1,13 @@
 id: market_briefing_now
 name: "장중 시장 관찰"
 
-# On-demand only. 사용자가 텔레그램 /briefing_now 또는 API 로 호출 시에만 실행.
-# (`docs/specs/BRIEFING-TIMEBASED-002...md` Phase 2 — schedule 없음)
-schedule: []
+# 장중 시점 자동 + 봇/API 온디맨드 둘 다 지원.
+# 자동: 평일 09:30 (시초가 정리) / 12:30 (점심) / 14:30 (마감 1시간 전).
+# 온디맨드: 텔레그램 /briefing_now 또는 POST /api/briefings/market_briefing_now/run.
+schedule:
+  - trigger: cron
+    expr: "30 9,12,14 * * 1-5"
+    timezone: Asia/Seoul
 
 knowledge:
   shared_canon: false

@@ -177,6 +177,11 @@ async def run_analyst(
 
     cache_read, cache_creation = _extract_cache_tokens(resp.get("raw") or {})
 
+    # raw error / mock fallback 가시화 — 503/rate limit/키 누락 같은 silent fallback 진단용
+    raw = resp.get("raw") or {}
+    upstream_error = raw.get("error")
+    is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
+
     metadata = {
         "analyst_id": spec.id,
         "display_name": spec.display_name,
@@ -193,7 +198,8 @@ async def run_analyst(
         "model": resp.get("model", ""),
         "cost_usd": resp.get("cost_usd", 0.0),
         "latency_s": round(latency_s, 2),
-        "is_mock": "-mock" in str(resp.get("model", "")),
+        "is_mock": is_mock,
+        "upstream_error": upstream_error,  # 실 LLM 호출 실패 시 원인 (mock fallback 진단)
     }
 
     log.info(

@@ -34,7 +34,7 @@ def _format_metadata(meta: dict) -> str:
         cache_label = f"hit (read {cache_read:,})"
     elif cache_creation > 0:
         cache_label = f"created ({cache_creation:,})"
-    return (
+    line = (
         f"  [meta] prompt {meta['system_prompt_chars']:,} chars · "
         f"RAG {meta['rag_chunks_returned']} chunks · "
         f"cache {cache_label} · "
@@ -43,6 +43,11 @@ def _format_metadata(meta: dict) -> str:
         f"{meta['latency_s']:.1f}s · "
         f"{meta['model']}"
     )
+    if meta.get("is_mock"):
+        line += "  ⚠ MOCK"
+    if meta.get("upstream_error"):
+        line += f"\n  [upstream error] {meta['upstream_error']}"
+    return line
 
 
 async def _ask(analyst_id: str, query: str) -> int:

@@ -19,6 +19,8 @@ type ChatMetadata = {
   model?: string;
   cost_usd?: number;
   latency_s?: number;
+  is_mock?: boolean;
+  upstream_error?: string | null;
 };
 type AnalystMeta = {
   id: string;
@@ -38,13 +40,30 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
       : (meta.cache_creation_tokens || 0) > 0
       ? `created (${meta.cache_creation_tokens?.toLocaleString()})`
       : "miss";
+  const borderColor = meta.is_mock
+    ? "border-amber-700"
+    : meta.upstream_error
+    ? "border-red-800"
+    : "border-neutral-800";
   return (
-    <div className="text-[11px] font-mono text-neutral-500 border-l-2 border-neutral-800 pl-3 mt-1 leading-relaxed">
+    <div
+      className={`text-[11px] font-mono text-neutral-500 border-l-2 ${borderColor} pl-3 mt-1 leading-relaxed`}
+    >
       prompt {meta.system_prompt_chars?.toLocaleString()} chars · RAG{" "}
       {meta.rag_chunks_returned} chunks · cache {cacheLabel} · turn tokens{" "}
       {meta.tokens_in?.toLocaleString()}/{meta.tokens_out?.toLocaleString()} ·
       cost ${meta.cost_usd?.toFixed(4)} · {meta.latency_s?.toFixed(1)}s ·{" "}
       {meta.model}
+      {meta.is_mock && (
+        <span className="ml-2 px-1.5 py-0.5 bg-amber-900/40 text-amber-400 rounded">
+          ⚠ MOCK fallback
+        </span>
+      )}
+      {meta.upstream_error && (
+        <div className="mt-1 text-red-400 break-all">
+          [upstream error] {meta.upstream_error}
+        </div>
+      )}
     </div>
   );
 }

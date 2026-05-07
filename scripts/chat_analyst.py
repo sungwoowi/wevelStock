@@ -65,7 +65,7 @@ def _format_metadata(meta: dict, cumulative_in: int, cumulative_out: int) -> str
     elif cache_creation > 0:
         cache_label = f"created ({cache_creation:,})"
     cost = meta.get("cost_usd", 0.0)
-    return (
+    line = (
         f"  [meta] prompt {meta['system_prompt_chars']:,} chars · "
         f"RAG {meta['rag_chunks_returned']} chunks · "
         f"cache {cache_label} · "
@@ -75,6 +75,11 @@ def _format_metadata(meta: dict, cumulative_in: int, cumulative_out: int) -> str
         f"{meta['latency_s']:.1f}s · "
         f"{meta['model']}"
     )
+    if meta.get("is_mock"):
+        line += "  ⚠ MOCK"
+    if meta.get("upstream_error"):
+        line += f"\n  [upstream error] {meta['upstream_error']}"
+    return line
 
 
 def _read_user_input() -> str | None:

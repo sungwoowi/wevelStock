@@ -27,6 +27,8 @@ from core.briefing import (
     get_parts_by_run,
     render_morning_pre,
 )
+from core.briefing.parts_store import get_recent_runs
+from core.briefing.render import render_pipeline
 from core.contracts.briefing_part import (
     BriefingResendResponse,
     BriefingResponse,
@@ -136,6 +138,31 @@ async def briefing_latest(pipeline_id: str) -> BriefingResponse:
         run_id=run_id,
         parts=parts,
     )
+
+
+@router.get("/{pipeline_id}/recent")
+async def briefing_recent(
+    pipeline_id: str,
+    limit: int = Query(20, ge=1, le=100, description="최근 N개 run"),
+) -> dict[str, Any]:
+    """최근 N개 run 의 (run_id, generated_at, parts, rendered) 리스트.
+
+    `rendered` = 텔레그램 봇이 보여주는 사람용 텍스트 (파트별 메시지 분할).
+    클라이언트가 그대로 표시 가능 — JSON 가시화 부담 제거.
+    """
+    runs = get_recent_runs(pipeline_id, limit=limit)
+    items: list[dict[str, Any]] = []
+    for run_id, generated_at, parts in runs:
+        rendered = render_pipeline(pipeline_id, parts, status="ok")
+        items.append(
+            {
+                "run_id": run_id,
+                "generated_at": generated_at,
+                "parts": [p.model_dump() for p in parts],
+                "rendered": rendered,
+            }
+        )
+    return {"pipeline_id": pipeline_id, "count": len(items), "runs": items}
 
 
 @router.get("/{pipeline_id}/latest/parts/{key}")

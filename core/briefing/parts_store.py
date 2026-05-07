@@ -136,6 +136,33 @@ def get_last_run_before(
     return run_id, get_parts_by_run(pipeline_id, run_id)
 
 
+def get_recent_runs(
+    pipeline_id: str, limit: int = 20
+) -> list[tuple[str, str, list[BriefingPart]]]:
+    """최근 N개 run 의 (run_id, generated_at_iso, parts) 묶음. created_at DESC.
+
+    같은 run_id 의 part 들은 ON CONFLICT 로 created_at 이 같이 갱신되므로,
+    DISTINCT run_id 의 MAX(created_at) 기준으로 정렬해 안전.
+    """
+    db = get_db()
+    rows = db.fetch_all(
+        """
+        SELECT run_id, MAX(created_at) AS generated_at
+        FROM briefing_parts
+        WHERE pipeline_id = ?
+        GROUP BY run_id
+        ORDER BY generated_at DESC
+        LIMIT ?
+        """,
+        (pipeline_id, limit),
+    )
+    out: list[tuple[str, str, list[BriefingPart]]] = []
+    for r in rows:
+        run_id = r["run_id"]
+        out.append((run_id, r["generated_at"], get_parts_by_run(pipeline_id, run_id)))
+    return out
+
+
 def get_part(pipeline_id: str, run_id: str, key: str) -> BriefingPart | None:
     """단일 파트 조회."""
     db = get_db()

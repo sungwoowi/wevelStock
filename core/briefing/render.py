@@ -48,7 +48,7 @@ def render_overnight(data: dict) -> str:
     lines: list[str] = []
     lines.append("🌙 간밤 시황")
     lines.append("")
-    lines.append("🇺🇸 미국 지수")
+    lines.append("🇺🇸 미국 지수  (괄호 = 전일 종가 대비)")
     for key, label in [
         ("nasdaq", "나스닥"),
         ("sp500", "S&P500"),
@@ -73,7 +73,7 @@ def render_overnight(data: dict) -> str:
 
     if macro:
         lines.append("")
-        lines.append("🌐 거시경제 지표")
+        lines.append("🌐 거시경제 지표  (괄호 = 전일 종가 대비)")
         for key, label in [
             ("dxy", "💵 (달러인덱스)"),
             ("usdkrw", "🇰🇷 (원달러환율)"),
@@ -254,7 +254,7 @@ def render_market_overview(data: dict) -> str:
     lines.append("📊 시장 개요")
     lines.append(f"출처: KIS API · {time_str} KST" if time_str else "출처: KIS API")
     lines.append("")
-    lines.append("🇰🇷 국내 지수")
+    lines.append("🇰🇷 국내 지수  (괄호 = KRX 정규장 전일 종가 대비)")
 
     for key, label in [("kospi", "KOSPI"), ("kosdaq", "KOSDAQ")]:
         v = indices.get(key) or {}
@@ -332,7 +332,7 @@ def render_supply_sectors(data: dict) -> str:
     top_n = combined[:10]
 
     lines.append(
-        f"📊 강세 섹터 (조건 ≥{threshold:g}% 우선 + 등락률 순으로 채움)"
+        f"📊 강세 섹터 (조건 ≥{threshold:g}% 우선 + KRX 정규장 전일 종가 대비 상승률 순)"
     )
     if not top_n:
         lines.append("  (추적 ETF 없음)")
@@ -379,7 +379,7 @@ def render_leading_stocks(data: dict) -> str:
         return matched, len(rows) - matched
 
     lines: list[str] = []
-    lines.append("🚀 주도주")
+    lines.append("🚀 주도주  (괄호 % = KRX 정규장 전일 종가 대비 등락)")
 
     # KOSPI 대형주
     lines.append("")
@@ -419,9 +419,9 @@ def render_leading_stocks(data: dict) -> str:
 
     lines.append("")
     lines.append("선별 조건 (거래대금 상위 30 종목 풀에서 추출):")
-    lines.append("  · KOSPI 대형주 (시총20위): 등락률 ≥ 2%")
-    lines.append("  · KOSPI 중소형 (시총20위 외): 등락률 ≥ 5%")
-    lines.append("  · KOSDAQ: 등락률 ≥ 5%")
+    lines.append("  · KOSPI 대형주 (시총20위): 전일 종가 대비 ≥ 2%")
+    lines.append("  · KOSPI 중소형 (시총20위 외): 전일 종가 대비 ≥ 5%")
+    lines.append("  · KOSDAQ: 전일 종가 대비 ≥ 5%")
     lines.append("  · 조건 충족 우선, 부족 시 거래대금 상위로 채움")
     lines.append("  🔥 조건 충족 / · 거래대금 순")
 
@@ -451,3 +451,24 @@ def render_market_briefing(
             continue
         out.append(renderer(p.data))
     return out
+
+
+_PIPELINE_RENDERERS = {
+    "market_briefing_pre": render_morning_pre,
+    "market_briefing_now": render_market_briefing,
+}
+
+
+def render_pipeline(
+    pipeline_id: str,
+    parts: list[BriefingPart],
+    status: BriefingStatus = "ok",
+) -> list[str]:
+    """pipeline_id 기반 분기 — 텔레그램·webapp 공용 진입점.
+
+    매핑되는 함수가 없으면 빈 리스트 반환 (caller 가 fallback).
+    """
+    renderer = _PIPELINE_RENDERERS.get(pipeline_id)
+    if renderer is None:
+        return []
+    return renderer(parts, status)
