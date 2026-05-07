@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **M3 자산전략가 1명 추론부 조회 인터페이스 가동** — `agents/analysts/wealth_strategist/{persona.md, manifest.yaml}` + `core/inference/run_analyst.py` + CLI(`just chat`/`just ask`) + FastAPI endpoint + Next.js webapp 데모 페이지. 핵심 함수 1개를 4 인터페이스가 wrap. 자산전략가 first call 성공 (canon M1·M2·M3 / C1·C3·C4·C5 / I2~I6 정확 인용, "펀치 카드"·"공포의 톱니바퀴" 박종훈 표현 그대로). 사용자 직접 검증 결과 **응답이 원론·반복 패턴** — canon 19K 압도 + 시장 데이터 부재가 원인. **다음 세션 = 응답 품질 개선 (페르소나 톤 + 시장 데이터 주입) → 나머지 4명 분석가 분화**.
+**현재 위치**: **브리핑 이력 UI + 자동 cron + KRX 라벨 정비 완료** — `market_briefing_now` 평일 09:30/12:30/14:30 자동 cron 가동 (18:37 임시 cron 발동 검증 통과 후 원복) + `BriefingPartsCard` 전면 재작성 (좌측 run 리스트 + 우측 텔레그램 텍스트 + AUTO/BOT 뱃지) + legacy `BriefingCard` 제거 + AlertList "최근 자동 푸시 알림" 라벨 명확화 + KIS prdy_ctrt 가 KRX 정규장 종가 대비 정확함 검증 + render 라벨에 "KRX 정규장 전일 종가 대비" 명시 (NXT 통합은 KIS 미지원이라 보류). **다음 세션 Top 1 = 분석가 응답 원론·반복 패턴 개선** (이전 세션부터 유지).
 
-**마지막 작업일**: 2026-05-06
-**마지막 세션 로그**: [2026-05-06_m3-wealth-strategist-trial.md](c_worked/2026-05-06_m3-wealth-strategist-trial.md)
-**Git**: `main` push 완료. 최신: `docs: wrap-up 2026-05-06 M3 자산전략가 추론부 trial` (이번 세션). 이전: `feat(inference): M3 자산전략가 추론부 조회 인터페이스` / `eca07ef` R4 wrap-up / `feat(knowledge): R4 자산복리부 canon` / `9698878` R3 RAG / `e23edbd` M1 / `1f0d556` M2 원칙부.
+**마지막 작업일**: 2026-05-07
+**마지막 세션 로그**: [2026-05-07_briefing-history-ui-and-now-cron.md](c_worked/2026-05-07_briefing-history-ui-and-now-cron.md)
+**Git**: `main` push 완료. 최신: `docs: wrap-up 2026-05-07 브리핑 이력 UI + 자동 cron + KRX 라벨` (이번 세션). 이전: `feat(briefing): briefing_now cron + 이력 UI + KRX 라벨` / `56dd63b` M3 wrap-up / `e9a36f0` M3 추론부 / `eca07ef` R4 wrap-up / `9698878` R3 RAG.
 
 ---
 
@@ -73,15 +73,24 @@
 - **`scripts/knowledge.py`** — `ingest`/`browse` 단순 CLI + Windows utf-8 reconfigure
 - **`docs/specs/INFRA-RAG-001-knowledge-rag.md`** — RAG SPEC + 한국어 임베딩 비교표 + 결정 근거
 - **`agents/analysts/wealth_strategist/{persona.md, manifest.yaml}`** (M3) — Layer 2 첫 분석가. R4 canon 톤 그대로 + `reads:[wealth_compounding]` + max_tokens 4000 + temp 0.4
-- **`core/inference/run_analyst.py`** (M3) — 분석가 단일 호출 핵심 함수. 멀티턴 messages 배열 수용 + `build_pipeline_prompt` + `call_llm` + metadata (system char/RAG chunks/cache tokens/cost/latency). CLI/REPL/FastAPI/webapp 4 인터페이스 모두 wrap
-- **`scripts/{chat_analyst,ask_analyst}.py` + `just {chat,ask}` 레시피** (M3) — REPL 멀티턴 + 단일 턴 CLI. stdin/stdout utf-8 reconfigure + surrogate normalize + JSONL 자동 저장 (`data/analyst_queries/<id>/<dt>.jsonl`) + 누적 토큰 200K 가시화
-- **`server/api/analyst_chat.py`** (M3) — `POST /api/analysts/{id}/chat` 멀티턴 endpoint + `GET /api/analysts/{id}` 메타. main.py router include
-- **`webapp/src/app/analyst-chat/page.tsx` + 메인 페이지 카드** (M3) — textarea + Ctrl+Enter + 멀티턴 누적 + 매 턴 metadata 박스 + `/clear` + 누적 토큰·비용. Next.js build 성공 (2.63 kB)
-- **pytest 60 passed** (M1, M2, R1, R3, R4, M3 회귀 모두 통과)
+- **`core/inference/run_analyst.py`** (M3) — 분석가 단일 호출 핵심 함수. 멀티턴 messages 배열 수용 + `build_pipeline_prompt` + `call_llm` + metadata (system char/RAG chunks/cache tokens/cost/latency/is_mock/upstream_error). CLI/REPL/FastAPI/webapp 4 인터페이스 모두 wrap
+- **`scripts/{chat_analyst,ask_analyst}.py` + `just {chat,ask}` 레시피** (M3) — REPL 멀티턴 + 단일 턴 CLI. stdin/stdout utf-8 reconfigure + surrogate normalize + JSONL 자동 저장 (`data/analyst_queries/<id>/<dt>.jsonl`) + 누적 토큰 200K 가시화 + mock/upstream_error 라벨
+- **`server/api/analyst_chat.py`** (M3) — `POST /api/analysts/{id}/chat` 멀티턴 endpoint + `GET /api/analysts/{id}` 메타
+- **`webapp/src/app/analyst-chat/page.tsx`** (M3) — 멀티턴 채팅 페이지. mock 응답 시 ⚠ 뱃지 + upstream error 빨간 표시
+- **`market_briefing_now` 자동 cron** (2026-05-07) — `30 9,12,14 * * 1-5` 평일 정규장 3회 (시초 정리 / 점심 / 마감 1시간 전). `pipeline::market_briefing_now::0` 등록 검증 + 18:37 임시 cron 발동 검증 통과
+- **`core/briefing/parts_store.get_recent_runs()`** + **`core/briefing/render.render_pipeline()` dispatcher** + **`GET /api/briefings/{id}/recent?limit=N`** (2026-05-07) — 최근 N runs 의 (run_id, generated_at, parts, rendered 텔레그램 텍스트) 묶음 반환. 텔레그램 봇·webapp 공용 진입점
+- **`webapp/src/components/BriefingPartsCard.tsx`** (2026-05-07) — 좌측 run 리스트 (날짜 그룹 + AUTO/BOT 뱃지 + 5초 polling) + 우측 텔레그램 텍스트 (가독성 ↑) + JSON 디버그 토글. 시계열 누적 가시화
+- **`webapp/src/components/AlertList.tsx`** (2026-05-07) — "최근 자동 푸시 알림" 라벨 + 부제 (봇 응답은 브리핑 이력에 있음 명시)
+- **render.py KRX 정규장 라벨 명시** (2026-05-07) — 국내지수·강세섹터·주도주 3군데 "KRX 정규장 전일 종가 대비" prefix. 키움 HTS 의 NXT 통합 가격과 혼동 회피
+- **pytest 60 passed** (M1, M2, R1, R3, R4, M3, 2026-05-07 회귀 모두 통과)
 - SPEC 3종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001**
 
 ### 미완 또는 의도적 공백
 - **분석가 응답 원론·반복 패턴** — M3 검증 결과: canon 19K 압도 + persona "framework 우선" 톤 + 시장 데이터 부재 + temp 0.4 결합. **다음 세션 Top 1**
+- **NXT 통합 시세 도입** — KIS API 가 명시 미지원 (`_AL`/`_NX` suffix 빈 응답, GitHub repo 0건). 키움은 suffix 패턴 지원하나 KIS 와 다름. KRX backend + 키움 OpenAPI 등 다중 source 결합 SPEC 필요 — 별도 백로그
+- **daily_briefing legacy 잔재** (`core/registry.py`, `core/config/schema.py`, `config/defaults.yaml` 의 daily_briefing 섹션) — webapp 측 `BriefingCard` 는 2026-05-07 제거됨. server/config 측은 의존성 그래프 큰 cleanup 세션 백로그
+- **analyst-chat SSR 깜빡임** — 첫 렌더 시 "분석가 메타 로드 실패" 빨간 텍스트. hydrate 후 fetch 가 채우는 정상 동작이지만 UX 백로그
+- **KRX backend 정규장 종가 일치 검증** — KIS 일봉 vs KRX 공식 종가 100% 일치 추가 보강. 1분 작업, 보강 백로그
 - **나머지 4명 분석가 분화** (원칙수호자·매매코치·종목분석가·뉴스큐레이터) — Top 1 패턴 안정 후 동일 패턴 복사 (Top 2)
 - **JSONL 매월 폴더 분리 + 90일 retention cron** — 5K 파일 임계점 도달 전 도입 (분석가 5명 분화 직전, Top 3 와 묶음)
 - **자동 컴팩트 (50+ turn 대화 압축)** — 1 conversation 50 turn 넘으면 요약 호출로 messages 압축. 백로그
@@ -111,7 +120,14 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-05-06 M3)**
+**이번 세션에 굳힌 판단 (2026-05-07 브리핑 이력 UI + cron + KRX 라벨)**
+- **3차원 분리 (SPEC 정합)**: 추론부 조회 (`run_analyst` + analyst_chat) / 알림 자동 푸시 (`notifications_log` + AlertList) / 브리핑 이력 (`briefing_parts` 시계열 + BriefingPartsCard). 봇 명령 응답은 `notify=False` 흐름이라 알림 X = 브리핑 이력
+- **briefing_parts = run_id 단위 시계열 누적** (일자 단위 upsert X). 같은 날 force 여러 번 = 다른 run_id = 새 row. 5명 분화 직전 매월 폴더 + 90일 retention 도입
+- **render dispatcher 1개 함수 → 모든 채널 wrap**: `render_pipeline(pipeline_id, parts, status)` 가 텔레그램 봇·webapp recent endpoint 동시 사용. 신 파이프라인 = `_PIPELINE_RENDERERS` 1줄 추가
+- **KIS prdy_ctrt = KRX 정규장 종가 대비 정확** (검증). 키움 HTS 차이는 NXT 통합 가격 표시 때문. KIS API NXT 통합 미지원 → 라벨에 "KRX 정규장" 명시로 혼동 회피
+- **legacy `BriefingCard` (webapp) 제거** — 5-Layer 도입 전 `daily_briefing` team 흐름. server 측 잔재는 별도 cleanup 세션
+
+**직전 세션 판단 (2026-05-06 M3)**
 - **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름 (CLI/REPL/FastAPI/webapp). 기존 `market_briefing_pre`/`market_briefing_now` 알림 파이프라인 안에 분석가 끼워넣지 않음
 - **인터페이스 = 핵심 함수 1개 wrap**: `core/inference/run_analyst.py` 가 manifest+persona+canon+RAG+memory+messages → Anthropic 호출 → metadata 한 묶음. CLI(`just chat`/`just ask`), REPL, FastAPI endpoint, webapp 페이지 모두 wrap. 텔레그램·MCP 도 같은 패턴
 - **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용. 같은 패턴 복사가 안전
