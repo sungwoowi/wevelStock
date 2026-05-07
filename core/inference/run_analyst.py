@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from collectors.snapshot import build_market_snapshot, render_snapshot_md
 from core.knowledge.compose import build_pipeline_prompt
 from core.llm.client import call_llm
 from core.logging import get_logger
@@ -155,6 +156,12 @@ async def run_analyst(
     rag_dept = spec.reads[0] if spec.reads else None
     query_for_rag = _last_user_text(messages)
 
+    snap_started = time.monotonic()
+    snapshot, snapshot_cache_hit = await build_market_snapshot()
+    snapshot_fetch_seconds = round(time.monotonic() - snap_started, 2)
+    snapshot_age_seconds = max(0, int(time.time() - snapshot.fetched_at))
+    market_snapshot_md = render_snapshot_md(snapshot)
+
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
         persona_path=spec.persona_path,
@@ -163,6 +170,7 @@ async def run_analyst(
         token_budget_memory=4000,
         query_for_rag=query_for_rag,
         rag_dept=rag_dept,
+        market_snapshot_md=market_snapshot_md,
         response_rules=spec.response_rules,
     )
 
@@ -214,6 +222,10 @@ async def run_analyst(
         "upstream_error": upstream_error,  # 실 LLM 호출 실패 시 원인 (mock fallback 진단)
         "provider_requested": provider,  # 사용자 명시 선택 (None = auto)
         "provider_used": provider_used,  # 실제 응답 backend
+        "snapshot_age_seconds": snapshot_age_seconds,
+        "snapshot_fetch_seconds": snapshot_fetch_seconds,
+        "snapshot_cache_hit": snapshot_cache_hit,
+        "snapshot_failures": snapshot.failures,
     }
 
     log.info(

@@ -169,18 +169,21 @@ async def build_pipeline_prompt(
     token_budget_memory: int = 4000,
     query_for_rag: str | None = None,
     rag_dept: str | None = None,
+    market_snapshot_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
     """Assemble system prompt for a pipeline stage.
 
-    Layout (all cached blocks use Anthropic prompt caching):
+    Layout (cache_control 박힌 블록만 Anthropic prompt caching 대상):
       [0] Shared canon (knowledge/canon/*.md)     — cached
       [1] Pipeline persona (prompts/analyst.md)    — cached
       [2] Memory context (recent days + rollups)   — cached
-      [3] RAG chunks (dynamic)                     — not cached
-      [4] Response rules                           — not cached
+      [3] Market snapshot (5분 갱신)                — not cached
+      [4] RAG chunks (query 종속)                   — not cached
+      [5] Response rules                           — not cached
 
     RAG: `query_for_rag` 와 `rag_dept` 둘 다 주어지면 retrieve. 둘 다 없으면 skip.
+    Market snapshot: `market_snapshot_md` 주어지면 RAG 직전 삽입 (캐시 분리선 뒤).
     """
     blocks: list[dict] = []
 
@@ -220,7 +223,14 @@ async def build_pipeline_prompt(
                 "cache_control": {"type": "ephemeral"},
             })
 
-    # [3] RAG chunks (not cached — query-dependent)
+    # [3] Market snapshot (not cached — 5분마다 갱신)
+    if market_snapshot_md:
+        blocks.append({
+            "type": "text",
+            "text": f"## Market Snapshot (current)\n{market_snapshot_md}",
+        })
+
+    # [4] RAG chunks (not cached — query-dependent)
     if query_for_rag and rag_dept:
         try:
             from core.knowledge.retrieve import retrieve
