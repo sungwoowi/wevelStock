@@ -75,8 +75,11 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
       {meta.system_prompt_chars?.toLocaleString()} chars · RAG{" "}
       {meta.rag_chunks_returned} chunks · cache {cacheLabel} · turn tokens{" "}
       {meta.tokens_in?.toLocaleString()}/{meta.tokens_out?.toLocaleString()} ·
-      cost ${meta.cost_usd?.toFixed(4)} · {meta.latency_s?.toFixed(1)}s ·{" "}
-      {meta.model}
+      cost{" "}
+      {providerUsed === "claude_code"
+        ? "$0 (subscription)"
+        : `$${meta.cost_usd?.toFixed(4)}`}{" "}
+      · {meta.latency_s?.toFixed(1)}s · {meta.model}
       {meta.is_mock && (
         <span className="ml-2 px-1.5 py-0.5 bg-amber-900/40 text-amber-400 rounded">
           ⚠ MOCK fallback
@@ -93,7 +96,9 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
 
 export default function AnalystChatPage() {
   const [analystId, setAnalystId] = useState("wealth_strategist");
-  const [analystMeta, setAnalystMeta] = useState<AnalystMeta | null>(null);
+  const [analystMeta, setAnalystMeta] = useState<AnalystMeta | null | undefined>(
+    undefined,
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [perTurnMeta, setPerTurnMeta] = useState<ChatMetadata[]>([]);
   const [input, setInput] = useState("");
@@ -146,7 +151,7 @@ export default function AnalystChatPage() {
   const cumulativeOut = perTurnMeta.reduce((s, m) => s + (m.tokens_out ?? 0), 0);
   const cumulativeTotal = cumulativeIn + cumulativeOut;
   const cumulativeCost = perTurnMeta.reduce(
-    (s, m) => s + (m.cost_usd ?? 0),
+    (s, m) => s + (m.provider_used === "claude_code" ? 0 : m.cost_usd ?? 0),
     0,
   );
 
@@ -225,7 +230,9 @@ export default function AnalystChatPage() {
             onChange={(e) => setAnalystId(e.target.value)}
             className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 font-mono text-xs"
           />
-          {analystMeta ? (
+          {analystMeta === undefined ? (
+            <span className="text-xs text-neutral-500">분석가 메타 로딩…</span>
+          ) : analystMeta ? (
             <span className="text-xs text-neutral-500">
               {analystMeta.display_name} · 학습부:{" "}
               {analystMeta.learning_dept} · RAG: {analystMeta.reads.join(",")}
