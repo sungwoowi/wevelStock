@@ -65,8 +65,8 @@ _CRON_GRACE_SECONDS = 60
 
 @dataclass
 class MarketSnapshot:
-    fetched_at: float                       # epoch seconds
-    fetched_at_iso: str                     # KST ISO-8601
+    fetched_at: float                       # epoch seconds (호출 시각)
+    fetched_at_iso: str                     # KST ISO-8601 (호출 시각)
     overnight: dict[str, Any]
     fear_greed: dict[str, Any]
     kr_indices: dict[str, Any]
@@ -77,6 +77,7 @@ class MarketSnapshot:
     failures: list[str] = field(default_factory=list)
     source_map: dict[str, str] = field(default_factory=dict)  # "kr"|"us" → "db"|"fetch"
     db_run_ids: dict[str, str] = field(default_factory=dict)  # pipeline_id → run_id
+    db_age_seconds: dict[str, float] = field(default_factory=dict)  # pipeline_id → age
 
 
 _LAST: MarketSnapshot | None = None
@@ -204,9 +205,12 @@ async def build_market_snapshot(
     *,
     kis: KISClient | None = None,
     krx: KRXClient | None = None,
-    max_age_seconds: int = 300,
+    max_age_seconds: int = 60,
 ) -> tuple[MarketSnapshot, bool]:
-    """DB-first hybrid + 5분 인메모리 캐시.
+    """DB-first hybrid + 짧은 인메모리 캐시 (default 60s).
+
+    DB-first 가 0.3s 수준이라 5분 캐시는 cron 발동 직후 옛 데이터 노출 위험만 컸다.
+    인메모리 캐시는 동시 호출 race / 짧은 burst 에 한정.
 
     Returns:
         (snapshot, cache_hit). cache_hit=True 면 max_age_seconds 안 인메모리 재사용.
@@ -298,10 +302,12 @@ async def build_market_snapshot(
 
     # 3) DB 어댑터 적용 — fresh 그룹만
     db_run_ids: dict[str, str] = {}
+    db_age_seconds: dict[str, float] = {}
 
     if us_from_db and pre_db is not None:
-        run_id, parts, _age = pre_db
+        run_id, parts, age = pre_db
         db_run_ids["market_briefing_pre"] = run_id
+        db_age_seconds["market_briefing_pre"] = age
         overnight_part = _find_part_data(parts, "overnight")
         if overnight_part:
             ov, fg = _adapt_overnight_from_part(overnight_part)
@@ -313,8 +319,9 @@ async def build_market_snapshot(
             failures.extend(["overnight", "fear_greed"])
 
     if kr_from_db and now_db is not None:
-        run_id, parts, _age = now_db
+        run_id, parts, age = now_db
         db_run_ids["market_briefing_now"] = run_id
+        db_age_seconds["market_briefing_now"] = age
         mo = _find_part_data(parts, "market_overview")
         ss = _find_part_data(parts, "supply_sectors")
         ls = _find_part_data(parts, "leading_stocks")
@@ -358,6 +365,7 @@ async def build_market_snapshot(
         failures=failures,
         source_map=source_map,
         db_run_ids=db_run_ids,
+        db_age_seconds=db_age_seconds,
     )
     _LAST = snapshot
     _LAST_AT = now
@@ -452,14 +460,56 @@ def _err_msg(d: Any) -> str:
     return d.get("error") if isinstance(d, dict) else "수집 실패"
 
 
+def _format_age(seconds: float) -> str:
+    """초 → 사람 친화 라벨 (분 / 시간)."""
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}초 전"
+    if s < 3600:
+        return f"{s // 60}분 전"
+    hours = s / 3600
+    if hours < 24:
+        return f"{hours:.1f}시간 전"
+    return f"{hours / 24:.1f}일 전"
+
+
+def _format_source_line(snapshot: MarketSnapshot) -> str | None:
+    """source_map + db_age_seconds → "_데이터 출처_" 라인.
+
+    분석가가 데이터 시점을 정확히 인지하도록 호출 시각이 아니라
+    실제 적재 시각 (DB age) 기준으로 표시.
+    """
+    if not snapshot.source_map:
+        return None
+    parts: list[str] = []
+    pipeline_map = {"kr": "market_briefing_now", "us": "market_briefing_pre"}
+    label_map = {"kr": "한국", "us": "미국"}
+    for group in ("us", "kr"):  # 시간순 (overnight 먼저, 한국 정규장 뒤)
+        src = snapshot.source_map.get(group)
+        if src is None:
+            continue
+        label = label_map[group]
+        if src == "db":
+            age = snapshot.db_age_seconds.get(pipeline_map[group])
+            age_label = _format_age(age) if age is not None else "?"
+            parts.append(f"{label}=DB ({age_label} 적재)")
+        else:
+            parts.append(f"{label}=직접 수집 (방금)")
+    return "_데이터 출처: " + " · ".join(parts) + "_"
+
+
 def render_snapshot_md(snapshot: MarketSnapshot) -> str:
     """분석가 system prompt 용 마크다운.
 
     실패 항목은 `[수집 실패 - 사유]` 로 표기 — 7계명 #6 (데이터 없이 추측 X) 정합.
+    헤더에 데이터 출처/적재 시점 명시 — 호출 시각이 아니라 실 데이터의 시점.
     """
     lines: list[str] = []
     age = max(0, int(time.time() - snapshot.fetched_at))
-    lines.append(f"_생성: {snapshot.fetched_at_iso} · age {age}s_")
+    lines.append(f"_호출: {snapshot.fetched_at_iso} · {age}s_")
+    src_line = _format_source_line(snapshot)
+    if src_line:
+        lines.append(src_line)
     lines.append("")
 
     # 1. 미국 지수

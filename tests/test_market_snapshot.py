@@ -700,3 +700,65 @@ async def test_db_both_missing_full_fetch() -> None:
     assert snap.db_run_ids == {}
     assert snap.failures == []
     assert snap.kr_indices.get("kospi", {}).get("value") == 2521.40
+
+
+# ---------------------------------------------------------------------------
+# 9. Render — 데이터 출처/시점 헤더
+# ---------------------------------------------------------------------------
+
+
+async def test_render_data_source_line_db_both(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DB hit 양쪽 → 헤더에 'DB (X 시간 전 적재)' 표기."""
+    _patch_db(monkeypatch, kr_age=600, us_age=3600)
+
+    async def _boom(*args, **kwargs):
+        raise AssertionError("no fetch")
+
+    for fn in (
+        "fetch_overnight", "fetch_fear_greed", "fetch_kr_indices",
+        "fetch_kr_supply_demand", "fetch_kr_sectors",
+        "fetch_kr_leading_stocks", "fetch_kr_futures_supply_demand",
+    ):
+        monkeypatch.setattr(snap_mod, fn, _boom)
+
+    snap, _ = await build_market_snapshot()
+    md = render_snapshot_md(snap)
+
+    assert "_데이터 출처:" in md
+    assert "한국=DB" in md
+    assert "미국=DB" in md
+    # age formatting
+    assert "10분 전 적재" in md  # 600s
+    assert "1.0시간 전 적재" in md  # 3600s
+
+
+async def test_render_data_source_line_full_fetch() -> None:
+    """DB 부재 → '직접 수집 (방금)' 표기."""
+    snap, _ = await build_market_snapshot()
+    md = render_snapshot_md(snap)
+
+    assert "_데이터 출처:" in md
+    assert "한국=직접 수집 (방금)" in md
+    assert "미국=직접 수집 (방금)" in md
+
+
+async def test_render_data_source_line_mixed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """KR fetch + US DB 혼합."""
+    _patch_db(monkeypatch, kr_age=86400 * 3, us_age=43200)  # 12h us
+
+    snap, _ = await build_market_snapshot()
+    md = render_snapshot_md(snap)
+
+    assert "한국=직접 수집 (방금)" in md
+    assert "미국=DB" in md
+    assert "12.0시간 전 적재" in md
+
+
+def test_format_age_humanizes() -> None:
+    from collectors.snapshot import _format_age
+
+    assert _format_age(30) == "30초 전"
+    assert _format_age(600) == "10분 전"
+    assert _format_age(3600) == "1.0시간 전"
+    assert _format_age(43200) == "12.0시간 전"
+    assert _format_age(86400 * 2) == "2.0일 전"
