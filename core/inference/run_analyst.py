@@ -226,6 +226,8 @@ async def run_analyst(
         "snapshot_fetch_seconds": snapshot_fetch_seconds,
         "snapshot_cache_hit": snapshot_cache_hit,
         "snapshot_failures": snapshot.failures,
+        "snapshot_source_map": dict(snapshot.source_map),
+        "snapshot_db_run_ids": dict(snapshot.db_run_ids),
     }
 
     log.info(

@@ -1,10 +1,19 @@
-"""Market snapshot for analyst system prompt — 7 collector 병렬 + 5분 인메모리 캐시.
+"""Market snapshot for analyst system prompt — DB-first hybrid + 5분 인메모리 캐시.
 
 목적: 분석가 LLM 호출 직전에 user_want_spec Task 2/3 의 시장 raw 를 모아
       `compose.build_pipeline_prompt` 의 RAG 직전 블록으로 자동 주입한다.
       framework 명제만 인용하던 응답이 실제 환율·VIX·수급 수치와 결합되도록.
 
-7 collector (병렬):
+DB-first 흐름:
+  1) `briefing_parts` (market_briefing_now / market_briefing_pre) latest part 조회
+  2) **시간대 인식 임계** 판정 — 다음 cron 발동 시각까지가 fresh
+       (한국 cron 30 9,12,14 * * 1-5 / 미국 cron 0 7 * * 1-5)
+  3) Stale 또는 부재 시에만 part 단위 부분 cold fetch (한국 5 / 미국 2)
+
+5-Layer 정합: 분석가가 collector 직호출 = "수집팀 → 분석팀" 단방향 위반. DB 우선
+      = briefing cron (수집팀) 이 raw 적재 → 분석가 (분석팀) 가 DB 에서 읽음.
+
+7 collector (DB stale 시 부분/전체 호출):
   1) us_markets.fetch_overnight       — 나스닥/S&P500/SOX/VIX/DXY/USD-KRW/US10Y/금/WTI
   2) fear_greed.fetch_fear_greed      — CNN F&G 0~100
   3) kr_indices.fetch_kr_indices      — KOSPI/KOSDAQ/KOSPI200
@@ -26,7 +35,7 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -39,11 +48,19 @@ from collectors.kr_supply_demand import fetch_kr_supply_demand
 from collectors.us_markets import fetch_overnight
 from connectors.kis import KISClient
 from connectors.krx import KRXClient
+from core.briefing import parts_store
 from core.logging import get_logger
 
 log = get_logger(__name__)
 
 _KST = ZoneInfo("Asia/Seoul")
+
+# 한국 정규장 cron 시각 (KST). manifest `30 9,12,14 * * 1-5` 와 일치.
+_KR_CRON_HM: list[tuple[int, int]] = [(9, 30), (12, 30), (14, 30)]
+# 미국 overnight cron 시각 (KST). manifest `0 7 * * 1-5`.
+_US_CRON_HM: tuple[int, int] = (7, 0)
+# Cron 발동 후 적재 완료까지 grace (네트워크 + KIS 22콜 ~28s).
+_CRON_GRACE_SECONDS = 60
 
 
 @dataclass
@@ -58,10 +75,129 @@ class MarketSnapshot:
     kr_sectors: dict[str, Any]
     kr_leading: dict[str, Any]
     failures: list[str] = field(default_factory=list)
+    source_map: dict[str, str] = field(default_factory=dict)  # "kr"|"us" → "db"|"fetch"
+    db_run_ids: dict[str, str] = field(default_factory=dict)  # pipeline_id → run_id
 
 
 _LAST: MarketSnapshot | None = None
 _LAST_AT: float = 0.0
+
+
+# ---------------------------------------------------------------------------
+# 시간대 인식 임계 (KR/US)
+# ---------------------------------------------------------------------------
+
+
+def _last_business_day(now_kst: datetime) -> datetime:
+    """가장 최근 평일 (now 가 평일이면 자기 자신)."""
+    d = now_kst
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d
+
+
+def _last_expected_kr_cron(now_kst: datetime) -> datetime:
+    """이 시각 기준 가장 최근에 발동했어야 하는 한국 cron 시각.
+
+    평일 정규장 중이면 가장 가까운 과거 cron, 그 이전이면 직전 영업일 14:30.
+    토/일이면 금요일 14:30.
+    """
+    weekday = now_kst.weekday()
+    if weekday < 5:
+        # 오늘의 cron 시각들 (역순) 중 now 이전 첫 번째
+        for h, m in reversed(_KR_CRON_HM):
+            cron_t = now_kst.replace(hour=h, minute=m, second=0, microsecond=0)
+            if now_kst >= cron_t:
+                return cron_t
+        # 자정 ~ 09:30 — 직전 영업일 14:30
+    # 토/일/평일 09:30 전 — 직전 영업일 14:30
+    prev = _last_business_day(now_kst - timedelta(days=1))
+    h, m = _KR_CRON_HM[-1]
+    return prev.replace(hour=h, minute=m, second=0, microsecond=0)
+
+
+def _last_expected_us_cron(now_kst: datetime) -> datetime:
+    """이 시각 기준 가장 최근에 발동했어야 하는 미국 overnight cron (07:00 KST 평일)."""
+    weekday = now_kst.weekday()
+    h, m = _US_CRON_HM
+    today_700 = now_kst.replace(hour=h, minute=m, second=0, microsecond=0)
+    if weekday < 5 and now_kst >= today_700:
+        return today_700
+    # 평일 07:00 전 또는 토/일 → 직전 영업일 07:00
+    prev = _last_business_day(now_kst - timedelta(days=1))
+    return prev.replace(hour=h, minute=m, second=0, microsecond=0)
+
+
+def kr_threshold_seconds(now_kst: datetime) -> int:
+    """한국 그룹 신선도 임계 (초). DB age 가 이 값 이하이면 fresh.
+
+    기준: now 와 가장 최근 발동했어야 할 cron 시각의 차 + grace (60s).
+    공휴일은 미반영 (직전 영업일 cron 으로 fallback).
+    """
+    last_cron = _last_expected_kr_cron(now_kst)
+    delta = (now_kst - last_cron).total_seconds()
+    return int(delta) + _CRON_GRACE_SECONDS
+
+
+def us_threshold_seconds(now_kst: datetime) -> int:
+    """미국 overnight 그룹 신선도 임계 (초). DB age 가 이 값 이하이면 fresh."""
+    last_cron = _last_expected_us_cron(now_kst)
+    delta = (now_kst - last_cron).total_seconds()
+    return int(delta) + _CRON_GRACE_SECONDS
+
+
+# ---------------------------------------------------------------------------
+# 어댑터 (briefing_parts data_json → snapshot dict)
+# ---------------------------------------------------------------------------
+
+
+def _find_part_data(parts: list, key: str) -> dict | None:
+    """Part 리스트에서 part_key 매칭하는 data_json 추출. 없으면 None."""
+    for p in parts:
+        if getattr(p, "key", None) == key:
+            return p.data
+    return None
+
+
+def _adapt_overnight_from_part(part_data: dict) -> tuple[dict, dict]:
+    """`market_briefing_pre` overnight part data_json → (overnight, fear_greed).
+
+    persist 가 `{overnight_us: {nasdaq, sp500, sox, vix, fear_greed},
+                  macro: {dxy, usdkrw, us_10y, gold, wti}, night_futures: ...}` 적재.
+    snapshot.overnight 은 fetch_overnight() 의 평면 dict 형식 (fear_greed 분리).
+    """
+    overnight_us = part_data.get("overnight_us") or {}
+    macro = part_data.get("macro") or {}
+    overnight: dict[str, Any] = {
+        k: v for k, v in overnight_us.items() if k != "fear_greed"
+    }
+    overnight.update(macro)
+    fear_greed = overnight_us.get("fear_greed") or {}
+    return overnight, fear_greed
+
+
+def _adapt_kr_indices_from_part(part_data: dict) -> dict:
+    """`market_briefing_now` market_overview part → snapshot.kr_indices."""
+    return part_data.get("indices") or {}
+
+
+def _adapt_kr_supply_sectors_from_part(part_data: dict) -> tuple[dict, dict, dict]:
+    """`market_briefing_now` supply_sectors part → (kr_supply, kr_futures_supply, kr_sectors)."""
+    return (
+        part_data.get("supply_demand") or {},
+        part_data.get("futures_supply_demand") or {},
+        part_data.get("sectors") or {},
+    )
+
+
+def _adapt_kr_leading_from_part(part_data: dict) -> dict:
+    """`market_briefing_now` leading_stocks part → snapshot.kr_leading."""
+    return part_data.get("leading_stocks") or {}
+
+
+# ---------------------------------------------------------------------------
+# build_market_snapshot — DB-first hybrid
+# ---------------------------------------------------------------------------
 
 
 async def build_market_snapshot(
@@ -70,14 +206,21 @@ async def build_market_snapshot(
     krx: KRXClient | None = None,
     max_age_seconds: int = 300,
 ) -> tuple[MarketSnapshot, bool]:
-    """7 collector 병렬 fetch + 5분 인메모리 캐시.
+    """DB-first hybrid + 5분 인메모리 캐시.
 
     Returns:
-        (snapshot, cache_hit). cache_hit=True 면 max_age_seconds 안 캐시 재사용.
+        (snapshot, cache_hit). cache_hit=True 면 max_age_seconds 안 인메모리 재사용.
+        DB hit 와 cache hit 는 다름 — DB hit 는 snapshot.source_map 으로 노출.
+
+    동작:
+        1. 인메모리 캐시 (5분) hit 면 즉시 반환.
+        2. briefing_parts latest part 조회 + 시간대 인식 임계 판정.
+        3. Stale/부재 그룹의 collector 만 cold 호출 (부분 fetch).
+        4. DB 그룹은 어댑터로 snapshot dict 조립.
 
     Note:
-        - cold call 시 stderr 에 진행 표시 (CLI/REPL 만 직접 보임).
-        - 동시 호출 시 두 번 fetch 될 수 있음 (last-writer-wins) — 정합성은 유지.
+        - cold call 시 stderr 에 진행 표시.
+        - 동시 호출 시 두 번 fetch 될 수 있음 (last-writer-wins).
         - kis/krx 가 None 이면 자체 context manager 로 단명 client 생성.
     """
     global _LAST, _LAST_AT
@@ -86,41 +229,122 @@ async def build_market_snapshot(
     if _LAST is not None and (now - _LAST_AT) < max_age_seconds:
         return _LAST, True
 
-    sys.stderr.write("[market snapshot fetching... ~30s]\n")
-    sys.stderr.flush()
     started = time.monotonic()
+    now_kst = datetime.now(_KST)
+    kr_th = kr_threshold_seconds(now_kst)
+    us_th = us_threshold_seconds(now_kst)
+
+    # 1) DB latest parts 조회
+    now_db = parts_store.get_latest_parts_with_age("market_briefing_now")
+    pre_db = parts_store.get_latest_parts_with_age("market_briefing_pre")
+
+    kr_from_db = now_db is not None and now_db[2] <= kr_th
+    us_from_db = pre_db is not None and pre_db[2] <= us_th
+
+    # 2) 부분 cold fetch — stale 그룹만
+    bucket: dict[str, Any] = {
+        k: {} for k in (
+            "overnight", "fear_greed", "kr_indices", "kr_supply",
+            "kr_sectors", "kr_leading", "kr_futures_supply",
+        )
+    }
+    failures: list[str] = []
+
+    fetch_tasks: list = []
+    fetch_labels: list[str] = []
 
     async with AsyncExitStack() as stack:
-        if kis is None:
-            kis = await stack.enter_async_context(KISClient())
-        if krx is None:
-            krx = await stack.enter_async_context(KRXClient())
+        if not us_from_db:
+            fetch_tasks.append(fetch_overnight())
+            fetch_labels.append("overnight")
+            fetch_tasks.append(fetch_fear_greed())
+            fetch_labels.append("fear_greed")
 
-        results = await asyncio.gather(
-            fetch_overnight(),
-            fetch_fear_greed(),
-            fetch_kr_indices(kis),
-            fetch_kr_supply_demand(kis),
-            fetch_kr_sectors(kis),
-            fetch_kr_leading_stocks(kis),
-            fetch_kr_futures_supply_demand(krx),
-            return_exceptions=True,
-        )
+        if not kr_from_db:
+            kis_client = kis
+            krx_client = krx
+            if kis_client is None:
+                kis_client = await stack.enter_async_context(KISClient())
+            if krx_client is None:
+                krx_client = await stack.enter_async_context(KRXClient())
+            fetch_tasks.append(fetch_kr_indices(kis_client))
+            fetch_labels.append("kr_indices")
+            fetch_tasks.append(fetch_kr_supply_demand(kis_client))
+            fetch_labels.append("kr_supply")
+            fetch_tasks.append(fetch_kr_sectors(kis_client))
+            fetch_labels.append("kr_sectors")
+            fetch_tasks.append(fetch_kr_leading_stocks(kis_client))
+            fetch_labels.append("kr_leading")
+            fetch_tasks.append(fetch_kr_futures_supply_demand(krx_client))
+            fetch_labels.append("kr_futures_supply")
 
-    labels = [
-        "overnight", "fear_greed", "kr_indices", "kr_supply",
-        "kr_sectors", "kr_leading", "kr_futures_supply",
-    ]
-    bucket: dict[str, Any] = {}
-    failures: list[str] = []
-    for label, res in zip(labels, results):
+        if fetch_tasks:
+            sys.stderr.write(
+                f"[market snapshot fetching {len(fetch_tasks)} collectors "
+                f"(kr={'db' if kr_from_db else 'fetch'} "
+                f"us={'db' if us_from_db else 'fetch'})...]\n"
+            )
+            sys.stderr.flush()
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+        else:
+            results = []
+
+    for label, res in zip(fetch_labels, results):
         if isinstance(res, Exception):
             bucket[label] = {"error": f"{type(res).__name__}: {res}"}
             failures.append(label)
         else:
             bucket[label] = res
 
+    # 3) DB 어댑터 적용 — fresh 그룹만
+    db_run_ids: dict[str, str] = {}
+
+    if us_from_db and pre_db is not None:
+        run_id, parts, _age = pre_db
+        db_run_ids["market_briefing_pre"] = run_id
+        overnight_part = _find_part_data(parts, "overnight")
+        if overnight_part:
+            ov, fg = _adapt_overnight_from_part(overnight_part)
+            bucket["overnight"] = ov
+            bucket["fear_greed"] = fg
+        else:
+            bucket["overnight"] = {"error": "overnight part missing in DB"}
+            bucket["fear_greed"] = {"error": "fear_greed part missing in DB"}
+            failures.extend(["overnight", "fear_greed"])
+
+    if kr_from_db and now_db is not None:
+        run_id, parts, _age = now_db
+        db_run_ids["market_briefing_now"] = run_id
+        mo = _find_part_data(parts, "market_overview")
+        ss = _find_part_data(parts, "supply_sectors")
+        ls = _find_part_data(parts, "leading_stocks")
+        if mo is not None:
+            bucket["kr_indices"] = _adapt_kr_indices_from_part(mo)
+        else:
+            bucket["kr_indices"] = {"error": "market_overview part missing in DB"}
+            failures.append("kr_indices")
+        if ss is not None:
+            sup, fut, sec = _adapt_kr_supply_sectors_from_part(ss)
+            bucket["kr_supply"] = sup
+            bucket["kr_futures_supply"] = fut
+            bucket["kr_sectors"] = sec
+        else:
+            err = {"error": "supply_sectors part missing in DB"}
+            bucket["kr_supply"] = err
+            bucket["kr_futures_supply"] = err
+            bucket["kr_sectors"] = err
+            failures.extend(["kr_supply", "kr_futures_supply", "kr_sectors"])
+        if ls is not None:
+            bucket["kr_leading"] = _adapt_kr_leading_from_part(ls)
+        else:
+            bucket["kr_leading"] = {"error": "leading_stocks part missing in DB"}
+            failures.append("kr_leading")
+
     elapsed = time.monotonic() - started
+    source_map = {
+        "kr": "db" if kr_from_db else "fetch",
+        "us": "db" if us_from_db else "fetch",
+    }
     snapshot = MarketSnapshot(
         fetched_at=now,
         fetched_at_iso=datetime.fromtimestamp(now, _KST).isoformat(timespec="seconds"),
@@ -132,18 +356,26 @@ async def build_market_snapshot(
         kr_sectors=bucket["kr_sectors"],
         kr_leading=bucket["kr_leading"],
         failures=failures,
+        source_map=source_map,
+        db_run_ids=db_run_ids,
     )
     _LAST = snapshot
     _LAST_AT = now
 
-    sys.stderr.write(
-        f"[market snapshot ready in {elapsed:.1f}s · {len(failures)} failed]\n"
-    )
-    sys.stderr.flush()
+    if fetch_tasks:
+        sys.stderr.write(
+            f"[market snapshot ready in {elapsed:.1f}s · "
+            f"{len(failures)} failed · "
+            f"kr={source_map['kr']} us={source_map['us']}]\n"
+        )
+        sys.stderr.flush()
     log.info(
         "market_snapshot_built",
         elapsed_s=round(elapsed, 2),
         failures=failures,
+        source_map=source_map,
+        db_run_ids=db_run_ids,
+        cold_collectors=len(fetch_tasks),
     )
     return snapshot, False
 

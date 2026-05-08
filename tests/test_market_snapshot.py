@@ -177,6 +177,14 @@ def _patch_collectors(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(snap_mod, "KISClient", _DummyKIS)
     monkeypatch.setattr(snap_mod, "KRXClient", _DummyKRX)
+
+    # Default: DB 비어있음 — 새 DB-first 테스트가 override 하지 않으면 cold fetch.
+    # 기존 테스트 (cold path / partial failure / render) 는 이 default 로 회귀 안전.
+    monkeypatch.setattr(
+        snap_mod.parts_store,
+        "get_latest_parts_with_age",
+        lambda pipeline_id: None,
+    )
     yield
 
 
@@ -360,3 +368,335 @@ async def test_run_analyst_metadata_includes_snapshot_keys(monkeypatch: pytest.M
     assert md["snapshot_cache_hit"] is False
     assert isinstance(md["snapshot_age_seconds"], int)
     assert isinstance(md["snapshot_fetch_seconds"], (int, float))
+    # DB-first metadata 키
+    assert "snapshot_source_map" in md
+    assert "snapshot_db_run_ids" in md
+    assert isinstance(md["snapshot_source_map"], dict)
+    assert isinstance(md["snapshot_db_run_ids"], dict)
+
+
+# ---------------------------------------------------------------------------
+# 6. DB-first hybrid — 시간대 인식 임계 함수
+# ---------------------------------------------------------------------------
+
+
+from datetime import datetime  # noqa: E402
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from collectors.snapshot import (  # noqa: E402
+    _adapt_kr_indices_from_part,
+    _adapt_kr_leading_from_part,
+    _adapt_kr_supply_sectors_from_part,
+    _adapt_overnight_from_part,
+    kr_threshold_seconds,
+    us_threshold_seconds,
+)
+from core.contracts.briefing_part import BriefingPart  # noqa: E402
+
+_KST_TZ = ZoneInfo("Asia/Seoul")
+
+
+def test_kr_threshold_weekday_intraday() -> None:
+    """평일 14:00 — 마지막 12:30 cron 부터 1.5h."""
+    # 2026-05-08 = Friday
+    now = datetime(2026, 5, 8, 14, 0, 0, tzinfo=_KST_TZ)
+    th = kr_threshold_seconds(now)
+    # 12:30 ~ 14:00 = 5400s + 60 grace
+    assert 5400 <= th <= 5500
+
+
+def test_kr_threshold_weekday_post_close() -> None:
+    """평일 22:00 — 마지막 14:30 cron 부터 7.5h."""
+    now = datetime(2026, 5, 8, 22, 0, 0, tzinfo=_KST_TZ)
+    th = kr_threshold_seconds(now)
+    # 14:30 ~ 22:00 = 27000s + 60 grace
+    assert 27000 <= th <= 27200
+
+
+def test_kr_threshold_weekday_pre_open() -> None:
+    """평일 09:00 — 09:30 cron 전 → 전 영업일 14:30."""
+    # 2026-05-08 = Friday → 전일 = 2026-05-07 (Thursday) 14:30
+    now = datetime(2026, 5, 8, 9, 0, 0, tzinfo=_KST_TZ)
+    th = kr_threshold_seconds(now)
+    # 5/7 14:30 ~ 5/8 09:00 = 18.5h = 66600s + 60
+    assert 66500 <= th <= 66800
+
+
+def test_kr_threshold_weekend_saturday() -> None:
+    """토요일 11:00 — 금 14:30 부터 ~20.5h."""
+    # 2026-05-09 = Saturday
+    now = datetime(2026, 5, 9, 11, 0, 0, tzinfo=_KST_TZ)
+    th = kr_threshold_seconds(now)
+    # 5/8 14:30 ~ 5/9 11:00 = 73800s + 60
+    assert 73700 <= th <= 74000
+
+
+def test_kr_threshold_monday_pre_open() -> None:
+    """월요일 09:00 — 09:30 cron 전 → 금 14:30 부터 ~66.5h."""
+    # 2026-05-11 = Monday
+    now = datetime(2026, 5, 11, 9, 0, 0, tzinfo=_KST_TZ)
+    th = kr_threshold_seconds(now)
+    # 5/8 14:30 ~ 5/11 09:00 = 66.5h = 239400s + 60
+    assert 239300 <= th <= 239600
+
+
+def test_us_threshold_weekday_intraday() -> None:
+    """평일 14:00 — 당일 07:00 cron 부터 7h."""
+    now = datetime(2026, 5, 8, 14, 0, 0, tzinfo=_KST_TZ)
+    th = us_threshold_seconds(now)
+    # 07:00 ~ 14:00 = 25200s + 60
+    assert 25200 <= th <= 25400
+
+
+def test_us_threshold_weekend_sunday() -> None:
+    """일요일 09:00 — 금 07:00 부터 ~50h."""
+    # 2026-05-10 = Sunday
+    now = datetime(2026, 5, 10, 9, 0, 0, tzinfo=_KST_TZ)
+    th = us_threshold_seconds(now)
+    # 5/8 07:00 ~ 5/10 09:00 = 50h = 180000s + 60
+    assert 179900 <= th <= 180200
+
+
+# ---------------------------------------------------------------------------
+# 7. DB-first hybrid — 어댑터 (data_json → snapshot dict)
+# ---------------------------------------------------------------------------
+
+
+def test_adapter_overnight_part_separates_fear_greed() -> None:
+    """overnight part data_json → snapshot.overnight (평면) + fear_greed 분리."""
+    part_data = {
+        "overnight_us": {
+            "nasdaq": {"price": 19873.21, "change_pct": -0.85},
+            "vix": {"price": 18.42, "change_pct": 5.30},
+            "fear_greed": {"score": 38.0, "rating_kr": "공포"},
+        },
+        "macro": {
+            "dxy": {"price": 105.42, "change_pct": 0.20},
+            "usdkrw": {"price": 1487.20, "change_pct": 0.32},
+        },
+        "night_futures": {"kospi200_cme_night": {}},  # snapshot 무관
+    }
+    overnight, fg = _adapt_overnight_from_part(part_data)
+    # overnight 은 평면 + fear_greed 빠짐
+    assert "fear_greed" not in overnight
+    assert overnight["nasdaq"]["price"] == 19873.21
+    assert overnight["vix"]["change_pct"] == 5.30
+    # macro 합쳐짐
+    assert overnight["dxy"]["price"] == 105.42
+    assert overnight["usdkrw"]["price"] == 1487.20
+    # fear_greed 분리
+    assert fg["score"] == 38.0
+    assert fg["rating_kr"] == "공포"
+
+
+def test_adapter_market_overview_part_to_kr_indices() -> None:
+    part_data = {"indices": _mock_kr_indices(), "fetched_at": "2026-05-08T14:32:00+09:00"}
+    out = _adapt_kr_indices_from_part(part_data)
+    assert out["kospi"]["value"] == 2521.40
+    assert out["kosdaq"]["value"] == 718.20
+
+
+def test_adapter_supply_sectors_splits_three_fields() -> None:
+    part_data = {
+        "supply_demand": {"kospi": {"individual_net_amount_m": 940771}},
+        "futures_supply_demand": {"trade_date": "20260508", "foreign_net_amount_b": 445},
+        "sectors": {"strong": [{"name": "KODEX 2차전지산업"}]},
+    }
+    sup, fut, sec = _adapt_kr_supply_sectors_from_part(part_data)
+    assert sup["kospi"]["individual_net_amount_m"] == 940771
+    assert fut["foreign_net_amount_b"] == 445
+    assert sec["strong"][0]["name"] == "KODEX 2차전지산업"
+
+
+def test_adapter_leading_stocks_part_to_kr_leading() -> None:
+    part_data = {"leading_stocks": _mock_kr_leading()}
+    out = _adapt_kr_leading_from_part(part_data)
+    assert out["kospi"][0]["name"] == "HD현대중공업"
+
+
+# ---------------------------------------------------------------------------
+# 8. DB-first hybrid — build_market_snapshot 의 source_map / 부분 fetch
+# ---------------------------------------------------------------------------
+
+
+def _make_now_parts() -> list[BriefingPart]:
+    return [
+        BriefingPart(
+            key="market_overview",
+            label="시장개요",
+            order=1,
+            data={"indices": _mock_kr_indices()},
+        ),
+        BriefingPart(
+            key="supply_sectors",
+            label="수급+섹터",
+            order=2,
+            data={
+                "supply_demand": _mock_kr_supply(),
+                "futures_supply_demand": _mock_kr_futures_supply(),
+                "sectors": _mock_kr_sectors(),
+            },
+        ),
+        BriefingPart(
+            key="leading_stocks",
+            label="주도주",
+            order=3,
+            data={"leading_stocks": _mock_kr_leading()},
+        ),
+    ]
+
+
+def _make_pre_parts() -> list[BriefingPart]:
+    overnight = _mock_overnight()
+    fg = _mock_fear_greed()
+    overnight_us = {
+        "nasdaq": overnight["nasdaq"],
+        "sp500": overnight["sp500"],
+        "sox": overnight["sox"],
+        "vix": overnight["vix"],
+        "fear_greed": fg,
+    }
+    macro = {k: overnight[k] for k in ("dxy", "usdkrw", "us_10y", "gold", "wti")}
+    return [
+        BriefingPart(
+            key="overnight",
+            label="간밤시황",
+            order=1,
+            data={
+                "overnight_us": overnight_us,
+                "macro": macro,
+                "night_futures": {},
+            },
+        ),
+    ]
+
+
+def _patch_db(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    kr_age: float | None,
+    us_age: float | None,
+) -> None:
+    """parts_store.get_latest_parts_with_age 를 그룹별 age 로 mock.
+
+    age=None 이면 해당 파이프라인은 DB 부재.
+    """
+    now_parts = _make_now_parts()
+    pre_parts = _make_pre_parts()
+
+    def _stub(pipeline_id: str):
+        if pipeline_id == "market_briefing_now" and kr_age is not None:
+            return ("run-now-1", now_parts, kr_age)
+        if pipeline_id == "market_briefing_pre" and us_age is not None:
+            return ("run-pre-1", pre_parts, us_age)
+        return None
+
+    monkeypatch.setattr(snap_mod.parts_store, "get_latest_parts_with_age", _stub)
+
+
+async def test_db_both_fresh_no_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """양쪽 DB fresh → 7 collector 호출 0회. source_map = both db."""
+    _patch_db(monkeypatch, kr_age=600, us_age=3600)
+
+    async def _boom(*args, **kwargs):
+        raise AssertionError("cold fetch should NOT happen when DB is fresh")
+
+    for fn in (
+        "fetch_overnight", "fetch_fear_greed", "fetch_kr_indices",
+        "fetch_kr_supply_demand", "fetch_kr_sectors",
+        "fetch_kr_leading_stocks", "fetch_kr_futures_supply_demand",
+    ):
+        monkeypatch.setattr(snap_mod, fn, _boom)
+
+    snap, hit = await build_market_snapshot()
+    assert hit is False  # 인메모리 캐시는 X (DB hit 와 다름)
+    assert snap.source_map == {"kr": "db", "us": "db"}
+    assert snap.db_run_ids == {
+        "market_briefing_now": "run-now-1",
+        "market_briefing_pre": "run-pre-1",
+    }
+    assert snap.failures == []
+    # DB 어댑터 결과 확인
+    assert snap.kr_indices.get("kospi", {}).get("value") == 2521.40
+    assert snap.overnight.get("usdkrw", {}).get("price") == 1487.20
+    assert "fear_greed" not in snap.overnight  # 어댑터가 분리
+    assert snap.fear_greed.get("score") == 38.0
+
+
+async def test_db_kr_stale_us_fresh_partial_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """한국만 stale → kr 5 collector 호출, overnight/fg 0회."""
+    # KR age 3일 → 임계 초과. US age 1h → fresh.
+    _patch_db(monkeypatch, kr_age=86400 * 3, us_age=3600)
+
+    calls: dict[str, int] = {}
+
+    def _wrap(name: str, mock_fn):
+        async def _f(*args, **kwargs):
+            calls[name] = calls.get(name, 0) + 1
+            return mock_fn()
+        return _f
+
+    monkeypatch.setattr(snap_mod, "fetch_overnight", _wrap("overnight", _mock_overnight))
+    monkeypatch.setattr(snap_mod, "fetch_fear_greed", _wrap("fear_greed", _mock_fear_greed))
+    monkeypatch.setattr(snap_mod, "fetch_kr_indices", _wrap("kr_indices", _mock_kr_indices))
+    monkeypatch.setattr(snap_mod, "fetch_kr_supply_demand", _wrap("kr_supply", _mock_kr_supply))
+    monkeypatch.setattr(snap_mod, "fetch_kr_sectors", _wrap("kr_sectors", _mock_kr_sectors))
+    monkeypatch.setattr(snap_mod, "fetch_kr_leading_stocks", _wrap("kr_leading", _mock_kr_leading))
+    monkeypatch.setattr(snap_mod, "fetch_kr_futures_supply_demand", _wrap("kr_futures_supply", _mock_kr_futures_supply))
+
+    snap, _ = await build_market_snapshot()
+    assert snap.source_map == {"kr": "fetch", "us": "db"}
+    # KR 5 collector 호출, US 0 회
+    assert calls.get("overnight", 0) == 0
+    assert calls.get("fear_greed", 0) == 0
+    assert calls.get("kr_indices") == 1
+    assert calls.get("kr_supply") == 1
+    assert calls.get("kr_sectors") == 1
+    assert calls.get("kr_leading") == 1
+    assert calls.get("kr_futures_supply") == 1
+    # US 데이터는 DB 어댑터로 채워짐
+    assert snap.fear_greed.get("score") == 38.0
+    assert snap.db_run_ids == {"market_briefing_pre": "run-pre-1"}
+
+
+async def test_db_us_stale_kr_fresh_partial_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """미국만 stale → overnight + fg 만 호출, KR 5 collector 0회."""
+    _patch_db(monkeypatch, kr_age=600, us_age=86400 * 3)
+
+    calls: dict[str, int] = {}
+
+    async def _ov(*a, **k):
+        calls["overnight"] = calls.get("overnight", 0) + 1
+        return _mock_overnight()
+
+    async def _fg(*a, **k):
+        calls["fear_greed"] = calls.get("fear_greed", 0) + 1
+        return _mock_fear_greed()
+
+    async def _boom_kr(*a, **k):
+        raise AssertionError("KR collector should NOT be called when KR is fresh in DB")
+
+    monkeypatch.setattr(snap_mod, "fetch_overnight", _ov)
+    monkeypatch.setattr(snap_mod, "fetch_fear_greed", _fg)
+    monkeypatch.setattr(snap_mod, "fetch_kr_indices", _boom_kr)
+    monkeypatch.setattr(snap_mod, "fetch_kr_supply_demand", _boom_kr)
+    monkeypatch.setattr(snap_mod, "fetch_kr_sectors", _boom_kr)
+    monkeypatch.setattr(snap_mod, "fetch_kr_leading_stocks", _boom_kr)
+    monkeypatch.setattr(snap_mod, "fetch_kr_futures_supply_demand", _boom_kr)
+
+    snap, _ = await build_market_snapshot()
+    assert snap.source_map == {"kr": "db", "us": "fetch"}
+    assert calls.get("overnight") == 1
+    assert calls.get("fear_greed") == 1
+    # KR 데이터는 DB 어댑터
+    assert snap.kr_indices.get("kospi", {}).get("value") == 2521.40
+    assert snap.db_run_ids == {"market_briefing_now": "run-now-1"}
+
+
+async def test_db_both_missing_full_fetch() -> None:
+    """DB 부재 (autouse default) → 7 collector 모두 호출 + source_map both fetch."""
+    snap, _ = await build_market_snapshot()
+    assert snap.source_map == {"kr": "fetch", "us": "fetch"}
+    assert snap.db_run_ids == {}
+    assert snap.failures == []
+    assert snap.kr_indices.get("kospi", {}).get("value") == 2521.40
