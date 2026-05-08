@@ -21,6 +21,11 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
+### 0. 시장 스냅샷 DB-first hybrid (옵션 A, PC, 1.5~2h) — Top 1 직전 권장
+- **왜**: `collectors/snapshot.py` 7 collector 가 `pipelines/market_briefing_{now,pre}/stages/collect_*` 와 **동일 함수 호출** (100% 중복). 분석가 호출마다 cold fetch ~30s + 5-Layer "수집팀 → 분석팀" 단방향 위반. 분석가 응답 40s (cold) → ~5s (gemini) / ~15s (claude_code) 단축.
+- **범위**: `collectors/snapshot.py` `build_market_snapshot()` 가 `parts_store.get_latest_parts_with_age()` 우선 → 신선도 임계 (한국 6h / 미국 24h) 초과 또는 부재 시 collector fallback. `briefing_parts.data_json` → snapshot dict 어댑터. `market_briefing_pre` overnight part data 형식 (raw vs LLM 가공) 확인 필요.
+- **예상**: 1.5~2h PC. Top 1 (분화) 직전 또는 같이.
+
 ### 1. 4명 분석가 분화 + canon 분기 (옵션 B) 묶음 (PC, 3~4h)
 - **왜**: 단계 2 검증 끝났고, 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법·박종훈 모두 인용). 5-Layer 1:1 매핑 정합 위해 분화 + canon 분기 함께 처리해야 비대칭 회피. 자산전략가 1명만 좁히면 검증 답변 퀄리티만 깎임 → 묶음 처리가 정합. 매매코치 추가하면 자산전략가와 톤 비교로 분화 의미 즉시 입증.
 - **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. temp 0.7 + 인접 명제 추론 허용 패턴 디폴트.
@@ -92,6 +97,7 @@
 - SPEC 3종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001**
 
 ### 미완 또는 의도적 공백
+- **시장 스냅샷 DB-first hybrid (옵션 A)** — `collectors/snapshot.py` 7 collector 가 `briefing_now/pre` stages 와 100% 중복. 분석가 호출마다 cold fetch 30s + 5-Layer 단방향 위반. **다음 세션 Top 0** (분화 직전). `parts_store.get_latest_parts_with_age()` 우선 → stale 시 collector fallback. 효과: 응답 latency 40s → 5~15s
 - **4명 분석가 분화 + canon 분기 (옵션 B) 묶음** — 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법까지). **다음 세션 Top 1**. `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona, manifest}` 4 set + `compose.load_shared_canon()` reads 분기 + run_analyst 패스. 단독 옵션 A (persona 가드) 는 시기상조라 의도적 미적용
 - **claude_code cost 표시 misleading** — Pro/Max 구독 추가 비용 0인데 metadata 가 토큰 환산 $0.16 표시. webapp MetadataBar 라벨 보완 필요 (Top 2 와 묶음)
 - **Layer 3 종합 판단부 (단타·스윙·중장기 전략가 3종)** — CLAUDE.md L100-105 에 이미 설계 (M4 마일스톤). 단타전략가 (종목분석가+뉴스큐레이터) / 스윙전략가 (종목분석가+자산전략가+매매코치) / 중장기전략가 (자산전략가+종목분석가+원칙수호자). 분석가 5명 분화 후 자연 진입
