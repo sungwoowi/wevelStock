@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **Top 2 (cost 라벨 + SSR 가드) 완료 + 시장 스냅샷 DB-first 중복 발견** — `webapp/src/app/analyst-chat/page.tsx` 단일 파일 4 곳 수정 (claude_code provider 시 cost 라벨 `$0 (subscription)` + 누적 비용 제외 + analystMeta 3-state `undefined|null|object` 로 SSR 첫 렌더 빨간 깜빡임 제거). 검증 4건 통과. 검증 도중 사용자가 "외부 LLM 응답 자체가 느리다 (~40s)" 본질 제기 → `collectors/snapshot.py` 7 collector 가 `pipelines/market_briefing_{now,pre}/stages/collect_*` 와 동일 함수 호출 (100% 중복) 임을 식별. **옵션 A (DB-first hybrid) 결정** + 백로그 등재. 다음 세션 Top 1 = 옵션 A 구현 (분화 직전), Top 2 = 4명 분석가 분화 + canon 분기.
+**현재 위치**: **옵션 A (DB-first hybrid) 완료 + LLM token streaming (SSE) 도입** — 분석가 호출 cold fetch ~30s 가 0.3s 로 단축 (briefing_parts DB 우선 + 시간대 인식 임계 + 부분 fetch + render 헤더에 데이터 출처 표시) + LLM 응답 통째 대기 → 토큰 스트리밍으로 webapp 검증 UX 개선 (Gemini/Anthropic native streaming, claude_code 는 환경별 native vs batch_thread 자동 분기). 사용자 검증: Gemini streaming 정상 + claude_code SelectorEventLoop silent fallback 정상. 테스트 60 → 94 통과 (회귀 0). 다음 세션 Top 1 = 4명 분석가 분화 + canon 분기.
 
-**마지막 작업일**: 2026-05-08
-**마지막 세션 로그**: [2026-05-08_cost-label-ssr-guard-and-db-first-backlog.md](c_worked/2026-05-08_cost-label-ssr-guard-and-db-first-backlog.md)
-**Git**: 이번 세션 push 완료 (`cf7eeb9..1e65c69`). 최신: `1e65c69 docs(resume): 옵션 A 백로그` / `53e657b feat(webapp): claude_code cost 라벨 + SSR 가드`. 이전: `cf7eeb9 docs: wrap-up 2026-05-08 단계 2 시장 스냅샷` / `1debbe6 feat(inference): 단계 2 시장 스냅샷` / `75cf1a0` 자산전략가 톤 + provider 선택 wrap-up. 본 wrap-up 커밋 후 push 는 사용자 요청 시.
+**마지막 작업일**: 2026-05-09
+**마지막 세션 로그**: [2026-05-09_db-first-snapshot-and-llm-streaming.md](c_worked/2026-05-09_db-first-snapshot-and-llm-streaming.md)
+**Git**: 이번 세션 push 완료 (`1e65c69..224e5e5`, 6 커밋). 최신: `224e5e5 fix(llm): claude_code 환경 사전 체크` / `723ef5f fix(llm): SelectorEventLoop 우회` / `5a9f798 fix(llm): claude_code stream deadlock` / `bb63929 feat(llm): token streaming (SSE)` / `e318768 feat(snapshot): 캐시 TTL 단축 + render 헤더` / `bead271 feat(snapshot): DB-first hybrid`. 본 wrap-up 커밋 + push 예정.
 
 ---
 
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 시장 스냅샷 DB-first hybrid (옵션 A, PC, 1.5~2h) — 분화 직전 처리
-- **왜**: `collectors/snapshot.py` 7 collector 가 `pipelines/market_briefing_{now,pre}/stages/collect_*` 와 **동일 함수 호출** (100% 중복). 분석가 호출마다 cold fetch ~30s + 5-Layer "수집팀 → 분석팀" 단방향 위반. 분석가 응답 latency 40s (cold) → ~5s (gemini) / ~15s (claude_code).
-- **범위**: `collectors/snapshot.py:build_market_snapshot()` 가 `parts_store.get_latest_parts_with_age()` 우선 → 신선도 임계 (한국 6h / 미국 24h) 초과 또는 부재 시 collector fallback. `briefing_parts.data_json` → snapshot dict 어댑터. `market_briefing_pre` overnight part 형식 (raw vs LLM 가공) 확인 필요.
-- **예상**: 1.5~2h PC. Top 2 (분화) 직전 또는 같이.
-
-### 2. 4명 분석가 분화 + canon 분기 (옵션 B) 묶음 (PC, 3~4h)
-- **왜**: 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법·박종훈 모두 인용). 5-Layer 1:1 매핑 정합 위해 분화 + canon 분기 함께 처리. 자산전략가 1명만 좁히면 검증 답변 퀄리티만 깎임 → 묶음 처리가 정합. 매매코치 추가하면 자산전략가와 톤 비교로 분화 의미 즉시 입증.
+### 1. 4명 분석가 분화 + canon 분기 (옵션 B) 묶음 (PC, 3~4h)
+- **왜**: 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법·박종훈 모두 인용). 5-Layer 1:1 매핑 정합 위해 분화 + canon 분기 함께 처리. 매매코치 추가하면 자산전략가와 톤 비교로 분화 의미 즉시 입증.
 - **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. temp 0.7 + 인접 명제 추론 허용 패턴 디폴트.
 - **예상**: 3~4h PC.
 
-### 3. 종목분석부 자료 첫 ingest (PC, 1h)
+### 2. 종목분석부 자료 첫 ingest (PC, 1h)
 - **왜**: `rag_docs/logchart/` (untracked, ~288KB) 차트 교육 자료 가용. 종목분석가 분화 시 RAG 즉시 활용. 5 학습부 중 종목분석부가 마지막 미채움.
-- **범위**: `knowledge/reference/stock_analysis/` 로 이동 + `just knowledge-sync stock_analysis` (또는 `knowledge.py ingest`) + 검증 회수.
-- **예상**: 1h PC. Top 2 (분화) 진입 전 또는 같이 묶음.
+- **범위**: `knowledge/reference/stock_analysis/` 로 이동 + `just knowledge-sync stock_analysis` + 검증 회수.
+- **예상**: 1h PC. Top 1 (분화) 진입 전 또는 같이 묶음.
 
-(추가 백로그: streaming SSE 도입 = FE/BE 양쪽, ~3-4h. provider default = gemini 토글 5분.)
+### 3. streaming 토글 UI + AbortController (PC, 1.5h)
+- **왜**: webapp 채팅에 streaming on/off 토글 + 응답 도중 cancel. default ON 유지하되 batch 모드 회귀 옵션. 사용자가 응답 길어질 때 중단 가능.
+- **범위**: `webapp/src/app/analyst-chat/page.tsx` 에 streaming 토글 (3 provider 토글 옆) + AbortController 로 fetch cancel + SSE reader cancel + 빈 assistant 메시지 정리.
+- **예상**: 1.5h PC.
+
+(추가 백로그: streaming response cache 멱등성 / KIS 토큰 캐시 검증 / claude_code anthropic API key 옵션 / 공휴일 캘린더 pykrx)
 
 ---
 
@@ -89,16 +89,18 @@
 - **claude_code Windows·OAuth 안정화** (2026-05-08) — `core/llm/claude_code_backend.py` 가 long system prompt 시 stdin `[SYSTEM]/[USER]` 결합 (cmd.exe 8K argv 우회) + `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` env strip (Pro/Max keychain OAuth 강제)
 - **Provider 선택 옵션 (CLI/API/webapp)** (2026-05-08) — `--provider` 플래그 (`scripts/{ask,chat}_analyst.py`) + `ChatRequest.provider` API 필드 (`server/api/analyst_chat.py`) + webapp LLM 토글 3개 (`webapp/src/app/analyst-chat/page.tsx`) + `GET /api/config/llm` 동적 라벨 endpoint (`server/api/config.py`). 응답 metadata 에 `provider_requested`/`provider_used` 노출
 - **단계 2 시장 스냅샷 자동 주입** (2026-05-08) — `collectors/snapshot.py` 신규 (7 collector 병렬 + 5분 인메모리 캐시 + `asyncio.gather(return_exceptions=True)` partial-failure + cold call stderr 진행 표시 + `MarketSnapshot` dataclass + `render_snapshot_md` 안전 렌더). `compose.build_pipeline_prompt` 의 RAG 직전 [3] 블록 (`market_snapshot_md` kwarg, `cache_control` 없음 — 5분 갱신). `run_analyst` metadata 4키 (`snapshot_age_seconds`/`fetch_seconds`/`cache_hit`/`failures`). 모든 분석가 자동 공유 (옵션 A 풀세트). 5-Layer 분석가 모두 동일 raw 베이스
-- **claude_code cost 라벨 frontend 분기 + analyst-chat SSR 가드** (2026-05-08 오후) — `webapp/src/app/analyst-chat/page.tsx` 4 곳 수정. MetadataBar/누적 비용에서 `provider_used==="claude_code"` 시 `cost $0 (subscription)` 표기 (Pro/Max 구독 호출당 추가 비용 0 정합). `analystMeta` state 를 `null` → `undefined | null | object` 3-state 로 확장 (undefined 면 회색 "분석가 메타 로딩…" placeholder, null 만 빨간 "로드 실패") → SSR 첫 렌더 빨간 깜빡임 제거. 백엔드 `total_cost_usd` 메타 의미는 유지 (표시 책임만 frontend 분리)
-- **분석가 응답에 실 수치 결합 검증** (2026-05-08) — Claude Code 호출에서 "현재 1,456원이니 사실상 지금이 그 시점이다", "3년 달러 평균가가 1,370원이고 지금 1,456원이면 이미 평균 위다" 처럼 framework 명제 + I6 시그널 + 실 USDKRW 결합. cache hit (read 14,795 토큰), prompt 25,988 chars, latency 40.1s, $0.16
-- **pytest 68 passed** (기존 60 + 신규 `tests/test_market_snapshot.py` 8 테스트)
-- SPEC 3종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001**
+- **claude_code cost 라벨 frontend 분기 + analyst-chat SSR 가드** (2026-05-08 오후) — `webapp/src/app/analyst-chat/page.tsx` 4 곳 수정. MetadataBar/누적 비용에서 `provider_used==="claude_code"` 시 `cost $0 (subscription)` 표기. `analystMeta` state 를 `undefined | null | object` 3-state 로 확장 → SSR 첫 렌더 빨간 깜빡임 제거
+- **시장 스냅샷 DB-first hybrid (옵션 A)** (2026-05-09) — `collectors/snapshot.py` 가 `briefing_parts` DB 의 latest part 우선 + 시간대 인식 임계 (`kr/us_threshold_seconds(now_kst)` cron 발동 시각 기반, 정규장 중 ~3h / 장 마감 후 ~18h / 주말 ~66h) + 부분 fetch (stale 그룹만). `MarketSnapshot` 에 `source_map`/`db_run_ids`/`db_age_seconds` 필드 추가, 4 어댑터 (`_adapt_overnight/kr_indices/supply_sectors/leading_from_part`). `render_snapshot_md` 헤더에 "_데이터 출처: 미국=DB (X시간 전 적재)_" 라인. 인메모리 캐시 TTL 300s → 60s. 분석가 호출 cold fetch ~30s → 0.3s, 5-Layer 단방향 정합 회복
+- **LLM token streaming (SSE) — INFRA-LLM-STREAM-001** (2026-05-09) — `core/llm/client.py:call_llm_stream()` async iterator + 4 provider stream (anthropic `messages.stream()` / gemini `aio.models.generate_content_stream` / claude_code CLI `--output-format stream-json --include-partial-messages` / mock 5글자 청크). fallback chain (첫 청크 전 실패만). `core/llm/claude_code_backend.py` 에 `_can_spawn_subprocess()` 사전 체크 — SelectorEventLoop 면 sync subprocess + asyncio.to_thread 의 batch_thread 직행 (warning 0). stdin 송신 background task (Windows pipe deadlock 회피) + subprocess `limit=10MB` (skill md 한 라인 64KB 초과). `core/inference/run_analyst.py:run_analyst_stream()` + `first_token_ms` metadata. `server/api/analyst_chat.py` 에 `POST /api/analysts/{id}/chat/stream` (StreamingResponse). `webapp/src/app/analyst-chat/page.tsx` 가 fetch ReadableStream + SSE 프레임 파싱 + 빈 assistant 메시지 점진 누적 + MetadataBar `(first XXXms)` 라벨
+- **pytest 94 passed** (60 → 87 → 94, 신규 `test_market_snapshot.py` 19 + `test_llm_streaming.py` 7)
+- SPEC 4종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001** + **INFRA-LLM-STREAM-001**
 
 ### 미완 또는 의도적 공백
-- **시장 스냅샷 DB-first hybrid (옵션 A)** — `collectors/snapshot.py` 7 collector 가 `briefing_now/pre` stages 와 100% 중복. 분석가 호출마다 cold fetch 30s + 5-Layer 단방향 위반. **다음 세션 Top 1** (분화 직전). `parts_store.get_latest_parts_with_age()` 우선 → stale 시 collector fallback. 효과: 응답 latency 40s → 5~15s
-- **4명 분석가 분화 + canon 분기 (옵션 B) 묶음** — 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법까지). **다음 세션 Top 2**. `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona, manifest}` 4 set + `compose.load_shared_canon()` reads 분기 + run_analyst 패스. 단독 persona 가드는 시기상조라 의도적 미적용
-- **streaming (SSE) 미도입** — 동일 모델도 체감 latency 5~10배 차이 (ChatGPT/Claude.ai 가 안 느린 이유 = 직접 SDK + streaming). FE/BE 양쪽 SSE 손, ~3-4h 별도 SPEC. 분석가는 챗봇이 아니라 알림 Agent (user_want_spec) 라 자동 호출은 무관, webapp 채팅 검증/디버그 UX 만 영향
-- **provider default = gemini 토글** — 5분 작업, 옵션 A 와 묶지 않고 보류
+- **4명 분석가 분화 + canon 분기 (옵션 B) 묶음** — 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법까지). **다음 세션 Top 1**. `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona, manifest}` 4 set + `compose.load_shared_canon()` reads 분기 + run_analyst 패스
+- **streaming 토글 UI + AbortController** — webapp 의 streaming on/off 토글 + 응답 도중 cancel 버튼. default ON 유지하되 회귀 옵션 + 사용자가 응답 길어질 때 중단 가능. ~1.5h
+- **streaming response cache (멱등성)** — `call_llm` 의 cache_lookup 패턴 streaming 용 미적용. text_delta 들을 모아 metadata 와 함께 저장하는 패턴 신규. 후속 백로그
+- **claude_code 첫 토큰 ~12s 한계** — subprocess 부팅 + OAuth keychain handshake. CLI 자체 한계라 streaming 도입에도 단축 X. Anthropic SDK 직접 호출 (`provider="anthropic"`, ~2s) 가 답이지만 Pro/Max 무료 혜택 포기. 운영 합리적 타협으로 batch_thread fallback 채택
+- **provider default = gemini 토글** — 5분 작업, 사용자가 매번 토글로 충분이라 미반영
 - **Layer 3 종합 판단부 (단타·스윙·중장기 전략가 3종)** — CLAUDE.md L100-105 에 이미 설계 (M4 마일스톤). 단타전략가 (종목분석가+뉴스큐레이터) / 스윙전략가 (종목분석가+자산전략가+매매코치) / 중장기전략가 (자산전략가+종목분석가+원칙수호자). 분석가 5명 분화 후 자연 진입
 - **NXT 통합 시세 도입** — KIS API 가 명시 미지원 (`_AL`/`_NX` suffix 빈 응답, GitHub repo 0건). 키움은 suffix 패턴 지원하나 KIS 와 다름. KRX backend + 키움 OpenAPI 등 다중 source 결합 SPEC 필요 — 별도 백로그
 - **daily_briefing legacy 잔재** (`core/registry.py`, `core/config/schema.py`, `config/defaults.yaml` 의 daily_briefing 섹션) — webapp 측 `BriefingCard` 는 2026-05-07 제거됨. server/config 측은 의존성 그래프 큰 cleanup 세션 백로그
@@ -132,36 +134,34 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-05-08 오후 cost 라벨 + DB-first 발견)**
-- **분석가 collector 직호출 = 5-Layer 단방향 위반**: snapshot.py 7 collector 가 briefing_{now,pre} stages 와 100% 중복 함수 호출. 본질은 "수집팀 (briefing) 이 cron 으로 raw 적재 → 분석팀 (분석가) 이 DB 에서 읽기" (user_want_spec 의 "수집팀 = 오감 / 분석팀 = 뇌"). 옵션 A 가 본질 정합 + cold fetch 30s 제거 동시 해결
-- **cost 표시 책임 분리**: 백엔드 metadata 의 토큰 환산 가격은 유지 (다른 비교에 활용 여지), frontend 에서만 provider 별 라벨 가공. 백엔드 `total_cost_usd` 를 0 으로 강제하지 않음
-- **analystMeta 3-state 패턴**: `null` 단일 상태로는 "로딩 중" 과 "fetch 실패" 구분 불가. `undefined | null | object` 3-state 가 BriefingPartsCard 의 SWR `isLoading` 패턴 등가 (raw fetch 직접 구현). 다른 raw fetch 컴포넌트도 동일 패턴 적용 가능
-- **claude_code latency 본질**: subprocess + OAuth keychain 오버헤드 ~10s + streaming 미사용. ChatGPT/Claude.ai 가 빠른 이유 = 직접 SDK + streaming. wevelStock 분석가는 챗봇이 아니라 알림 Agent (user_want_spec) — 자동 호출 시 무관, webapp 채팅은 검증/디버그 UX
+**이번 세션에 굳힌 판단 (2026-05-09 DB-first + LLM streaming)**
+- **시간대 인식 임계 정의**: `kr/us_threshold_seconds(now_kst)` = `now - last_expected_cron_time + 60s grace`. 단순 18h/24h 고정이 아니라 cron 발동 시각 기반. 평일 09:30 직전 같은 엣지에서 stale 오판 방지 + 주말 토~월 09:30 까지 자동 OK. 공휴일 미반영 (1회 cold fetch 수용)
+- **인메모리 캐시 의미 변질**: DB-first 가 0.3s 라 5분 캐시는 부작용만 컸음 (cron 직후 옛 데이터 노출). default 60s 단축. 캐시는 동시 호출 race / 짧은 burst 만 보호
+- **render 헤더에 데이터 시점 명시**: 호출 시각 ≠ 데이터 시점. `_데이터 출처: 미국=DB (17.4시간 전 적재)_` 라인으로 분석가가 정확히 인지 — 7계명 #6 (데이터 없이 추측 X) 정합
+- **streaming 우선순위**: 분석가 자동 호출은 알림 Agent 라 streaming 무관. webapp 채팅 검증/디버그 UX 만 영향. 그래도 사용자가 분석가 응답 평가하는 회수 → 시스템 고도화 속도에 간접 영향 → 본 세션 도입 가치 있음
+- **claude_code 환경별 분기**: ProactorEventLoop = native streaming, SelectorEventLoop = silent batch_thread (sync subprocess + asyncio.to_thread). `_can_spawn_subprocess()` 사전 체크로 NotImplementedError 자체 회피 → warning 0. 사용자 원칙: "환경 한계로 안 되는 streaming 은 강제 시도 X — silent fallback"
+- **stdin pipe deadlock 회피**: Windows asyncio subprocess 의 stdin write 가 64KB pipe buffer 가득 차면 block. 동시에 stdout 읽지 않으면 deadlock → stdin 송신을 background task 로 분리. subprocess `limit=10MB` 도 필요 (CLI hook_response 가 single-line 64KB 초과)
 
-**직전 세션 판단 (2026-05-08 단계 2 시장 스냅샷)**
-- **canon 통합 vs 분화 모순**: `load_shared_canon()` 5 학습부 통합 (5-Layer 베이스 = "통합 두뇌") 와 `manifest.reads:` 1:1 매핑 (분석가별 영역) 사이 불일치. 4명 분화 + 옵션 B (canon 분기) 로 동시 해소
-- **시기 묶음 처리**: 자산전략가 1명 검증 단계에 옵션 B 단독 도입은 시기상조 — 4명 분화 (Top 2) 와 묶음. 분화 직전엔 임시 봉합 X
-- **Layer 3 = "투자 종합 판단부"**: CLAUDE.md L100-105 이미 설계 (M4). 단타·스윙·중장기 전략가 3종, 분석가 manifest `analysts:` 라우팅. "자산전략가" 명칭은 Layer 2 분석가 (자산 도메인 1명) — Layer 3 의 단타/스윙/중장기 전략가 3종과 다름
-- **시장 스냅샷 = 캐시 분리선 뒤**: canon/persona/memory 는 cache_control ephemeral / snapshot/RAG/rules 는 비캐시. 5분마다 스냅샷 갱신 → 캐시 효율 손해 없음
-- **partial failure = 7계명 #6 정합**: `asyncio.gather(return_exceptions=True)` + `[수집 실패 - 사유]` 표기. 분석가가 데이터 부재를 인지해야 추측 회피
+**직전 세션 판단 (2026-05-08 cost 라벨 + DB-first 발견)**
+- **분석가 collector 직호출 = 5-Layer 단방향 위반**: snapshot.py 가 briefing_{now,pre} stages 와 100% 중복. 본질은 "수집팀 cron 적재 → 분석팀 DB 읽기" (user_want_spec 의 "수집팀 = 오감 / 분석팀 = 뇌"). 본 세션 옵션 A 로 해결
+- **cost 표시 책임 분리**: 백엔드 metadata 의 토큰 환산 가격 유지, frontend 에서만 provider 별 라벨 가공
+- **analystMeta 3-state 패턴**: `undefined | null | object` 3-state 가 SWR `isLoading` 등가. raw fetch 컴포넌트의 표준 패턴
 
 **직전 세션 판단 (2026-05-08 자산전략가 톤 + provider 선택)**
-- **자동 fallback ≠ 명시 선택**: `provider` kwarg None = config + 자동 폴백 / 명시 = 그 backend 만 + 에러 propagate. 톤 비교용은 명시, 평소엔 자동
-- **gemini → claude_code → mock 폴백 체인**: Gemini 503 일시 장애 시 ANTHROPIC 키 없어도 Pro/Max 구독으로 응답 보존. raw 에 `fallback_used` 박힘
-- **claude_code OAuth 강제 경로**: subprocess env 에서 `ANTHROPIC_API_KEY`/`AUTH_TOKEN` strip → keychain OAuth. API key auth 는 `provider=anthropic`
-- **Windows cmd.exe 8K argv 한계 = stdin 우회**: 19K canon spawn 시 long system 은 `[SYSTEM]/[USER]` stdin payload. 짧으면 정식 argv
+- **자동 fallback ≠ 명시 선택**: `provider` kwarg None = config + 자동 폴백 / 명시 = 그 backend 만 + 에러 propagate
+- **gemini → claude_code → mock 폴백 체인**: Gemini 503 일시 장애 시 ANTHROPIC 키 없어도 Pro/Max 구독으로 응답 보존
+- **claude_code OAuth 강제 경로**: subprocess env 에서 `ANTHROPIC_API_KEY`/`AUTH_TOKEN` strip → keychain OAuth
+- **Windows cmd.exe 8K argv 한계 = stdin 우회**: 19K canon spawn 시 long system 은 `[SYSTEM]/[USER]` stdin payload
 
 **직전 세션 판단 (2026-05-07 브리핑 이력 UI + cron + KRX 라벨)**
-- **3차원 분리 (SPEC 정합)**: 추론부 조회 (`run_analyst`) / 알림 자동 푸시 (`notifications_log`) / 브리핑 이력 (`briefing_parts` 시계열). 봇 명령 응답은 `notify=False` 라 알림 X = 브리핑 이력
-- **briefing_parts = run_id 단위 시계열 누적** (일자 단위 upsert X). 같은 날 force 여러 번 = 다른 run_id
-- **render dispatcher 1개 함수 → 모든 채널 wrap**: `render_pipeline()` 가 텔레그램 봇·webapp recent endpoint 동시 사용
+- **3차원 분리 (SPEC 정합)**: 추론부 조회 / 알림 자동 푸시 / 브리핑 이력 (briefing_parts 시계열)
+- **briefing_parts = run_id 단위 시계열 누적** (일자 upsert X)
+- **render dispatcher 1개 함수 → 모든 채널 wrap**
 
 **직전 세션 판단 (2026-05-06 M3)**
-- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름 (CLI/REPL/FastAPI/webapp)
-- **인터페이스 = 핵심 함수 1개 wrap**: `run_analyst()` 가 manifest+persona+canon+RAG+memory+messages → 호출 → metadata 한 묶음
+- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름
 - **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용
-- **JSONL retention A (그대로) → B (매월 폴더 + 90일) → C (SQLite)**: 임계는 5K (분화 직전) / 50K
-- **응답 원론·반복 패턴 발견**: canon 19K 압도 + 시장 데이터 부재 + temp 0.4 → 추상 명제 인용 반복. 단기 톤·temp → 중기 시장 스냅샷 (이번 세션 단계 2 로 해소)
+- **JSONL retention A → B (매월 폴더 + 90일) → C (SQLite)**: 임계 5K (분화 직전) / 50K
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
