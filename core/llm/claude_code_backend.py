@@ -244,6 +244,23 @@ async def call_claude_code(
     }
 
 
+def _can_spawn_subprocess() -> bool:
+    """현재 event loop 가 asyncio subprocess 를 지원하는지 사전 체크.
+
+    Windows 의 SelectorEventLoop 는 `create_subprocess_exec` 호출 시
+    NotImplementedError. ProactorEventLoop 는 지원. 사전에 알 수 있으니
+    NotImplementedError 발생 자체를 회피하고 batch_thread 로 직행 → 시끄러운
+    warning 도 안 띄움.
+    """
+    if platform.system() != "Windows":
+        return True
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return True
+    return "Selector" not in type(loop).__name__
+
+
 async def call_claude_code_stream(
     *,
     system: list[dict] | str,
@@ -255,17 +272,17 @@ async def call_claude_code_stream(
     timeout_sec: int = 90,
     extra_args: list[str] | None = None,
 ):
-    """Claude Code CLI streaming — native 시도 후 NotImplementedError 시 batch fallback.
+    """Claude Code CLI streaming.
 
-    Windows + asyncio.SelectorEventLoop 환경 (uvicorn 일부 설정) 에서는
-    `create_subprocess_exec` 자체가 NotImplementedError. 이 경우 batch 모드
-    (call_claude_code) 로 fallback 후 결과를 단일 text_delta + metadata 로 emit.
-    체감 streaming 효과는 사라지지만 응답 자체는 정상 도착.
-
-    ProactorEventLoop 환경 (CLI 직접 호출, FastAPI 일부 설정) 에서는 native
-    streaming 작동.
+    환경별 동작:
+        - ProactorEventLoop (CLI, asyncio default on Win Python 3.8+): native
+          streaming. CLI 의 `--output-format stream-json --include-partial-messages`
+          로 토큰 흘림.
+        - SelectorEventLoop (uvicorn 의 일부 설정): subprocess 미지원이라 native
+          시도 X. sync subprocess + asyncio.to_thread 의 batch_thread 로 직행 —
+          응답 도착 시점에 단일 text_delta + metadata 로 emit (전체 한 번에 표시).
     """
-    try:
+    if _can_spawn_subprocess():
         async for ev in _claude_code_stream_native(
             system=system, messages=messages, model=model,
             max_tokens=max_tokens, temperature=temperature,
@@ -273,16 +290,8 @@ async def call_claude_code_stream(
         ):
             yield ev
         return
-    except NotImplementedError as e:
-        log.warning(
-            "claude_code_stream_not_supported_batch_fallback",
-            error=repr(e),
-            reason="asyncio.SelectorEventLoop on Windows can't spawn subprocess",
-        )
 
-    # Batch fallback — sync subprocess.run 을 thread 에서 실행 (main event loop
-    # 의 SelectorEventLoop 한계 우회). 한 번에 결과 받고 단일 text_delta + metadata.
-    # webapp 에서는 결과 도착 시점에 화면이 한 번에 채워짐.
+    # SelectorEventLoop 환경 — sync subprocess + thread 로 직행.
     result = await _call_claude_code_sync_via_thread(
         system=system, messages=messages, model=model,
         max_tokens=max_tokens, temperature=temperature,
