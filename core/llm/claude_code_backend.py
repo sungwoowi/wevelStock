@@ -24,6 +24,7 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 from typing import Any
 
 from core.logging import get_logger
@@ -248,25 +249,192 @@ async def call_claude_code_stream(
     system: list[dict] | str,
     messages: list[dict],
     model: str,
+    max_tokens: int,
+    temperature: float,
+    binary: str = "claude",
+    timeout_sec: int = 90,
+    extra_args: list[str] | None = None,
+):
+    """Claude Code CLI streaming — native 시도 후 NotImplementedError 시 batch fallback.
+
+    Windows + asyncio.SelectorEventLoop 환경 (uvicorn 일부 설정) 에서는
+    `create_subprocess_exec` 자체가 NotImplementedError. 이 경우 batch 모드
+    (call_claude_code) 로 fallback 후 결과를 단일 text_delta + metadata 로 emit.
+    체감 streaming 효과는 사라지지만 응답 자체는 정상 도착.
+
+    ProactorEventLoop 환경 (CLI 직접 호출, FastAPI 일부 설정) 에서는 native
+    streaming 작동.
+    """
+    try:
+        async for ev in _claude_code_stream_native(
+            system=system, messages=messages, model=model,
+            max_tokens=max_tokens, temperature=temperature,
+            binary=binary, timeout_sec=timeout_sec, extra_args=extra_args,
+        ):
+            yield ev
+        return
+    except NotImplementedError as e:
+        log.warning(
+            "claude_code_stream_not_supported_batch_fallback",
+            error=repr(e),
+            reason="asyncio.SelectorEventLoop on Windows can't spawn subprocess",
+        )
+
+    # Batch fallback — sync subprocess.run 을 thread 에서 실행 (main event loop
+    # 의 SelectorEventLoop 한계 우회). 한 번에 결과 받고 단일 text_delta + metadata.
+    # webapp 에서는 결과 도착 시점에 화면이 한 번에 채워짐.
+    result = await _call_claude_code_sync_via_thread(
+        system=system, messages=messages, model=model,
+        max_tokens=max_tokens, temperature=temperature,
+        binary=binary, timeout_sec=timeout_sec, extra_args=extra_args,
+    )
+    yield {"type": "text_delta", "text": result["content"]}
+    raw = dict(result.get("raw") or {})
+    raw["stream_fallback"] = "batch_thread"  # 진단 마커
+    yield {
+        "type": "metadata",
+        "content": result["content"],
+        "tokens_in": result["tokens_in"],
+        "tokens_out": result["tokens_out"],
+        "model": result["model"],
+        "cost_usd": result["cost_usd"],
+        "raw": raw,
+    }
+
+
+async def _call_claude_code_sync_via_thread(
+    *,
+    system: list[dict] | str,
+    messages: list[dict],
+    model: str,
+    max_tokens: int,  # noqa: ARG001
+    temperature: float,  # noqa: ARG001
+    binary: str = "claude",
+    timeout_sec: int = 90,
+    extra_args: list[str] | None = None,
+) -> dict:
+    """Sync subprocess.run 을 asyncio.to_thread 로 실행 — main event loop 무관.
+
+    SelectorEventLoop 에서 asyncio.create_subprocess_exec 가 NotImplementedError
+    인 상황을 우회. 같은 인자/스킴으로 call_claude_code 와 동일 dict 반환.
+    """
+    launcher = _resolve_launcher(binary)
+    system_text = _blocks_to_text(system)
+    user_text = _messages_to_text(messages)
+
+    is_windows = platform.system() == "Windows"
+    cmdline_safe_limit = 7000
+    fold_system_into_stdin = is_windows and len(system_text) > cmdline_safe_limit
+
+    args: list[str] = [
+        *launcher,
+        "--print",
+        "--output-format", "json",
+        "--input-format", "text",
+        "--model", _normalize_model_alias(model),
+        "--no-session-persistence",
+    ]
+    if system_text.strip() and not fold_system_into_stdin:
+        args.extend(["--system-prompt", system_text])
+    if extra_args:
+        args.extend(extra_args)
+
+    stdin_payload = (
+        f"[SYSTEM]\n{system_text}\n\n[USER]\n{user_text}"
+        if fold_system_into_stdin and system_text.strip()
+        else user_text
+    )
+
+    sub_env = os.environ.copy()
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        sub_env.pop(key, None)
+
+    def _run_sync() -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(
+                args,
+                input=stdin_payload.encode("utf-8"),
+                capture_output=True,
+                timeout=timeout_sec,
+                env=sub_env,
+            )
+        except FileNotFoundError as exc:
+            raise ClaudeCodeNotInstalled(str(exc)) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"claude_code (sync) timed out after {timeout_sec}s"
+            ) from exc
+
+    r = await asyncio.to_thread(_run_sync)
+    stdout = r.stdout.decode("utf-8", errors="replace")
+    stderr = r.stderr.decode("utf-8", errors="replace")
+
+    if r.returncode != 0:
+        raise RuntimeError(
+            f"claude_code (sync) exited {r.returncode}: "
+            f"{stderr[:400] or stdout[:400]}"
+        )
+
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"claude_code (sync) stdout is not valid JSON: {stdout[:400]}"
+        ) from e
+
+    if payload.get("is_error"):
+        msg = payload.get("result") or "unknown error"
+        if "not logged in" in msg.lower() or "login" in msg.lower():
+            raise ClaudeCodeAuthError(
+                f"Claude Code is not authenticated. Run `claude setup-token`. Detail: {msg}"
+            )
+        raise RuntimeError(f"claude_code (sync) returned error: {msg}")
+
+    content = str(payload.get("result", ""))
+    usage = payload.get("usage") or {}
+    total_cost = payload.get("total_cost_usd") or 0.0
+    tokens_in = int(usage.get("input_tokens") or 0) + int(
+        usage.get("cache_creation_input_tokens") or 0
+    )
+    tokens_out = int(usage.get("output_tokens") or 0)
+    resolved_model = _resolve_reported_model(payload, model)
+
+    return {
+        "content": content,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "model": resolved_model,
+        "cost_usd": float(total_cost),
+        "raw": {
+            "provider": "claude_code",
+            "session_id": payload.get("session_id"),
+            "stop_reason": payload.get("stop_reason"),
+            "duration_ms": payload.get("duration_ms"),
+            "usage": usage,
+            "model_usage": payload.get("modelUsage", {}),
+        },
+    }
+
+
+async def _claude_code_stream_native(
+    *,
+    system: list[dict] | str,
+    messages: list[dict],
+    model: str,
     max_tokens: int,  # noqa: ARG001
     temperature: float,  # noqa: ARG001
     binary: str = "claude",
     timeout_sec: int = 90,
     extra_args: list[str] | None = None,
 ):
-    """Claude Code CLI streaming — `--output-format stream-json --include-partial-messages`.
+    """Native streaming — `--output-format stream-json --include-partial-messages`.
 
     Yields stream events:
         {"type": "text_delta", "text": str}
         {"type": "metadata", "tokens_in"/"tokens_out"/"cost_usd"/"raw"/...}
 
-    CLI stdout 은 JSONL — 각 line 이 SDK-style 이벤트. content_block_delta.delta.text
-    만 추출 (partial token). 종료 직전 result 메시지의 usage 로 metadata 조립.
-
-    Note:
-        - `--include-partial-messages` 가 토큰 흐름을 만드는 핵심 옵션
-        - 이 함수가 batch 모드에 폴백되는 경우는 없음 — 호출자 (call_llm_stream) 가
-          첫 청크 전 실패 시 다음 provider (mock 등) 로 chain
+    Windows asyncio.SelectorEventLoop 환경에선 NotImplementedError → 호출자
+    (call_claude_code_stream) 가 batch fallback.
     """
     launcher = _resolve_launcher(binary)
 
