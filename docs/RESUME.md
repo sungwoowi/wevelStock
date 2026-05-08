@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 4명 분석가 분화 + canon 분기 (옵션 B) 묶음 (PC, 3~4h)
-- **왜**: 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법·박종훈 모두 인용). 5-Layer 1:1 매핑 정합 위해 분화 + canon 분기 함께 처리. 매매코치 추가하면 자산전략가와 톤 비교로 분화 의미 즉시 입증.
-- **범위**: `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona.md, manifest.yaml}` 4 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. temp 0.7 + 인접 명제 추론 허용 패턴 디폴트.
-- **예상**: 3~4h PC.
+### 1. 종목분석부 자료 첫 ingest (PC, 1h) — 학습부 우선
+- **왜**: 학습부 (Layer 1) 자료 없이 분석가 분화 = 빈 머리 (RAG 회수 0). 5 학습부 중 원칙부·자산복리부만 채워짐. 종목분석부는 `rag_docs/logchart/` (untracked, ~288KB) 차트 교육 자료 가용 → 즉시 ingest 가능. 실전부·뉴스부는 자료 출처 미결.
+- **범위**: `rag_docs/logchart/` → `knowledge/reference/stock_analysis/` 이동 + `just knowledge-sync stock_analysis` + `just knowledge-ingest stock-analysis` + `just knowledge-browse stock-analysis "<query>"` 검증.
+- **예상**: 1h PC. Top 2 (분화) 의 선행 조건.
 
-### 2. 종목분석부 자료 첫 ingest (PC, 1h)
-- **왜**: `rag_docs/logchart/` (untracked, ~288KB) 차트 교육 자료 가용. 종목분석가 분화 시 RAG 즉시 활용. 5 학습부 중 종목분석부가 마지막 미채움.
-- **범위**: `knowledge/reference/stock_analysis/` 로 이동 + `just knowledge-sync stock_analysis` + 검증 회수.
-- **예상**: 1h PC. Top 1 (분화) 진입 전 또는 같이 묶음.
+### 2. 자료 있는 분석가만 분화 + canon 분기 (PC, 2~3h)
+- **왜**: 5명 일괄 분화 X — 학습부 자료 있는 분석가만 (원칙수호자 ← 원칙부 ✅ + 종목분석가 ← 종목분석부 ✅ Top 1 후). 매매코치 (실전부) / 뉴스큐레이터 (뉴스부) 는 자료 미결이라 보류. 자산전략가 영역 침범 (7계명·심법·박종훈 인용) 도 canon 분기로 해소.
+- **범위**: `agents/analysts/{principle_guardian, stock_analyst}/{persona.md, manifest.yaml}` 2 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. 매매코치 패턴은 자산전략가 톤 검증 그대로 복사 — 단 학습부 채워진 후.
+- **예상**: 2~3h PC.
 
-### 3. streaming 토글 UI + AbortController (PC, 1.5h)
-- **왜**: webapp 채팅에 streaming on/off 토글 + 응답 도중 cancel. default ON 유지하되 batch 모드 회귀 옵션. 사용자가 응답 길어질 때 중단 가능.
-- **범위**: `webapp/src/app/analyst-chat/page.tsx` 에 streaming 토글 (3 provider 토글 옆) + AbortController 로 fetch cancel + SSE reader cancel + 빈 assistant 메시지 정리.
-- **예상**: 1.5h PC.
+### 3. 실전부·뉴스부 자료 출처 결정 (사용자 의사결정)
+- **왜**: 매매코치·뉴스큐레이터 분화의 선행 조건. 실전부 = 어떤 매매 교과서/강의? 뉴스부 = RSS 어떤 채널? Tavily? Bloomberg API? 사용자 명시 OK 후 진행.
+- **범위**: 자료 출처 후보 정리 → 사용자 선택 → ingest 흐름 (knowledge-sync 또는 신규 collector).
+- **예상**: 의사결정 0.5h + 자료 ingest 1~2h.
 
-(추가 백로그: streaming response cache 멱등성 / KIS 토큰 캐시 검증 / claude_code anthropic API key 옵션 / 공휴일 캘린더 pykrx)
+(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / claude_code anthropic API key 옵션 / 공휴일 캘린더 pykrx)
 
 ---
 
