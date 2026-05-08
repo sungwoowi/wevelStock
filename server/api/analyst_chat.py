@@ -10,15 +10,18 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.inference import (
     AnalystNotFoundError,
     run_analyst,
 )
+from core.inference.run_analyst import run_analyst_stream
 from core.logging import get_logger
 
 log = get_logger(__name__)
@@ -77,6 +80,57 @@ async def post_analyst_chat(analyst_id: str, payload: ChatRequest) -> ChatRespon
         raise HTTPException(status_code=500, detail=f"inference failed: {e}") from e
 
     return ChatResponse(text=resp.text, metadata=resp.metadata)
+
+
+@router.post("/{analyst_id}/chat/stream")
+async def post_analyst_chat_stream(
+    analyst_id: str, payload: ChatRequest,
+) -> StreamingResponse:
+    """분석가 streaming endpoint — SSE (text/event-stream).
+
+    이벤트 (llm-stream-event-v1):
+        data: {"type":"text_delta","text":"..."}\n\n   # 토큰 청크
+        data: {"type":"metadata", ...}\n\n              # 종료 직전 1회
+        data: {"type":"error","message":"..."}\n\n      # provider 실패
+        data: {"type":"done"}\n\n                       # 정상 종료
+
+    클라이언트는 `response.body.getReader()` 또는 EventSource (POST 미지원)
+    대신 fetch + ReadableStream 으로 line-by-line 파싱.
+    """
+    messages_dicts = [m.model_dump() for m in payload.messages]
+
+    async def _event_stream():
+        try:
+            async for event in run_analyst_stream(
+                analyst_id,
+                messages_dicts,
+                model=payload.model,
+                include_memory=payload.include_memory,
+                provider=payload.provider,
+            ):
+                line = "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+                yield line.encode("utf-8")
+        except AnalystNotFoundError as e:
+            err = {"type": "error", "message": str(e),
+                   "provider": "n/a", "fatal": True, "status": 404}
+            yield ("data: " + json.dumps(err, ensure_ascii=False) + "\n\n").encode("utf-8")
+            yield ('data: {"type":"done"}\n\n').encode("utf-8")
+        except Exception as e:  # noqa: BLE001
+            log.error("analyst_chat_stream_failed",
+                      analyst=analyst_id, error=str(e))
+            err = {"type": "error", "message": f"inference failed: {e}",
+                   "provider": "n/a", "fatal": True, "status": 500}
+            yield ("data: " + json.dumps(err, ensure_ascii=False) + "\n\n").encode("utf-8")
+            yield ('data: {"type":"done"}\n\n').encode("utf-8")
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # nginx/proxy buffering 방지
+        },
+    )
 
 
 @router.get("/{analyst_id}")

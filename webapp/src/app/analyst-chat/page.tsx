@@ -21,6 +21,7 @@ type ChatMetadata = {
   model?: string;
   cost_usd?: number;
   latency_s?: number;
+  first_token_ms?: number | null;
   is_mock?: boolean;
   upstream_error?: string | null;
   provider_requested?: ProviderName | null;
@@ -79,7 +80,11 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
       {providerUsed === "claude_code"
         ? "$0 (subscription)"
         : `$${meta.cost_usd?.toFixed(4)}`}{" "}
-      · {meta.latency_s?.toFixed(1)}s · {meta.model}
+      · {meta.latency_s?.toFixed(1)}s
+      {meta.first_token_ms != null && (
+        <span className="text-emerald-400"> (first {meta.first_token_ms}ms)</span>
+      )}{" "}
+      · {meta.model}
       {meta.is_mock && (
         <span className="ml-2 px-1.5 py-0.5 bg-amber-900/40 text-amber-400 rounded">
           ⚠ MOCK fallback
@@ -160,7 +165,8 @@ export default function AnalystChatPage() {
     if (!trimmed || loading) return;
     setError(null);
     const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
-    setMessages(next);
+    // 빈 assistant 메시지를 미리 추가 — text_delta 가 누적되며 채워짐
+    setMessages([...next, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
 
@@ -172,7 +178,7 @@ export default function AnalystChatPage() {
         body.provider = provider;
       }
       const res = await fetch(
-        `${API_BASE}/api/analysts/${analystId}/chat`,
+        `${API_BASE}/api/analysts/${analystId}/chat/stream`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -183,16 +189,74 @@ export default function AnalystChatPage() {
         const detail = await res.text().catch(() => "");
         throw new Error(`${res.status} ${res.statusText}: ${detail}`);
       }
-      const data: { text: string; metadata: ChatMetadata } = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.text },
-      ]);
-      setPerTurnMeta((prev) => [...prev, data.metadata]);
+      if (!res.body) {
+        throw new Error("response body is null (streaming unsupported)");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalMeta: ChatMetadata | null = null;
+      let streamError: string | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE 프레임 분리: 두 개의 LF 가 이벤트 종결자
+        let sep: number;
+        while ((sep = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          // "data: {...}" 라인만 추출
+          const line = frame.split("\n").find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(payload);
+          } catch {
+            continue;
+          }
+          if (event.type === "text_delta") {
+            const delta = String(event.text || "");
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (!last || last.role !== "assistant") return prev;
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...last,
+                content: last.content + delta,
+              };
+              return updated;
+            });
+          } else if (event.type === "metadata") {
+            // metadata 이벤트는 분석가의 풍부한 키들 포함 (run_analyst_stream 가공).
+            // SSE 부속 키 (type) 만 제거.
+            const { type: _t, ...rest } = event;
+            void _t;
+            finalMeta = rest as unknown as ChatMetadata;
+          } else if (event.type === "error") {
+            streamError =
+              (event.message as string) || "stream error";
+          }
+          // "done" 은 무시 — while 루프가 자연 종료
+        }
+      }
+
+      if (streamError) {
+        throw new Error(streamError);
+      }
+      if (finalMeta) {
+        setPerTurnMeta((prev) => [...prev, finalMeta!]);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      setMessages((prev) => prev.slice(0, -1));
+      // 사용자 + 빈 assistant 모두 롤백
+      setMessages((prev) => prev.slice(0, -2));
     } finally {
       setLoading(false);
     }

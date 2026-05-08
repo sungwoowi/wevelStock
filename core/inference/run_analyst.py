@@ -25,7 +25,7 @@ import yaml
 
 from collectors.snapshot import build_market_snapshot, render_snapshot_md
 from core.knowledge.compose import build_pipeline_prompt
-from core.llm.client import call_llm
+from core.llm.client import call_llm, call_llm_stream
 from core.logging import get_logger
 
 log = get_logger(__name__)
@@ -243,3 +243,149 @@ async def run_analyst(
     )
 
     return AnalystResponse(text=resp.get("content", ""), metadata=metadata)
+
+
+async def run_analyst_stream(
+    analyst_id: str,
+    messages: list[dict],
+    *,
+    model: str | None = None,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    include_memory: bool = True,
+    provider: str | None = None,
+):
+    """run_analyst 의 streaming 변종. text_delta 이벤트 흘림 + 종료 시 metadata.
+
+    Yields:
+        {"type": "text_delta", "text": str}      # 토큰 청크
+        {"type": "metadata", **metadata_dict}     # 종료 직전 1회 (run_analyst 의
+                                                    metadata 키 + cumulative content)
+        {"type": "error", ...}                    # provider 실패
+        {"type": "done"}                          # 정상 종료
+
+    System prompt 합성 (manifest+persona+canon+RAG+memory+market_snapshot) 은
+    run_analyst 와 동일. call_llm 대신 call_llm_stream 사용.
+    """
+    if not messages:
+        raise ValueError("messages 가 비어있습니다 (최소 1턴 user 입력 필요)")
+
+    spec = load_analyst_spec(analyst_id)
+    rag_dept = spec.reads[0] if spec.reads else None
+    query_for_rag = _last_user_text(messages)
+
+    snap_started = time.monotonic()
+    snapshot, snapshot_cache_hit = await build_market_snapshot()
+    snapshot_fetch_seconds = round(time.monotonic() - snap_started, 2)
+    snapshot_age_seconds = max(0, int(time.time() - snapshot.fetched_at))
+    market_snapshot_md = render_snapshot_md(snapshot)
+
+    bundle = await build_pipeline_prompt(
+        context_id=spec.id,
+        persona_path=spec.persona_path,
+        include_shared_canon=True,
+        include_memory=include_memory,
+        token_budget_memory=4000,
+        query_for_rag=query_for_rag,
+        rag_dept=rag_dept,
+        market_snapshot_md=market_snapshot_md,
+        response_rules=spec.response_rules,
+    )
+
+    sys_chars = _system_char_count(bundle.blocks)
+    rag_chunks = _rag_chunks_in_blocks(bundle.blocks)
+
+    started = time.monotonic()
+    first_token_at: float | None = None
+    last_metadata: dict | None = None
+    last_error: dict | None = None
+
+    async for event in call_llm_stream(
+        system=bundle.blocks,
+        messages=messages,
+        model=model or spec.model,
+        max_tokens=max_tokens or spec.max_tokens,
+        temperature=temperature if temperature is not None else spec.temperature,
+        provider=provider,
+    ):
+        etype = event.get("type")
+        if etype == "text_delta":
+            if first_token_at is None:
+                first_token_at = time.monotonic()
+            yield event
+        elif etype == "metadata":
+            last_metadata = event
+            # metadata 는 우리가 보강한 형식으로 끝에 다시 emit
+            continue
+        elif etype == "error":
+            last_error = event
+            yield event
+        elif etype == "done":
+            # done 은 마지막에 우리가 emit
+            break
+        else:
+            # 알 수 없는 이벤트 — 그대로 흘림
+            yield event
+
+    latency_s = time.monotonic() - started
+    first_token_ms = (
+        int((first_token_at - started) * 1000) if first_token_at else None
+    )
+
+    # last_metadata 가 없으면 (예: error 만 발생) 빈 dict 로 보호
+    md_src = last_metadata or {}
+    raw = md_src.get("raw") or {}
+    cache_read, cache_creation = _extract_cache_tokens(raw)
+    upstream_error = raw.get("error") or (last_error.get("message") if last_error else None)
+    is_mock = "-mock" in str(md_src.get("model", "")) or bool(raw.get("mock"))
+    provider_used = (
+        raw.get("fallback_used")
+        or raw.get("provider")
+        or (provider if provider else "auto")
+    )
+
+    metadata = {
+        "analyst_id": spec.id,
+        "display_name": spec.display_name,
+        "learning_dept": spec.learning_dept,
+        "rag_dept": rag_dept,
+        "rag_chunks_returned": rag_chunks,
+        "system_prompt_chars": sys_chars,
+        "system_blocks": len(bundle.blocks),
+        "cache_breakpoint_count": bundle.cache_breakpoint_count,
+        "tokens_in": md_src.get("tokens_in", 0),
+        "tokens_out": md_src.get("tokens_out", 0),
+        "cache_read_tokens": cache_read,
+        "cache_creation_tokens": cache_creation,
+        "model": md_src.get("model", ""),
+        "cost_usd": md_src.get("cost_usd", 0.0),
+        "latency_s": round(latency_s, 2),
+        "first_token_ms": first_token_ms,
+        "is_mock": is_mock,
+        "upstream_error": upstream_error,
+        "provider_requested": provider,
+        "provider_used": provider_used,
+        "snapshot_age_seconds": snapshot_age_seconds,
+        "snapshot_fetch_seconds": snapshot_fetch_seconds,
+        "snapshot_cache_hit": snapshot_cache_hit,
+        "snapshot_failures": snapshot.failures,
+        "snapshot_source_map": dict(snapshot.source_map),
+        "snapshot_db_run_ids": dict(snapshot.db_run_ids),
+        "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
+    }
+
+    log.info(
+        "analyst_stream_done",
+        analyst=spec.id,
+        chars=sys_chars,
+        rag_chunks=rag_chunks,
+        tokens_in=metadata["tokens_in"],
+        tokens_out=metadata["tokens_out"],
+        cache_read=cache_read,
+        cost_usd=metadata["cost_usd"],
+        latency_s=metadata["latency_s"],
+        first_token_ms=first_token_ms,
+    )
+
+    yield {"type": "metadata", **metadata}
+    yield {"type": "done"}

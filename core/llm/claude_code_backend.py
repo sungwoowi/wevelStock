@@ -243,6 +243,217 @@ async def call_claude_code(
     }
 
 
+async def call_claude_code_stream(
+    *,
+    system: list[dict] | str,
+    messages: list[dict],
+    model: str,
+    max_tokens: int,  # noqa: ARG001
+    temperature: float,  # noqa: ARG001
+    binary: str = "claude",
+    timeout_sec: int = 90,
+    extra_args: list[str] | None = None,
+):
+    """Claude Code CLI streaming — `--output-format stream-json --include-partial-messages`.
+
+    Yields stream events:
+        {"type": "text_delta", "text": str}
+        {"type": "metadata", "tokens_in"/"tokens_out"/"cost_usd"/"raw"/...}
+
+    CLI stdout 은 JSONL — 각 line 이 SDK-style 이벤트. content_block_delta.delta.text
+    만 추출 (partial token). 종료 직전 result 메시지의 usage 로 metadata 조립.
+
+    Note:
+        - `--include-partial-messages` 가 토큰 흐름을 만드는 핵심 옵션
+        - 이 함수가 batch 모드에 폴백되는 경우는 없음 — 호출자 (call_llm_stream) 가
+          첫 청크 전 실패 시 다음 provider (mock 등) 로 chain
+    """
+    launcher = _resolve_launcher(binary)
+
+    system_text = _blocks_to_text(system)
+    user_text = _messages_to_text(messages)
+
+    is_windows = platform.system() == "Windows"
+    cmdline_safe_limit = 7000
+    fold_system_into_stdin = is_windows and len(system_text) > cmdline_safe_limit
+
+    args: list[str] = [
+        *launcher,
+        "--print",
+        "--output-format", "stream-json",
+        "--include-partial-messages",
+        "--input-format", "text",
+        "--model", _normalize_model_alias(model),
+        "--no-session-persistence",
+        "--verbose",  # stream-json 모드는 verbose 필수 (CLI 요구사항)
+    ]
+    if system_text.strip() and not fold_system_into_stdin:
+        args.extend(["--system-prompt", system_text])
+    if extra_args:
+        args.extend(extra_args)
+
+    if fold_system_into_stdin and system_text.strip():
+        stdin_payload = f"[SYSTEM]\n{system_text}\n\n[USER]\n{user_text}"
+    else:
+        stdin_payload = user_text
+
+    log.debug(
+        "claude_code_stream_spawn",
+        argv_head=args[:8],
+        system_chars=len(system_text),
+        user_chars=len(user_text),
+    )
+
+    sub_env = os.environ.copy()
+    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        sub_env.pop(key, None)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=sub_env,
+        )
+    except FileNotFoundError as e:
+        raise ClaudeCodeNotInstalled(str(e)) from e
+
+    # stdin 송신 후 close (stream-json 모드는 stdin 한 번 닫아야 시작)
+    assert proc.stdin is not None
+    proc.stdin.write(stdin_payload.encode("utf-8"))
+    await proc.stdin.drain()
+    proc.stdin.close()
+
+    full_text_parts: list[str] = []
+    final_usage: dict[str, Any] = {}
+    final_cost: float = 0.0
+    final_session_id: str | None = None
+    final_stop_reason: str | None = None
+    final_model_usage: dict = {}
+    saw_error: str | None = None
+
+    assert proc.stdout is not None
+    try:
+        while True:
+            try:
+                line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=timeout_sec,
+                )
+            except asyncio.TimeoutError as e:
+                try:
+                    proc.kill()
+                except Exception:  # noqa: BLE001
+                    pass
+                raise RuntimeError(
+                    f"claude_code_stream timed out after {timeout_sec}s"
+                ) from e
+
+            if not line:
+                break  # EOF
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if not line_str:
+                continue
+            try:
+                event = json.loads(line_str)
+            except json.JSONDecodeError:
+                log.warning("claude_code_stream_bad_jsonl",
+                            line_head=line_str[:120])
+                continue
+
+            etype = event.get("type")
+
+            # Streaming text 추출 — content_block_delta 가 partial 토큰의 표준 형식
+            if etype == "stream_event" or etype == "content_block_delta":
+                # nested 가능: stream_event.event.delta.text 또는 content_block_delta.delta.text
+                inner = event.get("event") or event
+                if inner.get("type") == "content_block_delta":
+                    delta = inner.get("delta") or {}
+                    text = delta.get("text") or ""
+                    if text:
+                        full_text_parts.append(text)
+                        yield {"type": "text_delta", "text": text}
+                continue
+
+            # CLI 형식 변형: assistant 이벤트가 부분 메시지 포함
+            if etype == "assistant":
+                message = event.get("message") or {}
+                for block in message.get("content") or []:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text") or ""
+                        # partial 모드에선 새 토큰만 와야 정상.
+                        # 누적 메시지 형식이면 마지막 부분만 emit.
+                        if text and text not in "".join(full_text_parts):
+                            new_text = text
+                            joined = "".join(full_text_parts)
+                            if joined and text.startswith(joined):
+                                new_text = text[len(joined):]
+                            if new_text:
+                                full_text_parts.append(new_text)
+                                yield {"type": "text_delta", "text": new_text}
+                continue
+
+            # 종료 메시지
+            if etype == "result":
+                if event.get("is_error"):
+                    saw_error = str(event.get("result") or "claude_code error")
+                    break
+                final_usage = event.get("usage") or {}
+                final_cost = float(event.get("total_cost_usd") or 0.0)
+                final_session_id = event.get("session_id")
+                final_stop_reason = event.get("stop_reason")
+                final_model_usage = event.get("modelUsage") or {}
+                # result 의 result 필드가 전체 텍스트 — full_text_parts 가 비어있는
+                # 케이스 (partial events 불가) 에 fallback
+                if not full_text_parts and event.get("result"):
+                    text = str(event["result"])
+                    full_text_parts.append(text)
+                    yield {"type": "text_delta", "text": text}
+                continue
+
+            # system 이벤트, message_stop, content_block_start 등은 무시
+    finally:
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5)
+        except (asyncio.TimeoutError, ProcessLookupError):
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+
+    if saw_error:
+        raise RuntimeError(f"claude_code stream returned error: {saw_error}")
+    if proc.returncode is not None and proc.returncode != 0:
+        stderr = (await proc.stderr.read()).decode("utf-8", errors="replace") if proc.stderr else ""
+        raise RuntimeError(
+            f"claude_code_stream exited {proc.returncode}: {stderr[:400]}"
+        )
+
+    tokens_in = int(final_usage.get("input_tokens") or 0) + int(
+        final_usage.get("cache_creation_input_tokens") or 0
+    )
+    tokens_out = int(final_usage.get("output_tokens") or 0)
+    resolved_model = _resolve_reported_model(
+        {"modelUsage": final_model_usage}, model,
+    )
+
+    yield {
+        "type": "metadata",
+        "content": "".join(full_text_parts),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "model": resolved_model,
+        "cost_usd": final_cost,
+        "raw": {
+            "provider": "claude_code",
+            "session_id": final_session_id,
+            "stop_reason": final_stop_reason,
+            "usage": final_usage,
+            "model_usage": final_model_usage,
+        },
+    }
+
+
 def _normalize_model_alias(model: str) -> str:
     """Map known full model names to CLI-friendly aliases when helpful."""
     aliases = {

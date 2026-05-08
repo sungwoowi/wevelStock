@@ -21,8 +21,9 @@ Returned payload is a dict with:
 """
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import Any
+from typing import Any, AsyncIterator
 
 from core.config import env, get_config
 from core.logging import get_logger
@@ -447,6 +448,264 @@ def _is_mock_response(resp: dict) -> bool:
     model = resp.get("model", "")
     raw = resp.get("raw") or {}
     return "-mock" in model or bool(raw.get("mock")) or raw.get("error") is not None
+
+
+# ---------------------------------------------------------------------------
+# Streaming — token-by-token 응답 (INFRA-LLM-STREAM-001)
+# ---------------------------------------------------------------------------
+#
+# 이벤트 계약 (llm-stream-event-v1):
+#   {"type": "text_delta", "text": str}                    # 토큰 청크
+#   {"type": "metadata",   "tokens_in"/"tokens_out"/...}   # 종료 직전 1회
+#   {"type": "error",      "message": str, "fatal": bool}  # provider 실패
+#   {"type": "done"}                                       # 정상 종료 마커
+#
+# call_llm 과 인터페이스 비슷하지만 cache layer 미적용 (streaming + 멱등성
+# 캐시는 후속 백로그). fallback 은 첫 청크 전 실패만 가능 — 첫 청크 후 실패는
+# partial + error event 로 전파.
+
+
+async def _stream_mock(system, messages, model: str) -> AsyncIterator[dict]:
+    """결정론적 mock stream — 짧은 청크로 분할 yield."""
+    full = _mock_response(system, messages, model)
+    text = full["content"]
+    # 5 글자씩 청크 (테스트 가시성 위해 작게)
+    chunk_size = 5
+    for i in range(0, len(text), chunk_size):
+        yield {"type": "text_delta", "text": text[i : i + chunk_size]}
+        await asyncio.sleep(0)  # 다른 코루틴 양보
+    yield {
+        "type": "metadata",
+        "content": full["content"],
+        "tokens_in": full["tokens_in"],
+        "tokens_out": full["tokens_out"],
+        "model": full["model"],
+        "cost_usd": full["cost_usd"],
+        "raw": full["raw"],
+    }
+    yield {"type": "done"}
+
+
+async def _stream_anthropic(
+    system, messages, model: str, max_tokens: int, temperature: float,
+) -> AsyncIterator[dict]:
+    """Anthropic SDK messages.stream() — text_delta 이벤트 흘림 + 종료 후 usage."""
+    client = _build_anthropic_client()
+    if client is None:
+        raise RuntimeError("ANTHROPIC_API_KEY missing")
+
+    full_text_parts: list[str] = []
+    final_message = None
+    async with client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=system,
+        messages=messages,
+    ) as stream:
+        async for event in stream:
+            # event types: message_start / content_block_start / content_block_delta /
+            #              content_block_stop / message_delta / message_stop
+            etype = getattr(event, "type", None)
+            if etype == "content_block_delta":
+                delta = getattr(event, "delta", None)
+                text = getattr(delta, "text", None) if delta else None
+                if text:
+                    full_text_parts.append(text)
+                    yield {"type": "text_delta", "text": text}
+        final_message = await stream.get_final_message()
+
+    usage = getattr(final_message, "usage", None)
+    tokens_in = getattr(usage, "input_tokens", 0) if usage else 0
+    tokens_out = getattr(usage, "output_tokens", 0) if usage else 0
+    yield {
+        "type": "metadata",
+        "content": "".join(full_text_parts),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "model": model,
+        "cost_usd": _estimate_cost(model, tokens_in, tokens_out),
+        "raw": {
+            "id": getattr(final_message, "id", None),
+            "stop_reason": getattr(final_message, "stop_reason", None),
+            "usage": usage.model_dump() if usage and hasattr(usage, "model_dump") else {},
+        },
+    }
+
+
+async def _stream_gemini(
+    system, messages, model: str, max_tokens: int, temperature: float,
+) -> AsyncIterator[dict]:
+    """Gemini async stream via google-genai. usage 마지막 chunk 의 usage_metadata."""
+    from google import genai
+    from google.genai import types
+
+    api_key = env("GOOGLE_AI_API_KEY")
+    if not api_key:
+        raise RuntimeError("GOOGLE_AI_API_KEY missing")
+
+    client = genai.Client(api_key=api_key)
+    system_text = _anthropic_blocks_to_gemini_system(system)
+    contents = _anthropic_messages_to_gemini_contents(messages)
+
+    config = types.GenerateContentConfig(
+        system_instruction=system_text if system_text else None,
+        max_output_tokens=max_tokens,
+        temperature=temperature,
+    )
+
+    full_text_parts: list[str] = []
+    last_usage = None
+    async for chunk in await client.aio.models.generate_content_stream(
+        model=model, contents=contents, config=config,
+    ):
+        text = getattr(chunk, "text", None) or ""
+        if text:
+            full_text_parts.append(text)
+            yield {"type": "text_delta", "text": text}
+        usage = getattr(chunk, "usage_metadata", None)
+        if usage is not None:
+            last_usage = usage
+
+    tokens_in = getattr(last_usage, "prompt_token_count", 0) if last_usage else 0
+    tokens_out = getattr(last_usage, "candidates_token_count", 0) if last_usage else 0
+    rates = _GEMINI_COSTS.get(model, {"in": 0.075, "out": 0.30})
+    cost = (tokens_in * rates["in"] + tokens_out * rates["out"]) / 1_000_000
+    yield {
+        "type": "metadata",
+        "content": "".join(full_text_parts),
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+        "model": model,
+        "cost_usd": cost,
+        "raw": {"provider": "gemini"},
+    }
+
+
+async def call_llm_stream(
+    *,
+    system: list[dict] | str,
+    messages: list[dict],
+    model: str | None = None,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    provider: str | None = None,
+) -> AsyncIterator[dict]:
+    """LLM 호출 + 토큰 스트림. provider 분기 + 첫 청크 전 fallback chain.
+
+    Yields:
+        {"type": "text_delta"|"metadata"|"error"|"done", ...}
+
+    Note:
+        - cache layer 미적용 (streaming + 멱등성은 후속 백로그)
+        - fallback: 첫 청크 받기 전 실패 = 다음 provider, 첫 청크 후 실패 = error event
+        - provider 명시 시 fallback X (해당 backend 만 시도, 에러 propagate)
+    """
+    cfg = get_config().llm
+    model = model or cfg.anthropic.model or cfg.primary
+    max_tokens = max_tokens or cfg.anthropic.max_tokens
+    temperature = temperature if temperature is not None else cfg.anthropic.temperature
+
+    if provider is not None:
+        resolved_provider = provider
+        allow_fallback = False
+    else:
+        resolved_provider = _resolve_provider(cfg)
+        allow_fallback = True
+
+    # provider chain — auto 모드 시 gemini → claude_code → mock
+    if allow_fallback and resolved_provider in ("gemini", "anthropic"):
+        chain = [resolved_provider, "claude_code"]
+    else:
+        chain = [resolved_provider]
+
+    last_error: Exception | None = None
+    for prov in chain:
+        first_chunk_received = False
+        try:
+            iterator = _provider_stream(
+                prov, cfg, system, messages, model, max_tokens, temperature,
+            )
+            async for event in iterator:
+                if event.get("type") == "text_delta":
+                    first_chunk_received = True
+                yield event
+            return  # 정상 종료 후 done
+        except Exception as e:  # noqa: BLE001
+            log.error("llm_stream_failed", provider=prov, error=str(e),
+                      first_chunk=first_chunk_received)
+            if first_chunk_received or not allow_fallback:
+                # 부분 stream 후 실패 — error event 만 emit, fallback X
+                yield {"type": "error", "message": str(e),
+                       "provider": prov, "fatal": True}
+                yield {"type": "done"}
+                return
+            last_error = e
+            # 첫 청크 전 실패 → 다음 provider 시도
+            continue
+
+    # 모든 provider 실패 → mock 또는 error
+    if cfg.mock_if_no_key:
+        async for event in _stream_mock(system, messages, model):
+            if event.get("type") == "metadata":
+                event["raw"] = dict(event.get("raw") or {})
+                event["raw"]["error"] = str(last_error) if last_error else "all_providers_failed"
+                event["raw"]["fallback_used"] = "mock"
+            yield event
+        return
+
+    yield {"type": "error",
+           "message": str(last_error) if last_error else "all providers failed",
+           "provider": "all", "fatal": True}
+    yield {"type": "done"}
+
+
+async def _provider_stream(
+    provider: str, cfg, system, messages,
+    model: str, max_tokens: int, temperature: float,
+) -> AsyncIterator[dict]:
+    """단일 provider stream. text_delta * N → metadata → done."""
+    if provider == "mock":
+        async for ev in _stream_mock(system, messages, model):
+            yield ev
+        return
+
+    if provider == "anthropic":
+        async for ev in _stream_anthropic(
+            system, messages, model, max_tokens, temperature,
+        ):
+            yield ev
+        yield {"type": "done"}
+        return
+
+    if provider == "gemini":
+        gemini_model = model
+        if "claude" in model.lower() or not model.startswith("gemini"):
+            gemini_model = getattr(
+                getattr(cfg, "gemini", None), "model", None,
+            ) or "gemini-2.5-flash"
+        async for ev in _stream_gemini(
+            system, messages, gemini_model, max_tokens, temperature,
+        ):
+            yield ev
+        yield {"type": "done"}
+        return
+
+    if provider == "claude_code":
+        from core.llm.claude_code_backend import call_claude_code_stream
+
+        async for ev in call_claude_code_stream(
+            system=system, messages=messages, model=model,
+            max_tokens=max_tokens, temperature=temperature,
+            binary=cfg.claude_code.binary,
+            timeout_sec=cfg.claude_code.timeout_sec,
+            extra_args=list(cfg.claude_code.extra_args),
+        ):
+            yield ev
+        yield {"type": "done"}
+        return
+
+    raise RuntimeError(f"unknown provider: {provider}")
 
 
 def parse_json_response(content: str) -> dict[str, Any]:
