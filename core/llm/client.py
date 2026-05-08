@@ -633,6 +633,7 @@ async def call_llm_stream(
             return  # 정상 종료 후 done
         except Exception as e:  # noqa: BLE001
             log.error("llm_stream_failed", provider=prov, error=str(e),
+                      error_repr=repr(e), error_type=type(e).__name__,
                       first_chunk=first_chunk_received)
             if first_chunk_received or not allow_fallback:
                 # 부분 stream 후 실패 — error event 만 emit, fallback X

@@ -309,21 +309,39 @@ async def call_claude_code_stream(
         sub_env.pop(key, None)
 
     try:
+        # limit=10MB — CLI 의 hook_response 가 skill md 통째 single-line 으로
+        # 출력 (default 64KB 면 LimitOverrunError, 빈 메시지로 죽음).
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=sub_env,
+            limit=10 * 1024 * 1024,
         )
     except FileNotFoundError as e:
         raise ClaudeCodeNotInstalled(str(e)) from e
 
-    # stdin 송신 후 close (stream-json 모드는 stdin 한 번 닫아야 시작)
+    # stdin 송신은 background task — Windows pipe buffer (64KB) 한계로 system
+    # prompt 가 크면 (19K canon+) write 가 block 됨. CLI 는 stdin 이 닫혀야
+    # 본격 처리 시작인데, 우리가 동시에 stdout 을 읽지 않으면 deadlock 발생.
+    # 그래서 write/drain/close 를 백그라운드로 돌리고 stdout readline 도
+    # 동시 진행.
     assert proc.stdin is not None
-    proc.stdin.write(stdin_payload.encode("utf-8"))
-    await proc.stdin.drain()
-    proc.stdin.close()
+
+    async def _send_stdin() -> None:
+        try:
+            proc.stdin.write(stdin_payload.encode("utf-8"))
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError) as e:
+            log.warning("claude_code_stdin_send_failed", error=repr(e))
+        finally:
+            try:
+                proc.stdin.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    stdin_task = asyncio.create_task(_send_stdin())
 
     full_text_parts: list[str] = []
     final_usage: dict[str, Any] = {}
@@ -413,6 +431,13 @@ async def call_claude_code_stream(
 
             # system 이벤트, message_stop, content_block_start 등은 무시
     finally:
+        # stdin background task 정리
+        if not stdin_task.done():
+            stdin_task.cancel()
+            try:
+                await stdin_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         try:
             await asyncio.wait_for(proc.wait(), timeout=5)
         except (asyncio.TimeoutError, ProcessLookupError):
