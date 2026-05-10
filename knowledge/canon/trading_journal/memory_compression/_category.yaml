@@ -1,0 +1,6 @@
+category_id: memory_compression
+title: 메모리 압축 doctrine
+description: detailed → summary → intuition 3-tier 인지 압축 (prism-insight 차용)
+target_analysts: []
+when_to_inject: always
+related_categories: []

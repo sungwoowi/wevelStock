@@ -1,0 +1,6 @@
+category_id: macro_indicators
+title: 매크로 지표 해석
+description: FOMC·금리·CPI·고용·GDP 등 단·중기 매크로 지표 시장 영향 추론
+target_analysts: []
+when_to_inject: always
+related_categories: []

@@ -1,0 +1,6 @@
+category_id: regime_signals
+title: 시장 국면 식별
+description: 강세/약세/횡보/하락 국면 전환 신호 (3개 지표 교차)
+target_analysts: []
+when_to_inject: always
+related_categories: []

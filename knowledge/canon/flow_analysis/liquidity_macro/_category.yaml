@@ -1,0 +1,6 @@
+category_id: liquidity_macro
+title: 거시 유동성 (얼마나 비를 내릴지)
+description: 글로벌 유동성·M2·중앙은행 자산·달러 인덱스·외국인 자금 인플로우
+target_analysts: []
+when_to_inject: always
+related_categories: []

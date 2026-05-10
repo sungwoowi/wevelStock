@@ -1,0 +1,6 @@
+category_id: cross_market
+title: 자산 간 상관 분석
+description: 외환·채권·주식·상품 cross-market 신호
+target_analysts: []
+when_to_inject: always
+related_categories: []

@@ -1,0 +1,6 @@
+category_id: market_regime_rules
+title: 시장 국면별 기준
+description: 강세장/약세장/횡보 국면 식별 + 국면별 매매 기준
+target_analysts: []
+when_to_inject: always
+related_categories: []

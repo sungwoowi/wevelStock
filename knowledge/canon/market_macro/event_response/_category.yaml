@@ -1,0 +1,6 @@
+category_id: event_response
+title: 매크로 이벤트 즉시 대응
+description: FOMC·지정학 충격·정책 변화 24시간 reaction doctrine
+target_analysts: []
+when_to_inject: always
+related_categories: []

@@ -1,0 +1,6 @@
+category_id: sector_flow
+title: 섹터 수급 (어느 바구니부터 채울지)
+description: 섹터별 수급 강도·세력·rotation 시점·ETF 자금 유입
+target_analysts: []
+when_to_inject: always
+related_categories: []

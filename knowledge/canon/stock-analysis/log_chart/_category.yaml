@@ -1,0 +1,6 @@
+category_id: log_chart
+title: 로그 차트
+description: 로그축 변환 후 추세선·목표치 계산
+target_analysts: []
+when_to_inject: always
+related_categories: []

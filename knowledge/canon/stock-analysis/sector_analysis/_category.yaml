@@ -1,0 +1,6 @@
+category_id: sector_analysis
+title: 섹터·산업 분석
+description: 종목 속한 산업의 사이클·트렌드 (시드 — ETF + 섹터 대장주 자료 채울 예정)
+target_analysts: []
+when_to_inject: always
+related_categories: []

@@ -75,3 +75,6 @@ logs/
 
 # === 생성된 문서 (자동 생성물) ===
 docs/traceability.md
+
+# knowledge/reference: 사용자 자료 (큰 PDF 포함, GitHub 100MB 제한). repo 외부 보관.
+knowledge/reference/

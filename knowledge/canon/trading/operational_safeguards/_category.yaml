@@ -1,0 +1,6 @@
+category_id: operational_safeguards
+title: 운영 안전장치
+description: 시스템 운영·실수 방지 doctrine
+target_analysts: []
+when_to_inject: always
+related_categories: []

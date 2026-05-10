@@ -1,0 +1,6 @@
+category_id: pnl_tracking
+title: 가상 PnL 트래킹
+description: 포지션 PnL·MDD·Sharpe·승률 정량 평가 방법론
+target_analysts: []
+when_to_inject: always
+related_categories: []

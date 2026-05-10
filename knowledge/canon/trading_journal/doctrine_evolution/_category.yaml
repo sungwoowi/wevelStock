@@ -1,0 +1,6 @@
+category_id: doctrine_evolution
+title: doctrine 자동 정제
+description: 누적 결과 → trader doctrine 의 자동 정제 규칙 (Buy score 자동 조정)
+target_analysts: []
+when_to_inject: always
+related_categories: []

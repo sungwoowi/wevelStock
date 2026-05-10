@@ -1,0 +1,6 @@
+category_id: asset_classes
+title: 자산 종류별 정수
+description: 자산 종류별 (주식·채권·금·부동산) 정수. 시드 (채권편 1)
+target_analysts: []
+when_to_inject: always
+related_categories: []

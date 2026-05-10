@@ -1,0 +1,6 @@
+category_id: post_mortem
+title: 매매 사후분석 frame
+description: 매매 성공/실패의 정성 분석 doctrine
+target_analysts: []
+when_to_inject: always
+related_categories: []
