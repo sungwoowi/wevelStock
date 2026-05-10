@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **옵션 A (DB-first hybrid) 완료 + LLM token streaming (SSE) 도입** — 분석가 호출 cold fetch ~30s 가 0.3s 로 단축 (briefing_parts DB 우선 + 시간대 인식 임계 + 부분 fetch + render 헤더에 데이터 출처 표시) + LLM 응답 통째 대기 → 토큰 스트리밍으로 webapp 검증 UX 개선 (Gemini/Anthropic native streaming, claude_code 는 환경별 native vs batch_thread 자동 분기). 사용자 검증: Gemini streaming 정상 + claude_code SelectorEventLoop silent fallback 정상. 테스트 60 → 94 통과 (회귀 0). 다음 세션 Top 1 = 4명 분석가 분화 + canon 분기.
+**현재 위치**: **KNOWLEDGE-SYNC-001 SPEC + 5-Layer 분석가 9명 분화 + agent 아키텍처 영구화 + Phase 0 마이그레이션 완료** — reference 자료 변경 시 RAG 인덱싱 + canon 승격 PROPOSAL + release note 자동화 SPEC 작성 (status: draft, scope = 자료 정수만, 페르소나는 M3 SPEC). 5-Layer 모델 진화: 분석가 5 → 9 (market_macro / stock_selection / trading_journal / flow_analysis 신설, mechanics → trading 명칭). agent 통신 패턴 영구화 (`docs/AGENT-ARCHITECTURE.md` = hierarchical orchestration + DB read 절충). Phase 0 폴더 마이그레이션: 9 지식부 × 36 카테고리 폴더 + `_category.yaml` 36 + 자료 git mv 50+ + 초안 삭제 3. prism-insight 비교 분석으로 Trading Journal Agent 직접 차용. 2 commit (`908770d` Phase A + `a8f9c2c` Phase 0). 다음 세션 Top 1 = 추가 자료 (technical_analysis 미처리) 마이그레이션 + Phase 1~2 구현 시작.
 
-**마지막 작업일**: 2026-05-09
-**마지막 세션 로그**: [2026-05-09_db-first-snapshot-and-llm-streaming.md](c_worked/2026-05-09_db-first-snapshot-and-llm-streaming.md)
-**Git**: 이번 세션 push 완료 (`1e65c69..224e5e5`, 6 커밋). 최신: `224e5e5 fix(llm): claude_code 환경 사전 체크` / `723ef5f fix(llm): SelectorEventLoop 우회` / `5a9f798 fix(llm): claude_code stream deadlock` / `bb63929 feat(llm): token streaming (SSE)` / `e318768 feat(snapshot): 캐시 TTL 단축 + render 헤더` / `bead271 feat(snapshot): DB-first hybrid`. 본 wrap-up 커밋 + push 예정.
+**마지막 작업일**: 2026-05-10
+**마지막 세션 로그**: [2026-05-10_knowledge-sync-001-spec-and-phase-0.md](c_worked/2026-05-10_knowledge-sync-001-spec-and-phase-0.md)
+**Git**: 이번 세션 3 commit + push 완료 (Phase A + Phase 0 + wrap-up). **`knowledge/reference/` 는 .gitignore 처리** — 사용자 자료 (PDF 다수, 최대 244MB, GitHub 100MB 제한 위반) 는 repo 외부 보관 (Google Drive 등 CDN, 사용자 의견 2026-05-10). canon 정수만 push, reference 원본은 사용자 로컬에서 RAG 인덱싱.
 
 ---
 
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 종목분석부 자료 첫 ingest (PC, 1h) — 학습부 우선
-- **왜**: 학습부 (Layer 1) 자료 없이 분석가 분화 = 빈 머리 (RAG 회수 0). 5 학습부 중 원칙부·자산복리부만 채워짐. 종목분석부는 `rag_docs/logchart/` (untracked, ~288KB) 차트 교육 자료 가용 → 즉시 ingest 가능. 실전부·뉴스부는 자료 출처 미결.
-- **범위**: `rag_docs/logchart/` → `knowledge/reference/stock_analysis/` 이동 + `just knowledge-sync stock_analysis` + `just knowledge-ingest stock-analysis` + `just knowledge-browse stock-analysis "<query>"` 검증.
-- **예상**: 1h PC. Top 2 (분화) 의 선행 조건.
+### 1. 추가 자료 로컬 마이그레이션 (PC, 30min)
+- **왜**: 사용자가 push 한 자료 옛 위치 (`1.프렉탈파동_basic/` 20+ PDF + `4.로그차트_advanced/` PNG/xlsx/txt + `주식 기술적 분석 총람.txt`) 가 working tree 에 있음. 카테고리 폴더로 정렬 필요. **knowledge/reference/ 자체는 .gitignore** — RAG 인덱싱 시 사용자 로컬에서만.
+- **범위**: 1.프렉탈파동_basic → fractal_wave/ 추가 / 4.로그차트_advanced PNG·xlsx·txt → log_chart/ 추가 / 주식 기술적 분석 총람.txt → technical_basics/. **commit 안 됨 — 사용자 로컬에서 폴더 정리만**.
+- **예상**: 30min.
 
-### 2. 자료 있는 분석가만 분화 + canon 분기 (PC, 2~3h)
-- **왜**: 5명 일괄 분화 X — 학습부 자료 있는 분석가만 (원칙수호자 ← 원칙부 ✅ + 종목분석가 ← 종목분석부 ✅ Top 1 후). 매매코치 (실전부) / 뉴스큐레이터 (뉴스부) 는 자료 미결이라 보류. 자산전략가 영역 침범 (7계명·심법·박종훈 인용) 도 canon 분기로 해소.
-- **범위**: `agents/analysts/{principle_guardian, stock_analyst}/{persona.md, manifest.yaml}` 2 set + `core/knowledge/compose.py:load_shared_canon()` 가 manifest `reads:` 받아 해당 학습부 canon 만 합치도록 분기 + `run_analyst.py` 가 spec.reads 패스. 매매코치 패턴은 자산전략가 톤 검증 그대로 복사 — 단 학습부 채워진 후.
-- **예상**: 2~3h PC.
+### 2. Phase 1~2 구현 시작 (PC, 2~4 세션)
+- **왜**: 사용자가 reference 자료 push → 자동 인덱싱 + RAG 추론 검증이 가능해지는 시점 = 프로토타입 1차 동작점.
+- **범위**: `core/knowledge/adapters/{markdown,text,pdf,xlsx,png}.py` 5종 + `ingest.py` 카테고리 metadata + 델타 모드 + `retrieve.py` 카테고리 필터 + `compose.py` `canon_categories` 기반 선택 주입 + `core/db/schema.py` `knowledge_index_runs` 테이블 + `core/knowledge/sync.py` (delta → 어댑터 → 인덱싱 → run log) + watchdog (`core/knowledge/watcher.py`) + `scripts/knowledge_sync.py` + `justfile` 명령 4개.
+- **예상**: 2~4 세션.
 
-### 3. 실전부·뉴스부 자료 출처 결정 (사용자 의사결정)
-- **왜**: 매매코치·뉴스큐레이터 분화의 선행 조건. 실전부 = 어떤 매매 교과서/강의? 뉴스부 = RSS 어떤 채널? Tavily? Bloomberg API? 사용자 명시 OK 후 진행.
-- **범위**: 자료 출처 후보 정리 → 사용자 선택 → ingest 흐름 (knowledge-sync 또는 신규 collector).
-- **예상**: 의사결정 0.5h + 자료 ingest 1~2h.
+### 3. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션)
+- **왜**: 9 분석가 페르소나 작성으로 production 호출 가능 — 프로토타입 가동. KNOWLEDGE-SYNC-001 Phase 1~2 완료 후 본격 진입.
+- **범위**: M3 SPEC 신설 + 9 페르소나 (8-섹션 portable 양식: Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + identity seed PROPOSAL 흐름 (자료 0 5명 시드: 시장상태분석가 / 종목선정가 / 매매저널리스트 / 수급분석가 / 뉴스큐레이터) + `compose.py` 가 `canon_categories` 읽도록 확장 + portable 검증 (다른 LLM 같은 페르소나로 호출 → 일관성).
+- **예상**: 3~5 세션.
 
-(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / claude_code anthropic API key 옵션 / 공휴일 캘린더 pykrx)
+(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 (firecrawl·perplexity) 차용 / **knowledge/reference/ Google Drive (CDN) 운영 워크플로** — 큰 binary 외부 보관 + 운영 시 fetch, 사용자 의견 2026-05-10, 후속 SPEC)
 
 ---
 
@@ -93,10 +93,15 @@
 - **시장 스냅샷 DB-first hybrid (옵션 A)** (2026-05-09) — `collectors/snapshot.py` 가 `briefing_parts` DB 의 latest part 우선 + 시간대 인식 임계 (`kr/us_threshold_seconds(now_kst)` cron 발동 시각 기반, 정규장 중 ~3h / 장 마감 후 ~18h / 주말 ~66h) + 부분 fetch (stale 그룹만). `MarketSnapshot` 에 `source_map`/`db_run_ids`/`db_age_seconds` 필드 추가, 4 어댑터 (`_adapt_overnight/kr_indices/supply_sectors/leading_from_part`). `render_snapshot_md` 헤더에 "_데이터 출처: 미국=DB (X시간 전 적재)_" 라인. 인메모리 캐시 TTL 300s → 60s. 분석가 호출 cold fetch ~30s → 0.3s, 5-Layer 단방향 정합 회복
 - **LLM token streaming (SSE) — INFRA-LLM-STREAM-001** (2026-05-09) — `core/llm/client.py:call_llm_stream()` async iterator + 4 provider stream (anthropic `messages.stream()` / gemini `aio.models.generate_content_stream` / claude_code CLI `--output-format stream-json --include-partial-messages` / mock 5글자 청크). fallback chain (첫 청크 전 실패만). `core/llm/claude_code_backend.py` 에 `_can_spawn_subprocess()` 사전 체크 — SelectorEventLoop 면 sync subprocess + asyncio.to_thread 의 batch_thread 직행 (warning 0). stdin 송신 background task (Windows pipe deadlock 회피) + subprocess `limit=10MB` (skill md 한 라인 64KB 초과). `core/inference/run_analyst.py:run_analyst_stream()` + `first_token_ms` metadata. `server/api/analyst_chat.py` 에 `POST /api/analysts/{id}/chat/stream` (StreamingResponse). `webapp/src/app/analyst-chat/page.tsx` 가 fetch ReadableStream + SSE 프레임 파싱 + 빈 assistant 메시지 점진 누적 + MetadataBar `(first XXXms)` 라벨
 - **pytest 94 passed** (60 → 87 → 94, 신규 `test_market_snapshot.py` 19 + `test_llm_streaming.py` 7)
-- SPEC 4종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001** + **INFRA-LLM-STREAM-001**
+- SPEC 5종: **BRIEFING-ON-DEMAND-001** + **BRIEFING-TIMEBASED-002** + **INFRA-RAG-001** + **INFRA-LLM-STREAM-001** + **KNOWLEDGE-SYNC-001** (2026-05-10 신설, draft)
+- **`docs/AGENT-ARCHITECTURE.md`** (2026-05-10) — hierarchical orchestration + DB read 절충 영구 본질 문서. 두 패턴 비교 10 측면 + 도메인 본질
+- **5-Layer 모델 9명 확장** (2026-05-10) — 지식부 9 (market_macro / stock_selection / trading_journal / flow_analysis 신설, mechanics→trading) + 분석가 9 (1:1 매핑). `CLAUDE.md` 5-Layer 표 + 본문 갱신
+- **9 지식부 × 36 카테고리 폴더 + `_category.yaml` 36** (2026-05-10 Phase 0) — `knowledge/canon/<dept>/<category>/` 3-tier 구조 완비. 자료 있는 4 dept (principles 3 / trading 6 / stock-analysis 5 / wealth_compounding 6) + 자료 0 시드 4 dept (market_macro 4 / stock_selection 4 / trading_journal 4 / flow_analysis 4). 자료 git mv 50+ + 초안 삭제 3
 
 ### 미완 또는 의도적 공백
-- **4명 분석가 분화 + canon 분기 (옵션 B) 묶음** — 자산전략가 통합 canon 답변이 영역 침범 (7계명·심법까지). **다음 세션 Top 1**. `agents/analysts/{principle_guardian, trade_coach, stock_analyst, news_curator}/{persona, manifest}` 4 set + `compose.load_shared_canon()` reads 분기 + run_analyst 패스
+- **9 분석가 페르소나 작성 (M3 SPEC)** — 자료 있는 4 (원칙수호자/트레이더/종목분석가/자산전략가) + 자료 0 시드 5 (시장상태분석가/종목선정가/매매저널리스트/수급분석가/뉴스큐레이터). 8-섹션 portable 양식. KNOWLEDGE-SYNC-001 Phase 1~2 완료 후 본격 진입. **프로토타입 가동의 핵심**
+- **KNOWLEDGE-SYNC-001 Phase 1~5 구현** — Phase 1 어댑터+인덱싱 / Phase 2 sync+DB / Phase 3 PROPOSAL+release note / Phase 4 트리거+스킬 / Phase 5 풀 사이클 검증. **다음 세션 Top 2**
+- **`technical_analysis/` 미처리 자료 마이그레이션** — 1.프렉탈파동_basic 20+ PDF + 4.로그차트_advanced PNG/xlsx/txt + 총람.txt. **다음 세션 Top 1** (~30min)
 - **streaming 토글 UI + AbortController** — webapp 의 streaming on/off 토글 + 응답 도중 cancel 버튼. default ON 유지하되 회귀 옵션 + 사용자가 응답 길어질 때 중단 가능. ~1.5h
 - **streaming response cache (멱등성)** — `call_llm` 의 cache_lookup 패턴 streaming 용 미적용. text_delta 들을 모아 metadata 와 함께 저장하는 패턴 신규. 후속 백로그
 - **claude_code 첫 토큰 ~12s 한계** — subprocess 부팅 + OAuth keychain handshake. CLI 자체 한계라 streaming 도입에도 단축 X. Anthropic SDK 직접 호출 (`provider="anthropic"`, ~2s) 가 답이지만 Pro/Max 무료 혜택 포기. 운영 합리적 타협으로 batch_thread fallback 채택
@@ -134,7 +139,16 @@
 - **`force` = "cache/snapshot 우회 + 새 실행"**: default False, `market_briefing_now` 09:00 fallback 도 force=true 면 우회
 - **데이터 무결성 우선**: KIS API 의 응답 정렬·필드 의미는 항상 의심하고 직접 검증
 
-**이번 세션에 굳힌 판단 (2026-05-09 DB-first + LLM streaming)**
+**이번 세션에 굳힌 판단 (2026-05-10 KNOWLEDGE-SYNC-001 + 9 분화 + agent 아키텍처)**
+- **canon ≠ 페르소나**: canon = 자료 정수 (자료에서 추출), 페르소나 = agent identity·doctrine·boundaries (자료 0 분석가도 페르소나만으로 추론 시작). KNOWLEDGE-SYNC-001 scope = canon 만, 페르소나는 M3 SPEC
+- **agent 통신 = hierarchical + DB read**: 분석가 간 직접 LLM 호출 X (시점 drift·frame 오염·debugging 지옥·비용 폭증 함정). DB `team_outputs` row read 만. 도메인 본질 (시점 일관성·frame 응집) 에서 도출. prism-insight 도 같은 결론. 본질·trade-off = `docs/AGENT-ARCHITECTURE.md`
+- **9 분석가 cohesion 보장**: 운영 규율 4 (Layer 3 통합 agent / horizon 별 라우팅 / StandardOutput 표준 / 페르소나의 anti-patterns + boundaries) 로 가능. 본질적 무리 X. 점진적 진화 (자료 0 시드 5명 → 페르소나만으로 추론 시작 → 자료 누적 시 본격화)
+- **카테고리 = 지식부 안의 LLM 인식 1차 단위**: agent 는 *갖는* 게 아니라 *선택해서 읽는* 단위. agent ↔ dept 1:1, dept ↔ category 1:N, agent ↔ category N:M (페르소나의 `canon_categories` 결정). 자기 dept + 공통 안전망(principles) 만
+- **카테고리 AI 친화 4 기준**: self-contained 추론 / 토큰 예산 균형 / frame 차별성 / 카테고리 직교성. 새 자료 라우팅 시 흡수 vs 신설 결정
+- **수급 = 가격의 원인, 4-tier**: 거시 유동성(얼마나 비를 내릴지) → 산업 업황(어디에 내릴지) → 섹터(어느 바구니부터) → 종목(어느 종목에 물이 차는지). 단일 frame 통합 (수급분석가 단독), 분산 X
+- **prism-insight 차용**: Trading Journal Agent (detailed→summary→intuition 메모리 압축 + Buy 점수 자동 조정) → trading_journal 분석가 신설. Memory Compression / Quality Eval / MCP 후속 SPEC
+
+**직전 세션 판단 (2026-05-09 DB-first + LLM streaming)**
 - **시간대 인식 임계 정의**: `kr/us_threshold_seconds(now_kst)` = `now - last_expected_cron_time + 60s grace`. 단순 18h/24h 고정이 아니라 cron 발동 시각 기반. 평일 09:30 직전 같은 엣지에서 stale 오판 방지 + 주말 토~월 09:30 까지 자동 OK. 공휴일 미반영 (1회 cold fetch 수용)
 - **인메모리 캐시 의미 변질**: DB-first 가 0.3s 라 5분 캐시는 부작용만 컸음 (cron 직후 옛 데이터 노출). default 60s 단축. 캐시는 동시 호출 race / 짧은 burst 만 보호
 - **render 헤더에 데이터 시점 명시**: 호출 시각 ≠ 데이터 시점. `_데이터 출처: 미국=DB (17.4시간 전 적재)_` 라인으로 분석가가 정확히 인지 — 7계명 #6 (데이터 없이 추측 X) 정합
@@ -142,26 +156,11 @@
 - **claude_code 환경별 분기**: ProactorEventLoop = native streaming, SelectorEventLoop = silent batch_thread (sync subprocess + asyncio.to_thread). `_can_spawn_subprocess()` 사전 체크로 NotImplementedError 자체 회피 → warning 0. 사용자 원칙: "환경 한계로 안 되는 streaming 은 강제 시도 X — silent fallback"
 - **stdin pipe deadlock 회피**: Windows asyncio subprocess 의 stdin write 가 64KB pipe buffer 가득 차면 block. 동시에 stdout 읽지 않으면 deadlock → stdin 송신을 background task 로 분리. subprocess `limit=10MB` 도 필요 (CLI hook_response 가 single-line 64KB 초과)
 
-**직전 세션 판단 (2026-05-08 cost 라벨 + DB-first 발견)**
-- **분석가 collector 직호출 = 5-Layer 단방향 위반**: snapshot.py 가 briefing_{now,pre} stages 와 100% 중복. 본질은 "수집팀 cron 적재 → 분석팀 DB 읽기" (user_want_spec 의 "수집팀 = 오감 / 분석팀 = 뇌"). 본 세션 옵션 A 로 해결
-- **cost 표시 책임 분리**: 백엔드 metadata 의 토큰 환산 가격 유지, frontend 에서만 provider 별 라벨 가공
-- **analystMeta 3-state 패턴**: `undefined | null | object` 3-state 가 SWR `isLoading` 등가. raw fetch 컴포넌트의 표준 패턴
-
 **직전 세션 판단 (2026-05-08 자산전략가 톤 + provider 선택)**
 - **자동 fallback ≠ 명시 선택**: `provider` kwarg None = config + 자동 폴백 / 명시 = 그 backend 만 + 에러 propagate
 - **gemini → claude_code → mock 폴백 체인**: Gemini 503 일시 장애 시 ANTHROPIC 키 없어도 Pro/Max 구독으로 응답 보존
 - **claude_code OAuth 강제 경로**: subprocess env 에서 `ANTHROPIC_API_KEY`/`AUTH_TOKEN` strip → keychain OAuth
 - **Windows cmd.exe 8K argv 한계 = stdin 우회**: 19K canon spawn 시 long system 은 `[SYSTEM]/[USER]` stdin payload
-
-**직전 세션 판단 (2026-05-07 브리핑 이력 UI + cron + KRX 라벨)**
-- **3차원 분리 (SPEC 정합)**: 추론부 조회 / 알림 자동 푸시 / 브리핑 이력 (briefing_parts 시계열)
-- **briefing_parts = run_id 단위 시계열 누적** (일자 upsert X)
-- **render dispatcher 1개 함수 → 모든 채널 wrap**
-
-**직전 세션 판단 (2026-05-06 M3)**
-- **추론부 조회 ≠ 알림 파이프라인**: 분석가는 별도 호출 흐름
-- **검증 우선 → 점진 확산**: 5명 일괄 분화 X. 자산전략가 1명 가동 → 패턴 안정 → 4명 적용
-- **JSONL retention A → B (매월 폴더 + 90일) → C (SQLite)**: 임계 5K (분화 직전) / 50K
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
