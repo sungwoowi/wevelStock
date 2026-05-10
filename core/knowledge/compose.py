@@ -33,14 +33,15 @@ def _read_file(path: Path) -> str:
 # Shared Knowledge (the user's brain)
 # ---------------------------------------------------------------------------
 
-def load_shared_canon() -> str:
-    """Load all MD files from knowledge/canon/ (recursively) as a combined canon string.
+def load_shared_canon(canon_categories: list[str] | None = None) -> str:
+    """Load MD files from knowledge/canon/ (recursively) as a combined canon string.
 
-    Walks 5 학습부 sub-folders (principles/, mechanics/, long-term/, stock-analysis/,
-    news/) plus any future siblings. README.md files are scaffolding-only and excluded.
+    Walks 9 지식부 sub-folders (principles/, trading/, market_macro/, ...) plus
+    any future siblings. README.md files are scaffolding-only and excluded.
 
-    These represent the user's core investment knowledge — always injected
-    into every LLM call regardless of pipeline.
+    `canon_categories` 가 주어지면 `["dept/category", ...]` 형태로 해석해
+    해당 카테고리 폴더의 md 만 통과 (KNOWLEDGE-SYNC-001 Phase 2 M1). None 이면
+    9 지식부 전체 (legacy 동작).
     """
     canon_dir = KNOWLEDGE_DIR / "canon"
     if not canon_dir.exists():
@@ -49,10 +50,17 @@ def load_shared_canon() -> str:
         canon_dir.rglob("*.md"),
         key=lambda p: p.relative_to(canon_dir).as_posix(),
     )
+    allowed = set(canon_categories) if canon_categories else None
     parts: list[str] = []
     for md_file in md_files:
         if md_file.name.lower() == "readme.md":
             continue
+        if allowed is not None:
+            rel_parts = md_file.relative_to(canon_dir).parts
+            if len(rel_parts) < 3:
+                continue  # canon 직속 / dept 직속 md 는 카테고리 필터 모드에서 제외
+            if f"{rel_parts[0]}/{rel_parts[1]}" not in allowed:
+                continue
         content = _read_file(md_file).strip()
         if content:
             parts.append(content)
@@ -169,6 +177,7 @@ async def build_pipeline_prompt(
     token_budget_memory: int = 4000,
     query_for_rag: str | None = None,
     rag_dept: str | None = None,
+    canon_categories: list[str] | None = None,
     market_snapshot_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
@@ -189,7 +198,7 @@ async def build_pipeline_prompt(
 
     # [0] Shared canon — the user's brain
     if include_shared_canon:
-        canon = load_shared_canon().strip()
+        canon = load_shared_canon(canon_categories=canon_categories).strip()
         if canon:
             blocks.append({
                 "type": "text",
@@ -232,9 +241,22 @@ async def build_pipeline_prompt(
 
     # [4] RAG chunks (not cached — query-dependent)
     if query_for_rag and rag_dept:
+        # canon_categories 중 rag_dept 와 일치하는 항목의 카테고리만 추출
+        rag_categories: list[str] | None = None
+        if canon_categories:
+            rag_categories = [
+                cc.split("/", 1)[1]
+                for cc in canon_categories
+                if "/" in cc and cc.split("/", 1)[0] == rag_dept
+            ] or None
         try:
             from core.knowledge.retrieve import retrieve
-            results = await retrieve(rag_dept, query_for_rag, top_k=3)
+            results = await retrieve(
+                rag_dept,
+                query_for_rag,
+                categories=rag_categories,
+                top_k=3,
+            )
         except Exception as e:  # noqa: BLE001
             log.warning("retrieval_failed", context=context_id, dept=rag_dept, error=str(e))
             results = []

@@ -474,12 +474,17 @@ CREATE INDEX IF NOT EXISTS idx_kir_dept_started ON knowledge_index_runs(dept, st
 3. INFRA-RAG-001 의 ingest/retrieve 가 새 구조에서 동작하는지 회귀 확인
 
 **Phase 1 — 어댑터 + 인덱싱 확장**
-4. `core/knowledge/adapters/` 신설 (md/txt/pdf/xlsx/png)
-5. `ingest.py` 확장: 카테고리 metadata 채움, 델타 모드 (`since_run_id` 인자)
-6. `retrieve.py` 확장: `categories` 필터
-7. `compose.py` 확장: `canon_categories` 기반 선택 주입
+4. ✅ `core/knowledge/adapters/` 신설 (md/txt/pdf/xlsx/png) — 2026-05-10
+5. ✅ `ingest.py` 확장: 카테고리 metadata 채움 — 2026-05-10 (델타 모드 `since_run_id` 는 Phase 2 와 묶음)
 
-**Phase 2 — sync run + DB**
+**Phase 2 — M1: retrieve/compose 카테고리 화이트리스트** (2026-05-10 완료)
+6. ✅ `retrieve.py` 확장: `categories` 필터 (where `{"category": {"$in": [...]}}`)
+7. ✅ `compose.py` 확장: `canon_categories` 기반 선택 주입 (`load_shared_canon` + RAG retrieve 둘 다)
+   - `core/inference/run_analyst.py` 의 `AnalystSpec.canon_categories` + manifest 로드
+   - 검증: `wealth_strategist` manifest `canon_categories: [wealth_compounding/macro_roadmap]` → canon 18,726 → 3,935 chars (79% 감소), RAG block macro_roadmap 청크만 회수
+   - tests: `test_retrieve_categories.py` (4) + `test_compose_canon_categories.py` (7) = +11, 회귀 122 passed
+
+**Phase 2 — M2: sync run + DB** (다음)
 8. `core/db/schema.py` 에 `knowledge_index_runs` 추가
 9. `core/knowledge/sync.py` 작성 (delta 발견 → 어댑터 → 인덱싱 → run log)
 

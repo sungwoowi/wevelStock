@@ -42,6 +42,7 @@ class AnalystSpec:
     display_name: str
     learning_dept: str
     reads: list[str]
+    canon_categories: list[str]
     persona_path: Path
     model: str | None
     max_tokens: int
@@ -79,6 +80,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         display_name=raw.get("display_name", analyst_id),
         learning_dept=raw.get("learning_dept", ""),
         reads=list(raw.get("reads") or []),
+        canon_categories=list(raw.get("canon_categories") or []),
         persona_path=persona_path,
         model=llm_cfg.get("model"),
         max_tokens=int(llm_cfg.get("max_tokens", 4000)),
@@ -170,6 +172,7 @@ async def run_analyst(
         token_budget_memory=4000,
         query_for_rag=query_for_rag,
         rag_dept=rag_dept,
+        canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         response_rules=spec.response_rules,
     )
@@ -288,6 +291,7 @@ async def run_analyst_stream(
         token_budget_memory=4000,
         query_for_rag=query_for_rag,
         rag_dept=rag_dept,
+        canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         response_rules=spec.response_rules,
     )

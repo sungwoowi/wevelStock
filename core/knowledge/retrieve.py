@@ -45,13 +45,28 @@ def _get_collection(dept: str) -> Any | None:
         return None
 
 
-async def retrieve(dept: str, query: str, top_k: int = 3) -> list[RetrievalResult]:
-    """Retrieve top_k chunks from `data/chroma/<dept>/`, or [] if absent."""
+async def retrieve(
+    dept: str,
+    query: str,
+    *,
+    categories: list[str] | None = None,
+    top_k: int = 3,
+) -> list[RetrievalResult]:
+    """Retrieve top_k chunks from `data/chroma/<dept>/`, or [] if absent.
+
+    `categories` 가 주어지면 chunk metadata 의 `category` 필드가 해당 리스트에
+    속하는 청크만 반환 (KNOWLEDGE-SYNC-001 Phase 2 M1). None 이면 dept 전체.
+    """
     collection = _get_collection(dept)
     if collection is None:
         return []
+    where: dict[str, Any] | None
+    if categories:
+        where = {"category": {"$in": list(categories)}}
+    else:
+        where = None
     try:
-        result = collection.query(query_texts=[query], n_results=top_k)
+        result = collection.query(query_texts=[query], n_results=top_k, where=where)
     except Exception as e:  # noqa: BLE001
         log.warning("chroma_query_failed", dept=dept, error=str(e))
         return []

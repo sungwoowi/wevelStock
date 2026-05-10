@@ -9,6 +9,13 @@ learning_dept: wealth_compounding
 reads:
   - wealth_compounding
 
+# 이 분석가가 받을 카테고리 화이트리스트 (KNOWLEDGE-SYNC-001 Phase 2 M1).
+# `<dept>/<category>` 형식. 비우면 reads dept 전체.
+# 검증용 임시 지정: macro_roadmap 1 카테고리 (canon md 1 + RAG chunks 38).
+# M3 분석가 분화 SPEC 에서 정식 정의 시 갱신 — 자산전략가는 보통 6 카테고리 전체로 복귀.
+canon_categories:
+  - wealth_compounding/macro_roadmap
+
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 llm:
   model: null            # 예: "claude-sonnet-4-5", "claude-opus-4-7"
