@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **KNOWLEDGE-SYNC-001 Phase 1 완료** — 어댑터 5종 (md/txt/pdf/xlsx/png) + ingest 카테고리 인식 + `_category.yaml` ground truth 메타 주입 + chunk metadata 18 keys + 멱등 backfill. wealth_compounding force re-index 검증 (25 sources / 787 chunks / 6 카테고리). retrieve smoke 통과 (한국어 쿼리 → category 라벨 노출). Phase 0 의 git mv 로 인한 legacy chunk 정리 동시 완료 (force=True 로 collection drop + 1회 임베딩). pytest 111 passed (94 → +17: adapters 10 + ingest_categories 7). technical_analysis 자료 27개도 카테고리 폴더로 정렬 (fractal_wave 22 PDF / log_chart 4 / technical_basics 1). rag_docs/ 삭제. 다음 세션 Top 1 = Phase 2 (retrieve 카테고리 필터 + compose canon_categories + DB knowledge_index_runs + sync.py + watchdog + just 명령 4종).
+**현재 위치**: **KNOWLEDGE-SYNC-001 Phase 2 M1 완료** — `retrieve()` 카테고리 필터 + `build_pipeline_prompt()` `canon_categories` 주입 + `AnalystSpec.canon_categories` 필드 + `wealth_strategist` manifest 검증값 (`canon_categories: [wealth_compounding/macro_roadmap]`). 통합 검증: canon 18,726 → 3,935 chars (79% 감소), RAG block 카테고리 청크만 회수. 분석가 manifest 한 줄로 RAG·canon 둘 다 카테고리 단위 화이트리스트 동작점. tests +11 (retrieve_categories 4 + compose_canon_categories 7) → pytest **122 passed** (111 → +11). 다음 세션 Top 1 = Phase 2 M2 (DB `knowledge_index_runs` 테이블 + `core/knowledge/sync.py` delta + run log).
 
 **마지막 작업일**: 2026-05-10
-**마지막 세션 로그**: [2026-05-10_phase-1-adapters-and-ingest-2.md](c_worked/2026-05-10_phase-1-adapters-and-ingest-2.md)
-**Git**: 이번 세션 1 commit + push (`325fe19` Phase 1 코드) + wrap-up commit 1개 추가. `knowledge/reference/` .gitignore 유지. 박종훈 Vol 2/3 OCR 외 `9.프렉탈 구조 응용 - 실전분석2-2.pdf` (30페이지 0 chars 이미지 PDF) 추가 식별 — OCR 백로그.
+**마지막 세션 로그**: [2026-05-10_phase-2-m1-canon-categories-3.md](c_worked/2026-05-10_phase-2-m1-canon-categories-3.md)
+**Git**: 이번 세션 1 commit + push (`7158cd0` M1 코드 + 테스트 + SPEC 갱신) + wrap-up commit 1개 추가 예정. 같은 날 3번째 세션 (Phase 1 완료 직후 곧장 M1 단일 마일스톤 추가).
 
 ---
 
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. KNOWLEDGE-SYNC-001 Phase 2 (PC, 2~3 세션)
-- **왜**: Phase 1 = "AI 가 형식별 읽고 + 카테고리 라벨 박음". Phase 2 = "분석가가 자기 카테고리만 골라 받음 + 자동화". 종료 시 = **사용자 reference push → 60s 자동 색인 + 분석가 페르소나의 `canon_categories` 동작** = 프로토타입 1차 동작점.
-- **범위**: `retrieve.py` 카테고리 필터 (`categories: list[str]`) + `compose.py` `canon_categories` 기반 선택 주입 + `core/db/schema.sql` `knowledge_index_runs` 테이블 + `core/knowledge/sync.py` (delta → 어댑터 → 인덱싱 → run log + `since_run_id` 델타 모드) + `core/knowledge/watcher.py` (watchdog 60s debounce) + `scripts/knowledge_sync.py` + `justfile` 4 명령 (sync/watch/status/rollback).
-- **예상**: 2~3 세션.
+### 1. KNOWLEDGE-SYNC-001 Phase 2 M2 (PC, ~1 세션)
+- **왜**: M1 (retrieve/compose 카테고리 화이트리스트) 직후라 맥락 신선. M2 = "어떤 자료가 언제 색인되었는지" DB 추적 + delta 발견. M3 (watchdog + just) 의 전제. M2 종료 시 수동 sync 가능 (자동화는 M3).
+- **범위**: `core/db/schema.py`(또는 `schema.sql`) 에 `knowledge_index_runs` 테이블 추가 (run_id / dept / started_at / finished_at / sources_indexed / chunks_added / since_run_id) + `core/knowledge/sync.py` 작성 (reference walk → file_hash 비교 → 변경분 어댑터 디스패치 → 인덱싱 → run log insert). `since_run_id` 델타 모드 인자.
+- **예상**: ~1 세션.
 
-### 2. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션)
-- **왜**: 9 분석가 페르소나 작성으로 production 호출 가능 — 프로토타입 가동. Phase 2 완료 후 본격 진입 (페르소나의 `canon_categories` 가 동작 확인 가능 시점).
+### 2. KNOWLEDGE-SYNC-001 Phase 2 M3 (PC, ~1 세션)
+- **왜**: M2 의 sync.py 를 자동화 + 사용자 인터페이스. 종료 시 = **사용자 reference push → 60s 자동 색인** = Phase 2 풀세트 동작점 (= 프로토타입 1차 동작점).
+- **범위**: `core/knowledge/watcher.py` (watchdog 60s debounce) + server lifecycle 등록 + `scripts/knowledge_sync.py` + `justfile` 4 명령 (sync/watch/status/rollback).
+- **예상**: ~1 세션.
+
+### 3. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션)
+- **왜**: 9 분석가 페르소나 작성으로 production 호출 가능 — 프로토타입 가동. Phase 2 풀세트 완료 후 본격 진입 (페르소나의 `canon_categories` 가 자동 sync 흐름과 결합 동작 확인 가능 시점).
 - **범위**: M3 SPEC 신설 + 9 페르소나 (8-섹션 portable: Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + identity seed PROPOSAL 흐름 (자료 0 시드 5명: 시장상태 / 종목선정 / 매매저널 / 수급 / 뉴스) + portable 검증 (다른 LLM 같은 페르소나 호출 → 일관성).
 - **예상**: 3~5 세션.
 
-### 3. stock-analysis dept 재인덱싱 + 검증 (PC, ~1 세션)
-- **왜**: technical_analysis 27개 자료가 정리되었으니 RAG 인덱싱 검증 자연. 어댑터 5종 다 굴려보는 첫 사례 (md/pdf/xlsx/txt 전부, png 은 silent skip).
-- **범위**: `ingest('stock-analysis', force=True)` 1회 (~75min) → "프랙탈 파동 매수 타점" / "로그차트 목표가 계산" 같은 한국어 쿼리로 카테고리 라벨 + score 검증. wealth_compounding 패턴 그대로 복사. principles / trading 도 같이 재인덱싱 (작아서 빠름).
-- **예상**: ~1 세션 (background 인덱싱 + 검증).
-
-(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf` 백로그) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로)
+(추가 백로그: stock-analysis dept 재인덱싱 + 검증 (어댑터 5종 다 굴리는 첫 사례, ~1 세션) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf`) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로 / `wealth_strategist` manifest 의 canon_categories 검증값 → 6 카테고리 전체 복귀 (M3 SPEC))
 
 ---
 
@@ -101,11 +101,12 @@
 - **`core/knowledge/ingest.py` 재작성** (2026-05-10) — `_iter_reference_files(dept)` 어댑터 디스패치 + 카테고리 폴더 직속 탐색 + `_` prefix 모든 path part skip. `_load_category_meta(dept, category)` canon `_category.yaml` ground truth 로드. `_build_metadata` 가 frontmatter + extraction + category 3중 병합. 멱등 backfill = `(file_hash, category)` 동시 비교. chunk metadata 18 keys (category / category_title / category_description / when_to_inject / target_analysts / dept / file_hash / extracted_at / page_count / sheet_count / char_count / source_pdf / ...)
 - **`tests/test_adapters.py` + `test_ingest_categories.py`** (2026-05-10) — 신규 17 (pytest 111 = 94 + 17). 어댑터 fixture 는 tmp_path 동적 생성 (xlsx 는 openpyxl write, pdf 는 PdfWriter blank page)
 - **`data/chroma/wealth_compounding/` force re-index** (2026-05-10) — 25 sources / 787 chunks / 6 카테고리 분포 (asset_classes 30 / crisis_signals 224 / currency_pricing 150 / debt_rate_cycle 153 / macro_roadmap 38 / monetary_evolution 192). retrieve smoke ("인플레이션 통화 가치") top 3 정확 + category 라벨 노출 + score 0.59~0.64. Phase 0 git mv 로 인한 legacy chunk 동시 청산
+- **Phase 2 M1: retrieve/compose 카테고리 화이트리스트** (2026-05-10) — `core/knowledge/retrieve.py` `retrieve(dept, query, *, categories=None, top_k=3)` + ChromaDB `where={"category": {"$in": [...]}}` 조건부 + 빈 리스트 falsy fallback. `core/knowledge/compose.py` `load_shared_canon(canon_categories=None)` 폴더 path prefix 매칭 필터 + `build_pipeline_prompt(..., canon_categories=None)` + RAG 분기에서 `rag_dept` 매칭 카테고리만 추출해 `retrieve(categories=)` 전달 (canon block + RAG block 둘 다 좁아짐). `core/inference/run_analyst.py` `AnalystSpec.canon_categories` 필드 + manifest 로드 + 두 run 함수에 전달. `wealth_strategist` manifest 검증값 `canon_categories: [wealth_compounding/macro_roadmap]` (M3 SPEC 정식 정의 시 6 카테고리 복귀 예정). `tests/test_retrieve_categories.py`(4) + `test_compose_canon_categories.py`(7) 신규 = pytest **122 passed** (111 → +11). 통합 검증: canon 18,726 → 3,935 chars (79% 감소), RAG block macro_roadmap 청크만 회수. 1 commit + push (`7158cd0`)
 
 ### 미완 또는 의도적 공백
-- **9 분석가 페르소나 작성 (M3 SPEC)** — 자료 있는 4 (원칙수호자/트레이더/종목분석가/자산전략가) + 자료 0 시드 5 (시장상태분석가/종목선정가/매매저널리스트/수급분석가/뉴스큐레이터). 8-섹션 portable 양식. Phase 2 완료 후 본격 진입. **프로토타입 가동의 핵심**
-- **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 retrieve 카테고리 필터 + compose canon_categories 주입 + DB knowledge_index_runs + sync.py + watchdog + just 명령 4종 / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증. **다음 세션 Top 1** (Phase 2)
-- **다른 dept 재인덱싱** (principles / trading / stock-analysis 등) — Phase 2 sync 로 자동화 또는 수동 force re-index. stock-analysis 는 5형식 자료 풍부해 어댑터 검증 풍부. **다음 세션 Top 3**
+- **9 분석가 페르소나 작성 (M3 SPEC)** — 자료 있는 4 (원칙수호자/트레이더/종목분석가/자산전략가) + 자료 0 시드 5 (시장상태분석가/종목선정가/매매저널리스트/수급분석가/뉴스큐레이터). 8-섹션 portable 양식. Phase 2 풀세트 완료 후 본격 진입. **프로토타입 가동의 핵심**
+- **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 M1 ✅ (retrieve 카테고리 필터 + compose canon_categories) / **Phase 2 M2** DB knowledge_index_runs + sync.py (다음 세션 Top 1) / Phase 2 M3 watchdog + just 명령 4종 (Top 2) / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증
+- **다른 dept 재인덱싱** (principles / trading / stock-analysis 등) — Phase 2 sync 로 자동화 또는 수동 force re-index. stock-analysis 는 5형식 자료 풍부해 어댑터 검증 풍부 (백로그)
 - **이미지 PDF OCR 미실행** — 박종훈 Vol 2/3 4 파일 + `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 30페이지 0 chars. `ocrmypdf` + tesseract 백로그
 - **png 어댑터 vision 활성화** — 비용 가시화 후 `enabled_by_default=True` flag + Anthropic vision API + extraction cache (`data/chroma/<dept>/_extraction_cache/<file_hash>.txt`). 현재 silent skip
 - **xlsx 어댑터 sheet 별 분리 인덱싱** — 현재 단일 body (sheet header + tab-delimited). SPEC 528행 SLOT, 실제 자료 (4.로그차트_advanced/ xlsx) 보고 결정
@@ -137,29 +138,21 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-10 Phase 1 코드)**
-- **chunk_id 포맷 그대로**: rel_path 가 이미 `<category>/<file>` 라 카테고리 정보 포함. metadata 에 `category` 필드만 추가 → backfill 단순화. 같은 자료의 폴더 위치만 안 바뀌면 멱등 캐시 hit.
-- **png default off + silent skip**: `enabled_by_default=False` flag 사전 체크 → log.debug. NotImplementedError 분기 안 탐. 환경 한계 silent fallback 원칙 정합. enable 시 flag 만 True 로
-- **chunk metadata 18 keys 표준** (category / category_title / category_description / when_to_inject / target_analysts / dept / file_hash / extracted_at / page_count / sheet_count / char_count / source_pdf / ...) — _category.yaml 은 **canon 쪽이 ground truth** (reference 쪽엔 X)
-- **force=True 1회로 깨끗 재인덱싱**: Phase 0 git mv 로 rel_path 변경 → 멱등 캐시 안 적중 → legacy stale + 새 chunks 중복 위험. force 로 collection drop + 1회 임베딩 (75min). 임베딩 2회 회피
-- **로컬 vs 클라우드 전략**: 로컬에서 끝까지 + 어댑터 패턴 추상화 + 24/7 봇 필요 시점에 작은 VM 1대로 통째 이전 (DB 분리 X). Supabase·Pinecone 무료 티어로 1~3년 운영. 마이그레이션 비용 거의 0 (chromadb.PersistentClient → HttpClient connection string 1줄)
+**이번 세션에 굳힌 판단 (2026-05-10 Phase 2 M1)**
+- **canon_categories 형식 = `<dept>/<category>`**: 한 분석가가 여러 dept 의 카테고리를 받을 수 있도록 다 dept 친화 설계. compose 가 RAG retrieve 호출 시 `rag_dept` 와 일치하는 항목만 추출 — ChromaDB 는 dept 별 collection 이라 카테고리는 단일 dept 안에서만 의미 (cross-dept 카테고리 retrieve 는 multi-collection 호출이 미래 옵션)
+- **빈 리스트 = 무필터 (legacy 동작)**: `canon_categories: []` 또는 `categories=[]` → falsy 체크로 dept 전체. `spec.canon_categories or None` 패턴으로 manifest 키 부재/빈 리스트 모두 None 변환. 회귀 안전망
+- **compose 두 곳 동시 적용**: `[0] Investment Knowledge` 의 canon md prefix 매칭 필터 + `[4] Retrieved References` 의 RAG retrieve 카테고리 인자 — manifest 한 줄로 두 경로 동시 좁힘. system prompt 의 일관성 보장
+- **M1 단일 마일스톤 끊기가 옳았음**: Phase 2 풀세트 (retrieve/compose/DB/sync/watchdog/just) 한 세션에 묶으면 검증 부담 ↑. M1 만 끊어 1세션 마감 → 분석가 호출이 검증 가능한 형태로 도착 → M3 분석가 분화 SPEC 의 페르소나 양식 검증 가능 시점이 빨라짐. small_milestones 원칙 가치 재확인
+- **테스트의 importlib 우회 패턴**: `core/knowledge/__init__.py` 의 `from .retrieve import retrieve` 가 패키지 attribute 를 함수로 가로채서 `import core.knowledge.retrieve as X` 가 모듈이 아닌 함수 반환. `importlib.import_module("core.knowledge.retrieve")` 로 우회. 비슷한 re-export 패턴 가진 다른 모듈 monkeypatch 시 동일하게 적용
 
-**직전 세션 판단 (2026-05-10 KNOWLEDGE-SYNC-001 SPEC + 9 분화 + agent 아키텍처)**
-- **canon ≠ 페르소나**: canon = 자료 정수 (자료에서 추출), 페르소나 = agent identity·doctrine·boundaries (자료 0 분석가도 페르소나만으로 추론 시작). KNOWLEDGE-SYNC-001 scope = canon 만, 페르소나는 M3 SPEC
-- **agent 통신 = hierarchical + DB read**: 분석가 간 직접 LLM 호출 X (시점 drift·frame 오염·debugging 지옥·비용 폭증 함정). DB `team_outputs` row read 만. 도메인 본질 (시점 일관성·frame 응집) 에서 도출. prism-insight 도 같은 결론. 본질·trade-off = `docs/AGENT-ARCHITECTURE.md`
-- **9 분석가 cohesion 보장**: 운영 규율 4 (Layer 3 통합 agent / horizon 별 라우팅 / StandardOutput 표준 / 페르소나의 anti-patterns + boundaries) 로 가능. 본질적 무리 X. 점진적 진화 (자료 0 시드 5명 → 페르소나만으로 추론 시작 → 자료 누적 시 본격화)
-- **카테고리 = 지식부 안의 LLM 인식 1차 단위**: agent 는 *갖는* 게 아니라 *선택해서 읽는* 단위. agent ↔ dept 1:1, dept ↔ category 1:N, agent ↔ category N:M (페르소나의 `canon_categories` 결정). 자기 dept + 공통 안전망(principles) 만
-- **카테고리 AI 친화 4 기준**: self-contained 추론 / 토큰 예산 균형 / frame 차별성 / 카테고리 직교성. 새 자료 라우팅 시 흡수 vs 신설 결정
-- **수급 = 가격의 원인, 4-tier**: 거시 유동성(얼마나 비를 내릴지) → 산업 업황(어디에 내릴지) → 섹터(어느 바구니부터) → 종목(어느 종목에 물이 차는지). 단일 frame 통합 (수급분석가 단독), 분산 X
-- **prism-insight 차용**: Trading Journal Agent (detailed→summary→intuition 메모리 압축 + Buy 점수 자동 조정) → trading_journal 분석가 신설. Memory Compression / Quality Eval / MCP 후속 SPEC
+**직전 세션 판단 (2026-05-10 Phase 1 코드)**
+- **chunk_id 포맷 그대로**: rel_path 가 이미 `<category>/<file>` 라 metadata 에 `category` 필드만 추가 → backfill 단순화. 같은 자료 폴더 위치 안 바뀌면 멱등 캐시 hit
+- **png default off + silent skip**: `enabled_by_default=False` flag 사전 체크 → log.debug. NotImplementedError 분기 안 탐. 환경 한계 silent fallback 원칙 정합
+- **로컬 vs 클라우드 전략**: 로컬에서 끝까지 + 어댑터 패턴 추상화 + 24/7 봇 필요 시점에 작은 VM 1대로 통째 이전. chromadb.PersistentClient → HttpClient connection string 1줄
 
-**직전 세션 판단 (2026-05-09 DB-first + LLM streaming)**
-- **시간대 인식 임계 정의**: `kr/us_threshold_seconds(now_kst)` = `now - last_expected_cron_time + 60s grace`. 단순 18h/24h 고정이 아니라 cron 발동 시각 기반. 평일 09:30 직전 같은 엣지에서 stale 오판 방지 + 주말 토~월 09:30 까지 자동 OK. 공휴일 미반영 (1회 cold fetch 수용)
-- **인메모리 캐시 의미 변질**: DB-first 가 0.3s 라 5분 캐시는 부작용만 컸음 (cron 직후 옛 데이터 노출). default 60s 단축. 캐시는 동시 호출 race / 짧은 burst 만 보호
-- **render 헤더에 데이터 시점 명시**: 호출 시각 ≠ 데이터 시점. `_데이터 출처: 미국=DB (17.4시간 전 적재)_` 라인으로 분석가가 정확히 인지 — 7계명 #6 (데이터 없이 추측 X) 정합
-- **streaming 우선순위**: 분석가 자동 호출은 알림 Agent 라 streaming 무관. webapp 채팅 검증/디버그 UX 만 영향. 그래도 사용자가 분석가 응답 평가하는 회수 → 시스템 고도화 속도에 간접 영향 → 본 세션 도입 가치 있음
-- **claude_code 환경별 분기**: ProactorEventLoop = native streaming, SelectorEventLoop = silent batch_thread (sync subprocess + asyncio.to_thread). `_can_spawn_subprocess()` 사전 체크로 NotImplementedError 자체 회피 → warning 0. 사용자 원칙: "환경 한계로 안 되는 streaming 은 강제 시도 X — silent fallback"
-- **stdin pipe deadlock 회피**: Windows asyncio subprocess 의 stdin write 가 64KB pipe buffer 가득 차면 block. 동시에 stdout 읽지 않으면 deadlock → stdin 송신을 background task 로 분리. subprocess `limit=10MB` 도 필요 (CLI hook_response 가 single-line 64KB 초과)
+**직전 세션 판단 (2026-05-10 KNOWLEDGE-SYNC-001 SPEC + 9 분화)**
+- **agent 통신 = hierarchical + DB read**: 분석가 간 직접 LLM 호출 X (시점 drift·frame 오염·debugging 지옥·비용 폭증). DB `team_outputs` row read 만. 본질·trade-off = `docs/AGENT-ARCHITECTURE.md`
+- **카테고리 = 지식부 안의 LLM 인식 1차 단위**: agent 는 *갖는* 게 아니라 *선택해서 읽는* 단위. agent ↔ dept 1:1, dept ↔ category 1:N, agent ↔ category N:M (페르소나의 `canon_categories` 결정)
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지
