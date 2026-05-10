@@ -1,10 +1,12 @@
-"""학습부(dept)별 RAG 인덱싱 — knowledge/reference/<dept>/**/*.md → Chroma.
+"""학습부(dept)별 RAG 인덱싱 — knowledge/reference/<dept>/<category>/* → Chroma.
 
-INFRA-RAG-001 5-Layer 리팩터:
-- 입력: `knowledge/reference/<dept>/` (sync_knowledge.py 가 멱등 추출한 markdown)
-- 출력: `data/chroma/<dept>/` (PersistentClient + collection name = dept)
-- 임베딩: `core.knowledge.embed.get_embedding_function()` 명시 wiring (한국어 BGE-m3)
-- 멱등성: `collection.upsert(ids=...)` — 동일 chunk_id 재인덱싱 시 덮어씀
+INFRA-RAG-001 + KNOWLEDGE-SYNC-001 Phase 1:
+- 입력: `knowledge/reference/<dept>/<category>/<files>` (md/txt/pdf/xlsx/png)
+- 어댑터 디스패치: 확장자별 `core.knowledge.adapters` 의 어댑터로 추출
+- 카테고리 메타 주입: `knowledge/canon/<dept>/<category>/_category.yaml` ground truth
+- 출력: `data/chroma/<dept>/` (collection name = dept)
+- 임베딩: `core.knowledge.embed.get_embedding_function()` (한국어 BGE-m3)
+- 멱등성: `collection.upsert(ids=...)` + file_hash skip
 
 CLI:
     just knowledge-ingest <dept>          # 멱등 (upsert)
@@ -17,8 +19,9 @@ import hashlib
 from pathlib import Path
 from typing import Any, Iterable
 
-import frontmatter
+import yaml
 
+from core.knowledge.adapters import get_adapter
 from core.knowledge.embed import get_embedding_function
 from core.logging import get_logger
 
@@ -26,17 +29,34 @@ log = get_logger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_ROOT = REPO_ROOT / "knowledge" / "reference"
+CANON_ROOT = REPO_ROOT / "knowledge" / "canon"
 INDEX_ROOT = REPO_ROOT / "data" / "chroma"
 
-# Frontmatter 의 어떤 키를 Chroma metadata 에 흘릴지 화이트리스트.
-# Chroma metadata 는 str/int/float/bool 만 허용. 리스트·dict 는 직렬화 필요.
+# Frontmatter / extraction / category 메타 중 Chroma 에 흘릴 키 화이트리스트.
+# Chroma metadata 는 str/int/float/bool 만 허용. 리스트·dict 는 ingest 가 직렬화.
 _META_WHITELIST = (
+    # frontmatter (markdown)
     "source",
     "extracted_at",
     "subfolder",
     "title",
     "lang",
+    "source_pdf",
+    "original_filename",
+    "learning_dept",
+    # extraction_meta (PDF/xlsx/text 어댑터)
+    "page_count",
+    "sheet_count",
+    "char_count",
 )
+
+_SOURCE_TYPE_BY_EXT = {
+    ".md": "markdown",
+    ".txt": "text",
+    ".pdf": "pdf",
+    ".xlsx": "xlsx",
+    ".png": "png",
+}
 
 
 def _chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> list[str]:
@@ -63,34 +83,134 @@ def _file_hash(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
 
 
+def _load_category_meta(dept: str, category: str) -> dict[str, Any]:
+    """canon 의 _category.yaml ground truth 로드. reference 쪽엔 없음."""
+    yml = CANON_ROOT / dept / category / "_category.yaml"
+    if not yml.exists():
+        return {}
+    try:
+        loaded = yaml.safe_load(yml.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        log.warning("category_yaml_load_failed", path=str(yml), error=str(e))
+        return {}
+    return loaded or {}
+
+
+def _source_type_for_ext(suffix: str) -> str:
+    return _SOURCE_TYPE_BY_EXT.get(suffix.lower(), "unknown")
+
+
 def _iter_reference_files(
-    dept_dir: Path,
-) -> Iterable[tuple[str, str, dict[str, Any], str]]:
-    """Yield (rel_path, body, meta_dict, file_hash) for every reference markdown."""
-    for p in sorted(dept_dir.rglob("*.md")):
-        if p.name.lower() == "readme.md":
+    dept: str,
+) -> Iterable[tuple[str, str, str, dict[str, Any], dict[str, Any], str]]:
+    """Yield (rel_path, category, body, frontmatter_meta, extra_meta, file_hash).
+
+    카테고리 폴더 = dept_dir 직속 디렉토리 (`_` prefix 는 skip — 예: `_inbox`).
+    카테고리 안의 파일을 확장자별 어댑터로 추출. `_` prefix path 는 모두 skip.
+    extra_meta = extraction_meta + category_meta (_category.yaml 내용).
+    """
+    dept_dir = REFERENCE_ROOT / dept
+    if not dept_dir.exists():
+        return
+
+    for category_dir in sorted(p for p in dept_dir.iterdir() if p.is_dir()):
+        if category_dir.name.startswith("_"):
             continue
-        rel = p.relative_to(dept_dir).as_posix()
-        fhash = _file_hash(p)
-        try:
-            post = frontmatter.load(p)
-        except Exception as e:  # noqa: BLE001
-            log.warning("frontmatter_parse_failed", path=str(p), error=str(e))
-            yield rel, p.read_text(encoding="utf-8"), {}, fhash
-            continue
-        meta_in = dict(post.metadata or {})
-        meta_out: dict[str, Any] = {
-            k: _coerce_meta_value(meta_in[k]) for k in _META_WHITELIST if k in meta_in
-        }
-        yield rel, post.content, meta_out, fhash
+        category = category_dir.name
+        category_meta = _load_category_meta(dept, category)
+
+        for p in sorted(category_dir.rglob("*")):
+            if not p.is_file():
+                continue
+            # _ prefix (어떤 path part 든) skip — _category.yaml, _inbox/, _draft.md 등
+            if any(part.startswith("_") for part in p.relative_to(category_dir).parts):
+                continue
+            if p.name.lower() == "readme.md":
+                continue
+
+            adapter = get_adapter(p.suffix)
+            if adapter is None:
+                continue
+            # SPEC L507: enabled_by_default=False (png 등) 은 silent skip — 비용 보호
+            if not getattr(adapter, "enabled_by_default", True):
+                log.debug("adapter_skipped_disabled", path=str(p), ext=p.suffix)
+                continue
+
+            try:
+                extracted = adapter.extract(p)
+            except Exception as e:  # noqa: BLE001
+                log.warning("adapter_failed", path=str(p), error=str(e))
+                continue
+
+            body = extracted.body_text.strip()
+            if not body:
+                continue
+
+            rel = p.relative_to(dept_dir).as_posix()
+            fhash = _file_hash(p)
+            extra: dict[str, Any] = {**dict(extracted.extraction_meta), **category_meta}
+            yield (
+                rel,
+                category,
+                extracted.body_text,
+                dict(extracted.frontmatter_meta),
+                extra,
+                fhash,
+            )
 
 
-def _resolve_subfolder(rel_path: str, meta: dict[str, Any]) -> str:
-    if "subfolder" in meta:
-        return str(meta["subfolder"])
-    if "/" in rel_path:
-        return rel_path.split("/", 1)[0]
-    return ""
+def _build_metadata(
+    rel_path: str,
+    category: str,
+    dept: str,
+    fm_meta: dict[str, Any],
+    extra_meta: dict[str, Any],
+    fhash: str,
+    chunk_index: int,
+) -> dict[str, Any]:
+    """Frontmatter + extraction + category 3중 병합 → Chroma metadata."""
+    title = str(fm_meta.get("title") or Path(rel_path).stem)
+    suffix = Path(rel_path).suffix
+
+    fm_carry = {
+        k: _coerce_meta_value(fm_meta[k])
+        for k in _META_WHITELIST
+        if k in fm_meta and k not in {"title", "subfolder"}
+    }
+    # extraction_meta 의 page_count/sheet_count/char_count 는 화이트리스트로 가져옴
+    extract_carry = {
+        k: _coerce_meta_value(extra_meta[k])
+        for k in ("page_count", "sheet_count", "char_count")
+        if k in extra_meta
+    }
+    # _category.yaml 메타: title/description/when_to_inject/target_analysts
+    cat_carry: dict[str, Any] = {}
+    if "title" in extra_meta:
+        cat_carry["category_title"] = str(extra_meta["title"])
+    if "description" in extra_meta:
+        cat_carry["category_description"] = str(extra_meta["description"])
+    if "when_to_inject" in extra_meta:
+        cat_carry["when_to_inject"] = str(extra_meta["when_to_inject"])
+    if "target_analysts" in extra_meta:
+        targets = extra_meta["target_analysts"] or []
+        if isinstance(targets, list):
+            cat_carry["target_analysts"] = ",".join(str(t) for t in targets)
+        else:
+            cat_carry["target_analysts"] = str(targets)
+
+    return {
+        "source_id": rel_path,
+        "source_type": _source_type_for_ext(suffix),
+        "source_title": title,
+        "source_subfolder": category,
+        "category": category,
+        "chunk_index": chunk_index,
+        "dept": dept,
+        "file_hash": fhash,
+        **fm_carry,
+        **extract_carry,
+        **cat_carry,
+    }
 
 
 def ingest(
@@ -100,7 +220,7 @@ def ingest(
     chunk_size: int = 800,
     overlap: int = 100,
 ) -> dict[str, Any]:
-    """Index all reference markdown for one learning department into Chroma.
+    """Index all reference files for one learning department into Chroma.
 
     Idempotent by default (`upsert` on stable chunk IDs). Use `force=True` to
     drop and recreate the collection (e.g., after embedding model change).
@@ -132,52 +252,63 @@ def ingest(
     total_chunks = 0
     total_sources = 0
     skipped_unchanged = 0
-    for rel_path, body, meta, fhash in _iter_reference_files(dept_dir):
+    by_category: dict[str, int] = {}
+
+    for rel_path, category, body, fm_meta, extra_meta, fhash in _iter_reference_files(dept):
         body = body.strip()
         if not body:
             continue
         total_sources += 1
 
-        # Skip if first chunk already indexed with the same file_hash. Cheap O(1)
-        # lookup before paying for ~30 BGE-m3 embeddings per file (~70s on CPU).
+        # Skip if first chunk already indexed with same file_hash. O(1) lookup.
         first_id = f"{rel_path}::0"
         if not force:
             try:
                 existing = collection.get(ids=[first_id], include=["metadatas"])
                 if existing.get("ids") and existing.get("metadatas"):
-                    prev_hash = existing["metadatas"][0].get("file_hash")
-                    if prev_hash == fhash:
+                    prev_meta = existing["metadatas"][0] or {}
+                    prev_hash = prev_meta.get("file_hash")
+                    prev_category = prev_meta.get("category")
+                    if prev_hash == fhash and prev_category == category:
                         skipped_unchanged += 1
                         continue
-                    if prev_hash is None:
-                        # Backfill: legacy index without file_hash. Patch every
-                        # chunk's metadata (no re-embedding, ~30s for whole dept).
-                        try:
-                            chunk_set = collection.get(
-                                where={"source_id": rel_path},
-                                include=["metadatas"],
-                            )
-                            all_ids = chunk_set.get("ids", [])
-                            metas_now = chunk_set.get("metadatas", [])
-                            if all_ids:
-                                patched = [
-                                    {**(m or {}), "file_hash": fhash}
-                                    for m in metas_now
-                                ]
-                                collection.update(ids=all_ids, metadatas=patched)
-                                skipped_unchanged += 1
-                                log.info(
-                                    "file_hash_backfilled",
-                                    source=rel_path,
-                                    chunks=len(all_ids),
+                    # Backfill: legacy index without category (or hash) → patch metadata
+                    # without re-embedding.
+                    try:
+                        chunk_set = collection.get(
+                            where={"source_id": rel_path},
+                            include=["metadatas"],
+                        )
+                        all_ids = chunk_set.get("ids", [])
+                        metas_now = chunk_set.get("metadatas", [])
+                        if all_ids and prev_hash == fhash:
+                            patched = [
+                                _build_metadata(
+                                    rel_path,
+                                    category,
+                                    dept,
+                                    fm_meta,
+                                    extra_meta,
+                                    fhash,
+                                    (m or {}).get("chunk_index", i),
                                 )
-                                continue
-                        except Exception as e:  # noqa: BLE001
-                            log.warning(
-                                "file_hash_backfill_failed",
+                                for i, m in enumerate(metas_now)
+                            ]
+                            collection.update(ids=all_ids, metadatas=patched)
+                            skipped_unchanged += 1
+                            log.info(
+                                "metadata_backfilled",
                                 source=rel_path,
-                                error=str(e),
+                                category=category,
+                                chunks=len(all_ids),
                             )
+                            continue
+                    except Exception as e:  # noqa: BLE001
+                        log.warning(
+                            "metadata_backfill_failed",
+                            source=rel_path,
+                            error=str(e),
+                        )
             except Exception as e:  # noqa: BLE001
                 log.debug("hash_check_failed", source=rel_path, error=str(e))
 
@@ -185,29 +316,14 @@ def ingest(
         if not chunks:
             continue
         ids = [f"{rel_path}::{i}" for i in range(len(chunks))]
-        title = str(meta.get("title") or Path(rel_path).stem)
-        subfolder = _resolve_subfolder(rel_path, meta)
-        carry = {
-            k: meta[k]
-            for k in _META_WHITELIST
-            if k in meta and k not in {"title", "subfolder"}
-        }
         metadatas = [
-            {
-                "source_id": rel_path,
-                "source_type": "markdown",
-                "source_title": title,
-                "source_subfolder": subfolder,
-                "chunk_index": i,
-                "dept": dept,
-                "file_hash": fhash,
-                **carry,
-            }
+            _build_metadata(rel_path, category, dept, fm_meta, extra_meta, fhash, i)
             for i in range(len(chunks))
         ]
         try:
             collection.upsert(ids=ids, documents=chunks, metadatas=metadatas)
             total_chunks += len(chunks)
+            by_category[category] = by_category.get(category, 0) + 1
         except Exception as e:  # noqa: BLE001
             log.warning("chroma_upsert_failed", source=rel_path, error=str(e))
 
@@ -217,6 +333,7 @@ def ingest(
         "sources": total_sources,
         "chunks": total_chunks,
         "skipped_unchanged": skipped_unchanged,
+        "by_category": by_category,
         "index_path": str(index_dir),
         "embedding_model": embedding_model,
     }
