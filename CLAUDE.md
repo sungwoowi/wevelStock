@@ -1,27 +1,27 @@
 # wevelStock — AI 에이전트 협업 주식 분석 시스템 (루트 컨텍스트)
 
 ## 프로젝트 개요
-5-Layer AI 에이전트 주식 분석 & 매매가이드 시스템. 학습부 → 분석가 → 전략가 → 계좌관리자 → 출력 채널의 단방향 흐름.
+5-Layer AI 에이전트 주식 분석 & 매매가이드 시스템. 지식부 → 분석가 → 전략가 → 계좌관리자 → 출력 채널의 단방향 흐름.
 크로스 플랫폼(Mac + Windows). DB: SQLite. API: 한국투자증권(KIS) + KRX.
 
 ## 5-Layer 도메인 모델 (불변 골격)
 | Layer | 역할 | 시작 수 | 폴더 |
 |---|---|---|---|
-| 1. 학습부 | 분석가가 읽을 자료 | 5 | `knowledge/canon/<learning_dept>/` |
-| 2. 분석가 | 자료 → 판단 (학습부 1:1) | 5 | `agents/analysts/<analyst_id>/persona.md` (M3 신설) |
+| 1. 지식부 | 분석가가 읽을 자료 | 9 | `knowledge/canon/<dept>/<category>/` |
+| 2. 분석가 | 자료 → 판단 (지식부 1:1) | 9 | `agents/analysts/<analyst_id>/persona.md` (M3 신설) |
 | 3. 전략가 | horizon별 종합 (단타·스윙·중장기) | 3 | `agents/strategists/<strategist_id>/persona.md` (M4) |
 | 4. 계좌관리자 | 4 계좌 + 자산배분 | 1 | `agents/account_manager/persona.md` (M5) |
 | 5. 출력 채널 | 브리핑 / 추천 / 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
 
-학습부 5 = 원칙부(`principles/`) · 실전부(`mechanics/`) · 자산복리부(`wealth_compounding/`) · 종목분석부(`stock-analysis/`) · 뉴스부(`news/`).
-분석가 5 = 원칙수호자 · 매매코치 · **자산전략가** · 종목분석가 · 뉴스큐레이터 (1:1 매핑).
-plugin 패턴: 새 학습부/분석가/전략가는 폴더 + manifest 드롭만으로 추가. 분화는 운용 중 trigger 시.
+지식부 9 = 원칙부(`principles/`) · 트레이딩부(`trading/`) · 시장매크로부(`market_macro/`) · 종목선정부(`stock_selection/`) · 종목분석부(`stock-analysis/`) · 자산복리부(`wealth_compounding/`) · 매매저널부(`trading_journal/`) · 수급분석부(`flow_analysis/`) · 뉴스부(`news/`).
+분석가 9 = 원칙수호자 · 트레이더 · 시장상태분석가 · 종목선정가 · 종목분석가 · 자산전략가 · 매매저널리스트 · 수급분석가 · 뉴스큐레이터 (1:1 매핑).
+plugin 패턴: 새 지식부/분석가/전략가는 폴더 + manifest 드롭만으로 추가. 분화는 운용 중 trigger 시.
 
 ## 최상위 구조
 ```
 pipelines/    — 🔀 시간대별 실행 단위 (Layer 5 의 한 형태). manifest.yaml 에 stages + schedule.
 agents/       — 🧠 페르소나 보관소 (Layer 2~4). M3 부터 점진 신설.
-knowledge/    — 📚 학습부 (Layer 1). canon/<learning_dept>/.
+knowledge/    — 📚 지식부 (Layer 1). canon/<dept>/<category>/.
 collectors/   — 📥 공용 수집 모듈 (KIS/KRX/yfinance 호출).
 checkers/     — ✅ 순수 규칙 체커 (LLM 없음).
 connectors/   — 🔌 외부 API 어댑터 (KIS/KRX/...).
@@ -47,7 +47,7 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 - 사용자가 이 명령을 안 불러도 **세션 시작 시 최소한 `docs/a_wanted/user_want_spec.md` 와 `docs/RESUME.md` 는 읽고 시작할 것.**
 
 ## 절대 원칙
-1. **파이프라인 간 코드 import 금지**. 통신은 DB 테이블(`team_outputs` / `briefing_parts`)과 계약 JSON 으로만.
+1. **파이프라인 간 코드 import 금지**. 통신은 DB 테이블(`team_outputs` / `briefing_parts`)과 계약 JSON 으로만. (근거: 시점 일관성·frame 응집·debugging — 본질·trade-off 는 [docs/AGENT-ARCHITECTURE.md](docs/AGENT-ARCHITECTURE.md) 참조)
 2. **SPEC 없이 코드 쓰지 말 것**. 스펙이 없으면 먼저 `/spec-interview` 로 작성.
 3. **SPEC frontmatter의 `generates` 경로에만 파일 생성**. 다른 위치에 만들면 validate가 실패.
 4. **표준 파이프라인 레이아웃 100% 준수**. `__init__.py`, `manifest.yaml`, `stages/` 는 필수.
@@ -87,7 +87,7 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 - 판단은 LLM이 하되, 데이터 수집·지표 계산은 순수 코드가 한다.
 - 서버가 죽었다 살아나도 맥락 유지: Gap Filler + Memory Layer + Knowledge Layer
 - **Memory Layer** (`core/memory/`): 분석가/전략가 판단의 시계열 맥락 보존, 일/주/월 롤업, 멱등성 캐시.
-- **Knowledge Layer** (`core/knowledge/`): 5 학습부 자료 (`knowledge/canon/<learning_dept>/`) 항상 주입 + Reference(Chroma RAG).
+- **Knowledge Layer** (`core/knowledge/`): 9 지식부 자료 (`knowledge/canon/<dept>/<category>/`) 항상 주입 + Reference(Chroma RAG).
 
 ## 분석가/전략가 통신 계약 (요약)
 각 분석가는 StandardOutput JSON 을 반환하고 `team_outputs` 테이블에 저장 (전략가가 종합 시 이 행들을 read).
@@ -130,14 +130,14 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 
 ## 전략가 라우팅 (Layer 3, M4 이후 구현)
 - 단타: 종목분석가 + 뉴스큐레이터 → 당일 시그널
-- 스윙: 종목분석가 + 자산전략가 + 매매코치 → 수일~수주
+- 스윙: 종목분석가 + 자산전략가 + 트레이더 → 수일~수주
 - 중장기: 자산전략가 + 종목분석가 + 원칙수호자 → 장기 보유
 > 라우팅은 전략가 manifest 의 `analysts: [...]` 로 선언.
 
 ## LLM 호출 규칙 (런타임)
 - 데이터 수집·계산은 코드, 판단·해석은 LLM API 호출.
 - 기본 모델: Claude Sonnet 4 (`ANTHROPIC_API_KEY` 필요).
-- LLM 호출 시 반드시 해당 분석가의 persona.md + 본인 학습부의 canon md 주입 (`load_shared_canon()` 이 5 학습부 재귀 로드).
+- LLM 호출 시 반드시 해당 분석가의 persona.md + 본인 지식부의 canon md 주입 (`load_shared_canon()` 이 9 지식부 재귀 로드).
 - **Anthropic Prompt Caching 활용** (system 부분 캐시로 비용 90% 절감).
 - 호출 결과는 `team_memory` + `llm_call_cache` 테이블에 저장.
 - 멱등성: `input_hash = sha256(input + context_snapshot + model + contract_version)`.
