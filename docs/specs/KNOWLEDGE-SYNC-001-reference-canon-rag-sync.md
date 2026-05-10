@@ -484,9 +484,12 @@ CREATE INDEX IF NOT EXISTS idx_kir_dept_started ON knowledge_index_runs(dept, st
    - 검증: `wealth_strategist` manifest `canon_categories: [wealth_compounding/macro_roadmap]` → canon 18,726 → 3,935 chars (79% 감소), RAG block macro_roadmap 청크만 회수
    - tests: `test_retrieve_categories.py` (4) + `test_compose_canon_categories.py` (7) = +11, 회귀 122 passed
 
-**Phase 2 — M2: sync run + DB** (다음)
-8. `core/db/schema.py` 에 `knowledge_index_runs` 추가
-9. `core/knowledge/sync.py` 작성 (delta 발견 → 어댑터 → 인덱싱 → run log)
+**Phase 2 — M2: sync run + DB** (2026-05-10 완료)
+8. ✅ `core/db/schema.sql` 에 `knowledge_index_runs` 테이블 + `idx_kir_dept_started` 인덱스 추가 (schema_version 4)
+9. ✅ `core/knowledge/sync.py` 작성 — `sync_dept(dept, *, since_run_id=None)` + `sync_all()`. collection metadata 비교로 delta 분류 (added/modified/deleted) → upsert + hard delete (where source_id) → DB run log update
+   - `_allocate_sync_id`: 분 단위 → 초 단위 → ms PK 충돌 fallback
+   - tests: `test_knowledge_sync.py` (6) = +6, 회귀 128 passed
+   - 실 호출: `uv run python -m core.knowledge.sync wealth_compounding` → delta 0 확인 (M1 까지 인덱싱된 25 sources / 787 chunks 그대로), DB row 적재 확인
 
 > ⛔ **Phase 3 prerequisite: M3 분석가 분화 SPEC 완료** — 5명 분석가의 `persona.md` (`canon_categories: [...]`) + `_category.yaml` 의 `target_analysts` 가 채워져야 PROPOSAL/release note LLM 추론이 정확. M3 전에는 reference 인덱싱(Phase 1~2)만 가동, PROPOSAL/release note 는 미작동.
 

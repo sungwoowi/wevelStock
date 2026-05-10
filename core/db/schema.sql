@@ -261,6 +261,28 @@ CREATE INDEX IF NOT EXISTS idx_briefing_parts_lookup
     ON briefing_parts(pipeline_id, created_at DESC);
 
 -- ============================================================
+-- knowledge_index_runs — KNOWLEDGE-SYNC-001 Phase 2 M2
+-- 한 번의 sync run 단위 운영 로그. delta = collection metadata 비교.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS knowledge_index_runs (
+    sync_id           TEXT PRIMARY KEY,        -- "YYYY-MM-DD-HHMM" (충돌 시 -SS)
+    dept              TEXT NOT NULL,
+    started_at        TEXT NOT NULL,
+    ended_at          TEXT,
+    status            TEXT NOT NULL,           -- running | success | partial | failed
+    files_added       INTEGER DEFAULT 0,
+    files_modified    INTEGER DEFAULT 0,
+    files_deleted     INTEGER DEFAULT 0,
+    chunks_upserted   INTEGER DEFAULT 0,
+    chunks_deleted    INTEGER DEFAULT 0,
+    proposal_path     TEXT,
+    release_note_path TEXT,
+    error             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_kir_dept_started
+    ON knowledge_index_runs (dept, started_at DESC);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -271,3 +293,4 @@ CREATE TABLE IF NOT EXISTS schema_version (
 INSERT OR IGNORE INTO schema_version (version) VALUES (1);
 INSERT OR IGNORE INTO schema_version (version) VALUES (2);
 INSERT OR IGNORE INTO schema_version (version) VALUES (3);
+INSERT OR IGNORE INTO schema_version (version) VALUES (4);
