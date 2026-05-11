@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **KNOWLEDGE-SYNC-001 Phase 2 풀세트 + 사전 부채 회복** — M3 watchdog 마감으로 프로토타입 1차 동작점 (reference drop → 60s 자동 색인) 유지. 직전 부채 `test_render_data_source_line_mixed` 시각 freeze 보강으로 **pytest 135 passed (134 → +1, 회귀 0)** 베이스라인 완전 회복. 모듈 단위 `datetime` monkeypatch 패턴 확립 (`snap_mod.datetime = _FrozenDateTime` 으로 `build_market_snapshot` 안 cron 임계 비결정성 차단). 다음 세션 Top 1 = M3 분석가 분화 SPEC = **프로토타입 가동의 핵심** (변동 없음).
+**현재 위치**: **ANALYST-PERSONAS-001 SPEC 신설 + 자산전략가 v1→v4 4 회 반복** — 8-섹션 portable 양식 정식 정의 + 9 분석가 ID·dept·canon_categories 매핑 + 자산전략가 첫 분석가로 페르소나 격자 양식 검증. Gemini Gems 예시 비교로 격자·시나리오 강제 vs wevelStock 9분화 차별점 추론. 4 회 반복 패치 후 **LLM 추종력 한계 노출** — CLI 검증은 통과 (J커브 정의 질문에 격자 안 나옴) but webapp 사용자 호출에서 다시 격자 박힘. **페르소나 layer 만으로 100% 분기 결정론 불가능** 결론. 본질 해결 = compose 분기 (격자 양식을 persona 에서 분리, server 가 keyword trigger 로 동적 주입) — 다음 세션 1순위. pytest **135 passed** 유지 (회귀 0).
 
-**마지막 작업일**: 2026-05-11 (같은 날 세 번째 세션)
-**마지막 세션 로그**: [2026-05-11_market-snapshot-mixed-freeze-3.md](c_worked/2026-05-11_market-snapshot-mixed-freeze-3.md)
-**Git**: 1 commit + push — `a10f651` (fix(tests): freeze now_kst in test_render_data_source_line_mixed). wrap-up commit 1개 추가 예정.
+**마지막 작업일**: 2026-05-12 (자정 넘김, 2026-05-11 네 번째 세션)
+**마지막 세션 로그**: [2026-05-12_analyst-personas-001-v1-to-v4.md](c_worked/2026-05-12_analyst-personas-001-v1-to-v4.md)
+**Git**: wrap-up commit 1개 진행 예정 (코드 변경은 분석가 persona/manifest + SPEC 신설).
 
 ---
 
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션) — **프로토타입 가동 핵심**
-- **왜**: Phase 2 풀세트(watchdog 자동 색인) 가동점에 도착. 다음 의미점은 **9 분석가 페르소나 작성으로 production 호출 가능** 분기. 페르소나의 `canon_categories: [<dept>/<category>, ...]` 가 자동 sync 흐름과 결합 동작 확인 가능. 자산전략가 1명만 활성 → 4명 (원칙수호자/트레이더/종목분석가/자산전략가) 으로 확장 + 자료 0 시드 5명 페르소나만으로 시작.
-- **범위**: M3 SPEC 신설 + 9 페르소나 (8-섹션 portable: Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + identity seed PROPOSAL 흐름 (자료 0 시드 5명) + portable 검증 (다른 LLM 같은 페르소나 호출 → 일관성).
-- **예상**: 3~5 세션.
+### 1. compose 분기 SPEC + 구현 (PC, 1.5~2 세션) — **본질 해결, 9 분석가 공통 인프라**
+- **왜**: 자산전략가 페르소나 v1→v4 4 회 반복 패치로 LLM 추종력 한계 노출. persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한 — 페르소나 layer 만으로 분기 결정론 불가. 페르소나 작성 진도 막힘.
+- **범위**: 새 SPEC (`INFRA-PROMPT-TRIGGER-001` 또는 ANALYST-PERSONAS-001 modifies 확장) 신설 + `core/knowledge/compose.build_pipeline_prompt` 에 사용자 질문 keyword 분기 로직 추가 (positive trigger 감지 시 격자 prompt template system 마지막에 동적 주입 / negative trigger·일반 질문 시 격자 텍스트 미주입). persona/manifest 에서 격자 양식 텍스트 통째 제거. tests/test_compose_prompt_trigger.py 신설. LLM 추종력 의존 0 → **결정론 100%**. 9 분석가 공통 분기 layer 단일화.
+- **예상**: 1.5~2 세션.
 
-### 2. stock-analysis dept 첫 인덱싱 + 검증 (PC, ~1 세션)
-- **왜**: 어댑터 5종 (md/txt/pdf/xlsx/png) 다 굴리는 첫 사례. M3 자동 색인 가동 후 `just knowledge-sync stock-analysis` 또는 reference drop 자동 sync. xlsx 어댑터 sheet 별 분리 여부 실 자료 (`4.로그차트_advanced/`) 보고 결정.
-- **범위**: 이미지 PDF 미실행 백로그 (OCR 도입 후), png 어댑터 vision 활성화 검토 (비용 가시화 후). 검증 = retrieve smoke 4건 정확 + 카테고리 분포 출력.
+### 2. 미국 매크로 collector SPEC 신설 (PC, ~1 세션) — 실시간 grounding 인프라
+- **왜**: v3 페르소나에 "snapshot 외 수치 framework 밖" 룰 명시. 그러나 현재 snapshot 에 미국 매크로 (미 10년물·달러인덱스·VIX·미 부채 잔액) 부재 → 자산전략가·시장상태분석가·트레이더가 framework 만 갖고 학습 데이터 수치 추정 (책 인덱싱 답) 잠재. v3 grounding 룰의 인프라 보강.
+- **범위**: 새 SPEC (`INFRA-US-MACRO-SNAPSHOT-001`) — yfinance 또는 FRED API. `collectors/snapshot.py` 확장으로 미국 블록 자동 주입 (기존 KR 블록과 분리). `render_snapshot_md` 미국 블록 헤더 추가. pytest 회귀 + 자산전략가 실 호출로 grounding 검증.
 - **예상**: ~1 세션.
 
-### 3. streaming 토글 UI + AbortController (PC, ~1.5h)
-- **왜**: streaming 은 default ON 이지만 회귀 옵션 + 응답 길어질 때 사용자 중단 옵션이 없음. analyst-chat 사용성 핵심 작은 보강. M3 SPEC 들어가기 전 작은 단위 작업.
-- **범위**: webapp `analyst-chat/page.tsx` 의 fetch ReadableStream 에 AbortController 결합 + 토글 컴포넌트 1개 + cancel 버튼. mock 응답 시는 자동 비활성.
-- **예상**: ~1.5h.
+### 3. 나머지 8 분석가 페르소나 작성 (PC, 3~4 세션) — compose 분기 + 미 매크로 collector 완료 후
+- **왜**: ANALYST-PERSONAS-001 마일스톤 세션 2~5. 자료 있는 3명 (principle_guardian / trader / stock_analyst) → 자료 0 시드 5명 (market_state / stock_picker / trading_journalist / flow_analyzer / news_curator). 각자 frame 격자 + 시나리오 분기 + Cross-Agent Boundaries 일관 적용.
+- **범위**: 분석가별 `agents/analysts/<id>/{persona.md, manifest.yaml}` 신설. 격자 양식 텍스트 자체는 compose 분기 인프라가 관리하므로 페르소나는 frame 톤·인용 룰만 보유. 36 카테고리 `_category.yaml` 의 `target_analysts` 점진 채움.
+- **예상**: 3~4 세션 (분석가 2명/세션 페이스).
 
-(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf`) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로 / `wealth_strategist` manifest 의 canon_categories 검증값 → 6 카테고리 전체 복귀 (M3 SPEC))
+(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf`) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로 / Layer 3 전략가 3종 (M4) / Layer 4 계좌관리자 (M5))
 
 ---
 
@@ -105,9 +105,13 @@
 - **Phase 2 M2: sync run + DB run log + delta 인덱싱** (2026-05-11) — `core/db/schema.sql` 에 `knowledge_index_runs` (sync_id PK / dept / started_at / ended_at / status / files_{added,modified,deleted} / chunks_{upserted,deleted} / proposal_path / release_note_path / error) + `idx_kir_dept_started` 인덱스 + schema_version 4. `core/knowledge/sync.py` 신규 — `sync_dept(dept, *, since_run_id=None)` + `sync_all()`. ingest 의 `_iter_reference_files`/`_build_metadata`/`_chunk_text` 재사용. collection metadata 비교로 `source_id → file_hash` 맵 추출 → delta 분류 (added/modified/deleted) → upsert + hard delete (`where source_id`). modified 는 청크 수 감소 케이스 위해 pre-delete + upsert. `_allocate_sync_id` 분→초→ms PK fallback. CLI = `python -m core.knowledge.sync <dept>` (생략 시 8 dept). `tests/test_knowledge_sync.py`(6) 신규 = pytest **128 passed** (122 → +6). 4-단계 회로 검증 (add 1 / modify 1 / delete 1 / DB 4 row) 정확. 1 commit + push (`0aadf8a`)
 - **Phase 2 M3: watchdog 자동 색인 + justfile 정리** (2026-05-11, 같은 날 두 번째 세션) — `core/knowledge/watcher.py` 신규 (watchdog Observer + `_Debouncer` threading.Timer dept 단위 coalesce + `_extract_dept` `_` prefix dept None + `_build_handler` `is_directory` skip / `moved` 시 src+dest 둘 다 처리 + `start_observer`/`stop_observer`/`run_forever` standalone + CLI `--reference-root`/`--debounce`). `core/knowledge/sync.py` 확장 (`sync_dept(force=False)` drop 직전 prev 카운트를 deleted 로 적재 → collection drop → 전체 added 재구축, `recent_runs(limit, dept)` helper, `_format_status_row` 1줄, CLI `--force`/`--status`/`--limit`, `_open_collection(drop_existing=)`). `server/main.py` lifespan startup 에 `start_observer()` 자동 등록 + `sync_all` fire-and-forget reconcile (BGE-m3 cold load 회피) / shutdown 에 reconcile_task cancel + `stop_observer`. `justfile` 정리 — 기존 3 명령 (`knowledge-sync` 구 OneDrive 추출 / `-ingest` / `-reingest`) 제거, 신규 5 명령 (`knowledge-sync` delta / `-rebuild` force / `-status` DB log / `-watch` standalone / `-browse` 유지). 외부→reference 이동은 사용자 manual 결정. `tests/test_knowledge_watcher.py`(7 cases: `_extract_dept` 3 + `_Debouncer` 3 + Observer 통합 1) 신규 = pytest **134 passed** (128 → +7, 회귀 0). 수동 회로 검증 4-단계 (add 1 +1/~0/-0 / modify 1 +0/~1/-0 / delete 1 +0/~0/-1) 적재 정확. server log: `watcher_started` + `knowledge_reconcile_done` 자동 등록 확인. 2 commits + push (`3228eb5` M3 코드 + `c078541` chore: sqlite-db MCP entry 제거).
 - **사전 부채 보강: market_snapshot mixed 테스트 시각 freeze** (2026-05-11, 같은 날 세 번째 세션) — `tests/test_market_snapshot.py::test_render_data_source_line_mixed` 에 `_FrozenDateTime(datetime)` 클래스 + `monkeypatch.setattr(snap_mod, "datetime", _FrozenDateTime)`. freeze 시각 = 2026-05-12 (화) KST 20:30 → KR threshold ~6h (kr_age 3일 stale → fetch), US threshold ~13.5h (us_age 12h fresh → DB). pytest **135 passed** (134 → +1, 회귀 0) 베이스라인 회복. 1 commit + push (`a10f651`).
+- **ANALYST-PERSONAS-001 SPEC 신설 + 자산전략가 v1→v4 4 회 반복** (2026-05-12, 네 번째 세션) — `docs/specs/ANALYST-PERSONAS-001-nine-analyst-portable-personas.md` 신설. 8-섹션 portable 양식 정식 정의 (Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + 9 분석가 ID·dept·canon_categories 매핑 표 (`principle_guardian` / `trader` / `market_state_analyzer` / `stock_picker` / `stock_analyst` / `wealth_strategist` / `trading_journalist` / `flow_analyzer` / `news_curator`) + identity seed Phase A-B-C 흐름 + SLOT (S5 미 매크로 collector / S6 LLM tool use). `agents/analysts/wealth_strategist/persona.md` 4 회 재작성 (v1 5→8섹션 portable / v2 격자 5요소 강제 / v3 Task trigger 분기 + Inputs 재조정 + Anti-patterns 책 인덱싱 차단 / v4 자연어 default 우선 + negative trigger 명시). `manifest.yaml` canon_categories 6개 정렬 + response_rules 시스템 [5] 블록 강화. CLI 4 호출 검증 통과 (J커브 정의 질문 격자 안 나옴 / 표 요청 질문 격자 나옴). 그러나 **webapp 사용자 호출 "J커브가 뭔지 설명해줘" 에 격자 박힘 → LLM 추종력 한계 노출**. 페르소나 layer 만으로 100% 분기 결정론 불가능 결론. pytest 135 passed 유지.
 
 ### 미완 또는 의도적 공백
-- **9 분석가 페르소나 작성 (M3 SPEC)** — 자료 있는 4 (원칙수호자/트레이더/종목분석가/자산전략가) + 자료 0 시드 5 (시장상태분석가/종목선정가/매매저널리스트/수급분석가/뉴스큐레이터). 8-섹션 portable 양식. Phase 2 풀세트 완료 후 본격 진입. **프로토타입 가동의 핵심**
+- **나머지 8 분석가 페르소나 작성** — ANALYST-PERSONAS-001 마일스톤 세션 2~5. 자료 있는 3 (`principle_guardian` / `trader` / `stock_analyst`) + 자료 0 시드 5 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`). **compose 분기 인프라 완성 후 진입** (격자 양식 텍스트는 server 가 동적 주입 — 페르소나 본문은 frame 톤·인용 룰만 보유).
+- **compose 분기 인프라 미완** — 자산전략가 v4 페르소나가 LLM 추종력 한계로 webapp 호출 시 격자 trigger 분기 보장 X. 본질 해결 = `core/knowledge/compose.build_pipeline_prompt` 에 keyword trigger 분기 추가 + persona/manifest 에서 격자 양식 텍스트 통째 제거. 새 SPEC 후보 `INFRA-PROMPT-TRIGGER-001` (Top 1)
+- **미국 매크로 collector 부재** — 자산전략가 frame 의 핵심 입력 (미 10년물·달러인덱스·VIX·미 부채 잔액) 이 `collectors/snapshot.py` 에 미적재. v3 페르소나가 "snapshot 없음, framework 밖" 으로 솔직히 답하긴 하나 grounding 인프라 자체가 빈 상태. 새 SPEC 후보 `INFRA-US-MACRO-SNAPSHOT-001` (Top 2)
+- **36 카테고리 `_category.yaml` 의 `target_analysts` 채우기** — 현재 100% 비어있음. ANALYST-PERSONAS-001 SPEC 의 매핑 표가 ground truth. 자료 있는 4 dept 페르소나 완성 후 채움
 - **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 M1 ✅ (retrieve 카테고리 필터 + compose canon_categories) / Phase 2 M2 ✅ (DB knowledge_index_runs + sync.py delta 인덱싱) / Phase 2 M3 ✅ (watchdog 60s debounce + justfile 5 명령 정리 + server lifespan 자동 등록) — **Phase 2 풀세트 = 프로토타입 1차 동작점** / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 (M3 분석가 분화 SPEC 후) / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증
 - **다른 dept 재인덱싱** (principles / trading / stock-analysis 등) — Phase 2 sync 로 자동화 또는 수동 force re-index. stock-analysis 는 5형식 자료 풍부해 어댑터 검증 풍부 (백로그)
 - **이미지 PDF OCR 미실행** — 박종훈 Vol 2/3 4 파일 + `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 30페이지 0 chars. `ocrmypdf` + tesseract 백로그
@@ -141,10 +145,14 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-11 부채 보강)**
-- **모듈 단위 datetime monkeypatch 패턴**: `from datetime import datetime` 모듈은 `<module>.datetime` 이 모듈 attribute. `setattr(<module>, "datetime", FakeCls)` 로 갈아끼우면 해당 모듈 안 호출만 영향. 다른 모듈은 자기 import 본위라 무관. `_FrozenDateTime(datetime)` 으로 subclass + `now()` 만 override 가 가장 안전한 형식. 비결정 시각 의존 테스트의 표준 패턴.
-- **freeze 시각 결정 식**: cron 발동 시각 기반 임계 검증 시 weekday<5 + now ≥ today_cron 면 `_last_expected_*_cron` 이 오늘 cron 반환 → now-cron = threshold. 테스트가 의도하는 fresh/stale path 가 정해지면 그 path 가 안정적으로 성립하는 시각 1개로 freeze (이번엔 화 KST 20:30).
-- **사전 부채 = 분리 처리 정합**: M3 작업 중 식별만 해두고 분리 표기 → 별도 세션에서 단독 보강. 큰 마일스톤(M3) 안에 묶지 않는 게 회귀 비교 정합.
+**이번 세션에 굳힌 판단 (2026-05-12 ANALYST-PERSONAS-001 + v1→v4)**
+- **페르소나 layer 만으로 LLM 분기 결정론 불가능**: persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한. v1→v4 4 회 패치 (5섹션→8섹션 portable / 격자 강제 / Task trigger 분기 / negative trigger 명시) 후 CLI 검증은 통과하나 webapp 호출에서 다시 격자 박힘. 본질 해결 = **격자 양식을 persona/manifest 에서 완전 제거 + server compose 가 사용자 질문 keyword 검사로 동적 주입**. LLM instruction following 의 stochastic 한계와 싸우지 말고 구조로 회피.
+- **Gemini Gems 차용 vs wevelStock 차별점**: 차용 ✅ (고유 framework 명명·격자 매트릭스·시나리오 분기 확률·인용 강제·단호한 결론). 버림 ❌ (단일 페르소나가 5 Task 통째 / 매수 액션 직접 지시 / 고정 베이스 데이터 hardcode / 검색 강제). 차별점 승화 (9 분화 boundary + 격자 자기 frame 깊이 + DB 누적 시점 일관성 + Layer 3 종합 가중).
+- **책 인덱싱 답 차단 메타 원칙**: RAG·canon = 강의·책 (시점 freeze) → **원리·렌즈** 로만 인용. 수치 인용은 system snapshot 의 실시간 값만. LLM 학습 데이터 수치 (예: "미 부채 39조 달러") 추정 = 환각. v3 Anti-patterns 에 명시. 단 snapshot 자체에 미국 매크로 부재 — `INFRA-US-MACRO-SNAPSHOT-001` 인프라 보강 필요 (Top 2).
+- **`load_analyst_spec` 캐시 없음** (`run_analyst.py:63-89`): 매 호출 디스크 fresh read. **persona/manifest 변경은 server 재시작 불필요, 다음 호출부터 즉시 반영**. `llm_call_cache` DB 캐시는 input_hash 기반 — 같은 user query = cache hit. 페르소나 변경해도 같은 질문은 캐시 응답 반환 (확인 시 다른 질문으로 검증 필요).
+
+**직전 세션 판단 (2026-05-11 부채 보강)**
+- **모듈 단위 datetime monkeypatch 패턴**: `from datetime import datetime` 모듈은 `<module>.datetime` 이 모듈 attribute. `setattr(<module>, "datetime", FakeCls)` 로 갈아끼우면 해당 모듈 안 호출만 영향. `_FrozenDateTime(datetime)` 으로 subclass + `now()` 만 override 가 가장 안전. 비결정 시각 의존 테스트의 표준 패턴.
 
 **직전 세션 판단 (2026-05-11 Phase 2 M3)**
 - **watcher 진입점 함수 1개 = 2곳 호출**: `start_observer()` 가 server lifespan + `just knowledge-watch` 둘 다에서 호출. "자동 등록 + standalone" 안 = 코드 비용 0 (함수 1개 정의 + 2 호출). 의사결정 시 "진입점 2군데" 처럼 보였으나 실제로는 동일 함수.

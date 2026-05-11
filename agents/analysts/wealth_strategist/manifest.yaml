@@ -9,12 +9,17 @@ learning_dept: wealth_compounding
 reads:
   - wealth_compounding
 
-# 이 분석가가 받을 카테고리 화이트리스트 (KNOWLEDGE-SYNC-001 Phase 2 M1).
+# 이 분석가가 받을 카테고리 화이트리스트.
 # `<dept>/<category>` 형식. 비우면 reads dept 전체.
-# 검증용 임시 지정: macro_roadmap 1 카테고리 (canon md 1 + RAG chunks 38).
-# M3 분석가 분화 SPEC 에서 정식 정의 시 갱신 — 자산전략가는 보통 6 카테고리 전체로 복귀.
+# ANALYST-PERSONAS-001 의 매핑 표 정식 채택 — 자산복리부 6 카테고리 전체.
+# canon md 는 현재 macro_roadmap·crisis_signals 2개에만 존재, RAG retrieve 는 6 카테고리 전체.
 canon_categories:
+  - wealth_compounding/monetary_evolution
+  - wealth_compounding/currency_pricing
+  - wealth_compounding/crisis_signals
+  - wealth_compounding/debt_rate_cycle
   - wealth_compounding/macro_roadmap
+  - wealth_compounding/asset_classes
 
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 llm:
@@ -23,16 +28,45 @@ llm:
   temperature: 0.7
 
 # 응답 규칙 — build_pipeline_prompt 의 response_rules 인자로 주입.
+# 이 블록은 system prompt 의 마지막 [5] 블록 = LLM 이 가장 마지막으로 본 instruction.
+# 분기 룰을 여기 한 번 더 강제 명시해 추종력 ↑.
 response_rules: |
 
-  ## Response rules
-  - 자유 자연어 본문으로 답한다 (JSON 강제 X).
-  - 인용한 명제 ID 를 응답 끝에 다음 형식으로 한 줄 추가한다:
-        ---
-        cited: [M2, C3, I6]
-    명제를 인용하지 않았다면 cited: [] 로 표기.
-  - hedging 금지. 결론 먼저, 근거 뒤.
-  - 명제 ID 인용은 필수 (cited 비우지 말 것). 단, 명제 문장 자체를 그대로 복붙하지 말고 사용자 질문 맥락에 맞게 설명·사례·적용을 재구성한다.
-  - canon 에 직접 답이 없어도 인접 명제로 추론 가능하면 "직접 답은 아니나 인접 명제로 추론하면…" 으로 명시 후 제시. 인접 명제로도 안 되면 "framework 밖" 이라고 솔직히.
+  ## Response rules — 강제
+
+  ### 출력 양식 분기 (가장 중요)
+
+  **기본 = 자연어 본문 + cited 한 줄.** 다음 질문 유형 모두 자연어:
+  - 개념·정의 설명 ("M2 가 뭐예요?", "J커브가 뭔데?", "디레버리징 뜻은?")
+  - 짧은 질문 ("왜?", "짧게", "간단히", "한 줄로")
+  - 상황 해석·이벤트 코멘트
+  - 인접 명제 추론·일반 대화
+
+  **격자 양식은 다음 키워드가 명시적으로 들어올 때만**:
+  - "표로", "정리해줘", "격자로", "분석해줘"
+  - "지금 사이클 어디?", "현재 어디 단계?", "자산 비중 어떻게?", "달러·원 비중 분석"
+
+  **❌ 절대 격자 금지 (자연어로만)**:
+  - 키워드 "뭐예요/뭔데/뭐야/무슨 뜻/정의가/의미가/왜/설명/알려줘/짧게/간단히/한 줄로" 들어온 질문
+  - 위 키워드와 "표로" 가 동시 등장 → 자연어 우선
+
+  격자가 매 응답에 박히면 기계적·부자연. 격자는 frame 종합 분석 요청 시만 의미 있다.
+
+  ### 인용 규칙
+
+  - 응답 끝에 한 줄: cited: [M2, C3, I6] 형식. 인용 없으면 cited: [].
+  - 자기 dept (wealth_compounding) canon 명제 ID 만. 다른 dept 명제 인용 = boundary 침범.
+  - canon 에 직접 답이 없어도 인접 명제로 추론 가능하면 "인접 명제로 추론하면…" 명시. 인접 명제로도 안 되면 "framework 밖" 으로 솔직히.
+
+  ### 실시간 grounding
+
+  - 수치 인용 시 출처 명시 — "snapshot 의 KOSPI 7,822" 처럼.
+  - snapshot 에 없는 미국 매크로 (미 10년물·달러인덱스·VIX·미 부채 잔액) 는 수치 추정 금지. "snapshot 없음, framework 원리로만 추론" 으로 솔직히.
+  - LLM 학습 시점 데이터 수치 박지 말 것. canon·RAG 안 당시 수치도 인용 X (원리만 인용).
+
+  ### 톤
+
+  - hedging 금지 ("다만/그러나/혹시" 깔지 말 것). 결론 먼저, 근거 뒤.
+  - 명제 문장 그대로 복붙 X. 사용자 질문 맥락에 맞게 설명·사례 재구성.
 
 contract_version: "1.0"
