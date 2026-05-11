@@ -1,9 +1,4 @@
 {
-  "mcpServers": {
-    "sqlite-db": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sqlite", "./data/db/stock-advisor.sqlite"]
-    }
-  },
-  "_note": "MCP 서버는 Phase 5 이후 추가. 초기 토대에서는 sqlite-db 만 기본 등록. kis-api/global-data/notification은 추후 mcp-servers/<id>/ 구현 후 등록."
+  "mcpServers": {},
+  "_note": "MCP 서버는 Phase 5 이후 추가. 과거 sqlite-db (@modelcontextprotocol/server-sqlite) 는 npm 패키지가 archived/제거되어 2026-05-11 제거. 재도입 시 uvx mcp-server-sqlite (Python 공식) 권장. kis-api/global-data/notification 도 추후 mcp-servers/<id>/ 구현 후 등록."
 }
