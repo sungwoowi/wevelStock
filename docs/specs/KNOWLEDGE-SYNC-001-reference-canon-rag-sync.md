@@ -379,10 +379,15 @@ png 의 vision 호출은 `core/llm/` 의 캐시·쿼터 정책을 그대로 사�
 
 ### 수동 명령
 
-- `just knowledge-sync` — 전체 dept 동기화 (델타)
-- `just knowledge-sync <dept>` — 특정 dept 만
-- `just knowledge-rebuild <dept>` — 인덱스 전체 재구축 (`force=True`)
-- `just knowledge-status` — 마지막 sync run 요약 (`knowledge_index_runs` 최신 row)
+> 외부 소스(OneDrive 등) → `knowledge/reference/<dept>/` 이동은 사용자 manual.
+> just 명령은 reference 에 자료 drop 된 이후의 인덱싱/정제 자동화만 담당.
+> (필요 시 `uv run python -m scripts.sync_knowledge <dept>` 직접 호출.)
+
+- `just knowledge-sync` — 8 dept 전체 delta sync
+- `just knowledge-sync <dept>` — 특정 dept delta sync
+- `just knowledge-rebuild <dept>` — collection drop + 전체 재구축 (drop 직전 prev 카운트가 deleted 로 적재돼 운영 가시화)
+- `just knowledge-status [dept]` — `knowledge_index_runs` 최신 N row 요약 (default 10)
+- `just knowledge-watch` — standalone watcher (server 미구동 시 대안. 평소엔 server lifespan 이 자동 등록)
 
 ## Claude 스킬 2개 (`.claude/skills/`)
 
@@ -490,6 +495,23 @@ CREATE INDEX IF NOT EXISTS idx_kir_dept_started ON knowledge_index_runs(dept, st
    - `_allocate_sync_id`: 분 단위 → 초 단위 → ms PK 충돌 fallback
    - tests: `test_knowledge_sync.py` (6) = +6, 회귀 128 passed
    - 실 호출: `uv run python -m core.knowledge.sync wealth_compounding` → delta 0 확인 (M1 까지 인덱싱된 25 sources / 787 chunks 그대로), DB row 적재 확인
+
+**Phase 2 — M3: watchdog + justfile + server lifecycle** (2026-05-11 완료) — 프로토타입 1차 동작점
+10. ✅ `core/knowledge/sync.py` 확장
+    - `sync_dept(dept, *, force=False)` 추가 — drop 직전 indexed_state 의 (files, chunks) 카운트를 `files_deleted` / `chunks_deleted` 로 적재 후 collection drop → 모든 reference 자료 added 로 재구축
+    - `recent_runs(limit=N, dept=None)` helper — `knowledge_index_runs` 최신 N row
+    - CLI 확장: `--force` (rebuild) + `--status` (recent_runs 1줄 포맷 출력) + `--limit`
+11. ✅ `core/knowledge/watcher.py` 신규
+    - `_extract_dept(path, reference_root)` — `_` prefix dept 는 None
+    - `_Debouncer` (threading.Timer, dept 단위 coalesce + stop() 시 pending 취소)
+    - `_build_handler` (watchdog `FileSystemEventHandler` — `is_directory` skip, `moved` 시 src+dest 둘 다 처리)
+    - `start_observer(reference_root, debounce_seconds=60, on_sync=...)` + `stop_observer(observer)` + `run_forever()` standalone 진입점
+    - `python -m core.knowledge.watcher` CLI (`--reference-root` / `--debounce`)
+12. ✅ `server/main.py` lifespan — startup 에 `start_observer()` 등록 + `sync_all()` fire-and-forget reconcile (절전 후 fsevents 누락 안전망, BGE-m3 cold load 위해 blocking 회피) / shutdown 에 reconcile_task cancel + `stop_observer()`
+13. ✅ `justfile` 정리 — 기존 `knowledge-sync`(외부 PDF 추출) / `-ingest` / `-reingest` 3 명령 제거. 신규 5 명령 (`knowledge-sync` / `-rebuild` / `-status` / `-watch` + `-browse` 유지). 외부→reference 는 사용자 manual 결정 (필요 시 `uv run python -m scripts.sync_knowledge`).
+14. ✅ tests: `test_knowledge_watcher.py` (7) = +7, 회귀 0 (134 passed; `test_render_data_source_line_mixed` 1건은 사전 부채 — 시간-의존 mock 누락, M3 영역 무관)
+    - 회로 검증 (단위): _extract_dept 3 (정상/`_prefix`/외부 path) + _Debouncer 3 (coalesce/dept 분리/stop cancel) + Observer 통합 1 (tmp dir 파일 생성 → 0.2s debounce → callback)
+    - 수동 회로 검증 (예정): server 띄움 → reference 에 자료 add/modify/delete 3-단계 → `just knowledge-status` 적재 확인
 
 > ⛔ **Phase 3 prerequisite: M3 분석가 분화 SPEC 완료** — 5명 분석가의 `persona.md` (`canon_categories: [...]`) + `_category.yaml` 의 `target_analysts` 가 채워져야 PROPOSAL/release note LLM 추론이 정확. M3 전에는 reference 인덱싱(Phase 1~2)만 가동, PROPOSAL/release note 는 미작동.
 

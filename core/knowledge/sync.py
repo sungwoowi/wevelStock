@@ -61,11 +61,17 @@ def _make_sync_id(now: datetime | None = None) -> str:
     return dt.strftime("%Y-%m-%d-%H%M")
 
 
-def _open_collection(dept: str, *, create_if_missing: bool = True) -> Any | None:
+def _open_collection(
+    dept: str,
+    *,
+    create_if_missing: bool = True,
+    drop_existing: bool = False,
+) -> Any | None:
     """Chroma collection 핸들. delta sync 는 ingest 와 같은 client 설정.
 
     `create_if_missing=False` 시 컬렉션 디렉토리가 비어있으면 None 반환 — 첫 sync 가
     아닐 때 잘못된 dept 호출을 빨리 탐지.
+    `drop_existing=True` 면 기존 collection 을 drop 후 재생성 (force 재구축 경로).
     """
     try:
         import chromadb  # type: ignore[import-not-found]
@@ -79,6 +85,12 @@ def _open_collection(dept: str, *, create_if_missing: bool = True) -> Any | None
 
     ef = get_embedding_function()
     client = chromadb.PersistentClient(path=str(index_dir))
+    if drop_existing:
+        try:
+            client.delete_collection(name=dept)
+            log.info("collection_dropped_for_force", dept=dept)
+        except Exception:  # noqa: BLE001 — 컬렉션 없을 때 안전 무시
+            pass
     return client.get_or_create_collection(name=dept, embedding_function=ef)
 
 
@@ -180,6 +192,7 @@ def sync_dept(
     dept: str,
     *,
     since_run_id: str | None = None,
+    force: bool = False,
     chunk_size: int = 800,
     overlap: int = 100,
 ) -> dict[str, Any]:
@@ -187,6 +200,10 @@ def sync_dept(
 
     `since_run_id` 는 SPEC 호환을 위해 인자로 받지만 M2 는 collection metadata 단일
     baseline (DB run log 는 운영 로그). 후속 마일스톤에서 적극 활용 가능.
+
+    `force=True` 면 기존 collection 을 drop 후 모든 reference 자료를 added 로 재구축
+    (`ingest --force` 의 sync 버전). drop 직전 indexed_state 의 카운트는
+    `files_deleted` / `chunks_deleted` 로 적재돼 운영 로그에서 가시화된다.
     """
     started_at = _now_iso()
     sync_id = _allocate_sync_id(dept, started_at)
@@ -211,6 +228,30 @@ def sync_dept(
             raise RuntimeError(f"failed to open collection for dept={dept}")
 
         indexed_state = _scan_indexed_state(collection)
+
+        if force and indexed_state:
+            # 운영 가시화: drop 직전 상태를 deleted 카운트로 적재
+            prev_files = len(indexed_state)
+            prev_chunks = sum(
+                len(slot.get("chunk_ids") or []) for slot in indexed_state.values()
+            )
+            counts["files_deleted"] += prev_files
+            counts["chunks_deleted"] += prev_chunks
+
+            # drop + recreate → indexed_state 비우고 모든 파일 added 로 재분류
+            collection = _open_collection(
+                dept, create_if_missing=True, drop_existing=True
+            )
+            if collection is None:
+                raise RuntimeError(f"failed to reopen collection after drop for dept={dept}")
+            indexed_state = {}
+            log.info(
+                "sync_force_drop",
+                dept=dept,
+                prev_files=prev_files,
+                prev_chunks=prev_chunks,
+            )
+
         seen_sources: set[str] = set()
 
         # add / modified
@@ -290,6 +331,7 @@ def sync_dept(
 def sync_all(
     *,
     since_run_id: str | None = None,
+    force: bool = False,
     chunk_size: int = 800,
     overlap: int = 100,
 ) -> list[dict[str, Any]]:
@@ -303,6 +345,7 @@ def sync_all(
             results.append(sync_dept(
                 dept,
                 since_run_id=since_run_id,
+                force=force,
                 chunk_size=chunk_size,
                 overlap=overlap,
             ))
@@ -311,24 +354,110 @@ def sync_all(
     return results
 
 
+def recent_runs(limit: int = 10, dept: str | None = None) -> list[dict[str, Any]]:
+    """`knowledge_index_runs` 최신 N row. dept 지정 시 해당 dept 만.
+
+    `just knowledge-status` 의 진입점. 운영자가 "방금 sync 어떻게 됐지?" 를 1줄로
+    확인하는 용도.
+    """
+    db = get_db()
+    if dept:
+        rows = db.fetch_all(
+            "SELECT * FROM knowledge_index_runs WHERE dept = ? "
+            "ORDER BY started_at DESC, sync_id DESC LIMIT ?",
+            (dept, limit),
+        )
+    else:
+        rows = db.fetch_all(
+            "SELECT * FROM knowledge_index_runs "
+            "ORDER BY started_at DESC, sync_id DESC LIMIT ?",
+            (limit,),
+        )
+    return [dict(row) for row in rows]
+
+
+def _format_status_row(row: dict[str, Any]) -> str:
+    """`knowledge-status` 출력용 1줄 포맷."""
+    sid = row.get("sync_id", "?")
+    dept = row.get("dept", "?")
+    status = row.get("status", "?")
+    added = row.get("files_added", 0) or 0
+    modified = row.get("files_modified", 0) or 0
+    deleted = row.get("files_deleted", 0) or 0
+    chunks_up = row.get("chunks_upserted", 0) or 0
+    chunks_del = row.get("chunks_deleted", 0) or 0
+    started = row.get("started_at", "")
+    ended = row.get("ended_at", "")
+    duration = ""
+    if started and ended:
+        try:
+            from datetime import datetime
+            t0 = datetime.fromisoformat(started)
+            t1 = datetime.fromisoformat(ended)
+            duration = f" ({(t1 - t0).total_seconds():.1f}s)"
+        except Exception:  # noqa: BLE001
+            pass
+    err = row.get("error")
+    err_suffix = f"  err={err}" if err else ""
+    return (
+        f"[{sid}] {dept:<22} {status:<8}{duration}  "
+        f"+{added}/~{modified}/-{deleted} files, "
+        f"+{chunks_up}/-{chunks_del} chunks{err_suffix}"
+    )
+
+
 def _cli() -> None:
     parser = argparse.ArgumentParser(
-        description="KNOWLEDGE-SYNC-001 M2 — delta sync + run log."
+        description="KNOWLEDGE-SYNC-001 M2/M3 — delta sync + run log + status."
     )
     parser.add_argument(
         "dept",
         nargs="?",
-        help="learning dept id (생략 시 8 dept 전체 sync)",
+        help="learning dept id (생략 시 8 dept 전체)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="기존 collection 을 drop 후 재구축 (knowledge-rebuild)",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="sync 실행 대신 knowledge_index_runs 최신 row 출력",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="--status 시 출력 row 수 (default=10)",
     )
     parser.add_argument("--chunk-size", type=int, default=800)
     parser.add_argument("--overlap", type=int, default=100)
     args = parser.parse_args()
 
+    if args.status:
+        rows = recent_runs(args.limit, dept=args.dept)
+        if not rows:
+            print("(no sync runs yet)")
+            return
+        for row in rows:
+            print(_format_status_row(row))
+        return
+
     if args.dept:
-        result = sync_dept(args.dept, chunk_size=args.chunk_size, overlap=args.overlap)
+        result = sync_dept(
+            args.dept,
+            force=args.force,
+            chunk_size=args.chunk_size,
+            overlap=args.overlap,
+        )
         print(result)
     else:
-        for r in sync_all(chunk_size=args.chunk_size, overlap=args.overlap):
+        for r in sync_all(
+            force=args.force,
+            chunk_size=args.chunk_size,
+            overlap=args.overlap,
+        ):
             print(r)
 
 

@@ -75,20 +75,32 @@ test-pipeline name:
 test-cov:
     uv run pytest --cov=core --cov=pipelines --cov=server --cov-report=html
 
-# === 지식 레이어 ===
+# === 지식 레이어 (KNOWLEDGE-SYNC-001 Phase 2 M3) ===
+# 외부 소스(OneDrive 등) → knowledge/reference/<dept>/ 이동은 사용자 수동.
+# (직접 호출 시: uv run python -m scripts.sync_knowledge <dept>)
 
-# 외부 source(OneDrive 등)의 PDF 를 reference/<learning_dept>/ 로 멱등 추출
-# 이미 추출된 파일은 skip — 새 PDF 추가 시 재실행만 하면 됨
-knowledge-sync dept:
-    uv run python -m scripts.sync_knowledge {{dept}}
+# reference 와 chroma collection 비교 → added/modified/deleted 만 처리 (delta sync).
+# 인자 없으면 8 dept 전체. dept 지정 시 해당 dept 만.
+# 예: just knowledge-sync
+#     just knowledge-sync wealth_compounding
+knowledge-sync *args:
+    uv run python -m core.knowledge.sync {{args}}
 
-# 학습부 RAG 인덱싱 (knowledge/reference/<dept>/ → data/chroma/<dept>/, 멱등 upsert)
-knowledge-ingest dept:
-    uv run python -m scripts.knowledge ingest {{dept}}
+# 컬렉션 drop 후 전체 재구축 (임베딩 모델 변경, 카테고리 메타 대규모 갱신 등).
+# 운영 로그(knowledge_index_runs)에 drop 직전 prev 카운트가 deleted 로 적재된다.
+knowledge-rebuild dept:
+    uv run python -m core.knowledge.sync --force {{dept}}
 
-# 학습부 RAG 강제 재인덱싱 (컬렉션 삭제 후 재생성 — 임베딩 모델 변경 시)
-knowledge-reingest dept:
-    uv run python -m scripts.knowledge ingest {{dept}} --force
+# knowledge_index_runs 최신 N row 출력. 인자에 dept 지정 시 해당 dept 만.
+# 예: just knowledge-status
+#     just knowledge-status wealth_compounding --limit 5
+knowledge-status *args:
+    uv run python -m core.knowledge.sync --status {{args}}
+
+# standalone watcher (server 미구동 시). reference/** 변경 감지 → 60s debounce → 자동 sync.
+# 평소엔 server 가 lifespan 에서 자동 등록하므로 별도 실행 불필요.
+knowledge-watch:
+    uv run python -m core.knowledge.watcher
 
 # 청크 검색 (디버깅용, top-5 단편 출력)
 knowledge-browse dept query:

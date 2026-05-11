@@ -52,7 +52,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         log.warning("gap_filler_failed", error=str(e))
 
-    # 5. Telegram bot (BRIEFING-ON-DEMAND-001) — long-polling task.
+    # 5. Knowledge watcher (KNOWLEDGE-SYNC-001 Phase 2 M3) — reference/** 변경 감지 + 60s debounce.
+    # 절전모드/서버 다운 중에 변경된 자료를 catchup 하기 위해 startup 시 1회 reconcile (fire-and-forget).
+    knowledge_observer = None
+    reconcile_task: asyncio.Task | None = None
+    try:
+        from core.knowledge.watcher import start_observer
+
+        knowledge_observer = start_observer()
+
+        async def _knowledge_reconcile() -> None:
+            try:
+                from core.knowledge.sync import sync_all
+
+                await asyncio.to_thread(sync_all)
+                log.info("knowledge_reconcile_done")
+            except Exception as e:  # noqa: BLE001
+                log.warning("knowledge_reconcile_failed", error=str(e))
+
+        reconcile_task = asyncio.create_task(_knowledge_reconcile())
+    except Exception as e:  # noqa: BLE001
+        log.warning("knowledge_watcher_init_failed", error=str(e))
+
+    # 6. Telegram bot (BRIEFING-ON-DEMAND-001) — long-polling task.
     # 토큰 미설정 시 build_application() 이 None 반환하여 봇만 비활성.
     bot_task: asyncio.Task | None = None
     try:
@@ -76,6 +98,21 @@ async def lifespan(app: FastAPI):
             pass
         except Exception as e:  # noqa: BLE001
             log.warning("telegram_bot_shutdown_failed", error=str(e))
+    if reconcile_task is not None and not reconcile_task.done():
+        reconcile_task.cancel()
+        try:
+            await reconcile_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning("knowledge_reconcile_shutdown_failed", error=str(e))
+    if knowledge_observer is not None:
+        try:
+            from core.knowledge.watcher import stop_observer
+
+            stop_observer(knowledge_observer)
+        except Exception as e:  # noqa: BLE001
+            log.warning("knowledge_watcher_stop_failed", error=str(e))
     shutdown_scheduler()
     stop_watcher()
 
