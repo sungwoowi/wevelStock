@@ -743,7 +743,24 @@ async def test_render_data_source_line_full_fetch() -> None:
 
 
 async def test_render_data_source_line_mixed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """KR fetch + US DB 혼합."""
+    """KR fetch + US DB 혼합.
+
+    임계는 cron 발동 시각 기반이라 현재 시각을 freeze 해야 결정적. 평일 (화요일)
+    KST 20:30 으로 고정 → KR threshold ~6h (kr_age=3일 stale → fetch),
+    US threshold ~13.5h (us_age=12h fresh → DB).
+    """
+    from datetime import datetime as _DT
+
+    frozen_now = _DT(2026, 5, 12, 20, 30, tzinfo=snap_mod._KST)
+
+    class _FrozenDateTime(_DT):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            if tz is not None:
+                return frozen_now.astimezone(tz)
+            return frozen_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(snap_mod, "datetime", _FrozenDateTime)
     _patch_db(monkeypatch, kr_age=86400 * 3, us_age=43200)  # 12h us
 
     snap, _ = await build_market_snapshot()
