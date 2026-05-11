@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **KNOWLEDGE-SYNC-001 Phase 2 M2 완료** — `knowledge_index_runs` 테이블 (sync_id PK + dept/started_at/ended_at/status/files_*/chunks_* + idx_kir_dept_started, schema_version 4) + `core/knowledge/sync.py` (sync_dept/sync_all, collection metadata 비교 기반 delta 분류, modified pre-delete + upsert, deleted hard delete `where source_id`, `_allocate_sync_id` 분→초→ms PK fallback). 4-단계 회로 검증 (add 1 / modify 1 / delete 1 / DB 4 row) 정확. tests +6 (test_knowledge_sync 6) → pytest **128 passed** (122 → +6). 다음 세션 Top 1 = Phase 2 M3 (watchdog + just 명령 4종) — 종료 시 reference push → 60s 자동 색인 = 프로토타입 1차 동작점.
+**현재 위치**: **KNOWLEDGE-SYNC-001 Phase 2 풀세트 완료** — M3 (watchdog + justfile 정리) 마감 = 프로토타입 1차 동작점 도달. `core/knowledge/watcher.py` (Observer + 60s debounce dept 단위 coalesce + `start_observer`/`stop_observer`/`run_forever`) + `core/knowledge/sync.py` 확장 (`sync_dept(force=True)` + `recent_runs()` + CLI `--force`/`--status`/`--limit`) + `server/main.py` lifespan 자동 등록 + `sync_all` fire-and-forget reconcile + `justfile` 5 명령 정리 (`knowledge-sync` delta / `-rebuild` force / `-status` DB log / `-watch` standalone / `-browse` 유지, 기존 3 명령 제거). 외부→reference 이동은 사용자 manual 결정. 수동 회로 검증 4단계 (add 1 / modify 1 / delete 1 / +baseline) 적재 정확. pytest **134 passed** (128 → +7 watcher). 다음 세션 Top 1 = M3 분석가 분화 SPEC = **프로토타입 가동의 핵심**.
 
-**마지막 작업일**: 2026-05-11
-**마지막 세션 로그**: [2026-05-11_phase-2-m2-sync-and-db.md](c_worked/2026-05-11_phase-2-m2-sync-and-db.md)
-**Git**: 이번 세션 1 commit + push (`0aadf8a` M2 코드 + 테스트 + 스키마 + SPEC 갱신) + wrap-up commit 1개 추가 예정.
+**마지막 작업일**: 2026-05-11 (같은 날 두 번째 세션)
+**마지막 세션 로그**: [2026-05-11_phase-2-m3-watchdog-and-just.md](c_worked/2026-05-11_phase-2-m3-watchdog-and-just.md)
+**Git**: 2 commits + push — `3228eb5` (M3 코드 + 테스트 + SPEC), `c078541` (chore: sqlite-db MCP entry 제거, npm archived). wrap-up commit 1개 추가 예정.
 
 ---
 
@@ -21,20 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. KNOWLEDGE-SYNC-001 Phase 2 M3 (PC, ~1 세션)
-- **왜**: M2 의 `sync_dept` 가 동작점 도착. M3 = 자동 트리거 + 사용자 인터페이스. 종료 시 = **사용자 reference push → 60s 자동 색인** = Phase 2 풀세트 동작점 (= 프로토타입 1차 동작점).
-- **범위**: `core/knowledge/watcher.py` (watchdog 60s debounce, `knowledge/reference/**` 변경 → `sync_dept` 호출) + server lifecycle 등록 + `scripts/knowledge_sync.py` (CLI wrap) + `justfile` 4 명령 (`knowledge-sync` / `knowledge-watch` / `knowledge-status` / `knowledge-rebuild`).
-- **예상**: ~1 세션.
-
-### 2. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션)
-- **왜**: 9 분석가 페르소나 작성으로 production 호출 가능 — 프로토타입 가동. Phase 2 풀세트 완료 후 본격 진입 (페르소나의 `canon_categories` 가 자동 sync 흐름과 결합 동작 확인 가능 시점). 프로토타입 가동의 핵심.
-- **범위**: M3 SPEC 신설 + 9 페르소나 (8-섹션 portable: Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + identity seed PROPOSAL 흐름 (자료 0 시드 5명: 시장상태 / 종목선정 / 매매저널 / 수급 / 뉴스) + portable 검증 (다른 LLM 같은 페르소나 호출 → 일관성).
+### 1. M3 분석가 분화 SPEC 작성 (PC, 3~5 세션) — **프로토타입 가동 핵심**
+- **왜**: Phase 2 풀세트(watchdog 자동 색인) 가동점에 도착. 다음 의미점은 **9 분석가 페르소나 작성으로 production 호출 가능** 분기. 페르소나의 `canon_categories: [<dept>/<category>, ...]` 가 자동 sync 흐름과 결합 동작 확인 가능. 자산전략가 1명만 활성 → 4명 (원칙수호자/트레이더/종목분석가/자산전략가) 으로 확장 + 자료 0 시드 5명 페르소나만으로 시작.
+- **범위**: M3 SPEC 신설 + 9 페르소나 (8-섹션 portable: Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + identity seed PROPOSAL 흐름 (자료 0 시드 5명) + portable 검증 (다른 LLM 같은 페르소나 호출 → 일관성).
 - **예상**: 3~5 세션.
 
-### 3. stock-analysis dept 첫 인덱싱 + 검증 (PC, ~1 세션)
-- **왜**: 어댑터 5종 (md/txt/pdf/xlsx/png) 다 굴리는 첫 사례. Phase 2 풀세트 도착 후 `just knowledge-sync stock-analysis` 또는 watchdog 자동 트리거. xlsx 어댑터 sheet 별 분리 여부 결정도 이 시점에 (실 자료 보고).
+### 2. stock-analysis dept 첫 인덱싱 + 검증 (PC, ~1 세션)
+- **왜**: 어댑터 5종 (md/txt/pdf/xlsx/png) 다 굴리는 첫 사례. M3 자동 색인 가동 후 `just knowledge-sync stock-analysis` 또는 reference drop 자동 sync. xlsx 어댑터 sheet 별 분리 여부 실 자료 (`4.로그차트_advanced/`) 보고 결정.
 - **범위**: 이미지 PDF 미실행 백로그 (OCR 도입 후), png 어댑터 vision 활성화 검토 (비용 가시화 후). 검증 = retrieve smoke 4건 정확 + 카테고리 분포 출력.
 - **예상**: ~1 세션.
+
+### 3. 사전 부채 보강: market_snapshot mixed 테스트 (~30min)
+- **왜**: `tests/test_market_snapshot.py::test_render_data_source_line_mixed` 가 시간-의존 mock 누락으로 깨져 있어 베이스라인이 -1. M3 코드 무관하지만 회귀 비교 정합 위해 보강 필요.
+- **범위**: `kr/us_threshold_seconds(now_kst)` cron 발동 시각을 freezegun 같은 mock 으로 freeze + DB latest part fixture 적재 → `미국=DB` 헤더 path 정확 진입. ~30분.
+- **예상**: 별도 작은 백로그.
 
 (추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf`) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로 / `wealth_strategist` manifest 의 canon_categories 검증값 → 6 카테고리 전체 복귀 (M3 SPEC))
 
@@ -103,10 +103,12 @@
 - **`data/chroma/wealth_compounding/` force re-index** (2026-05-10) — 25 sources / 787 chunks / 6 카테고리 분포 (asset_classes 30 / crisis_signals 224 / currency_pricing 150 / debt_rate_cycle 153 / macro_roadmap 38 / monetary_evolution 192). retrieve smoke ("인플레이션 통화 가치") top 3 정확 + category 라벨 노출 + score 0.59~0.64. Phase 0 git mv 로 인한 legacy chunk 동시 청산
 - **Phase 2 M1: retrieve/compose 카테고리 화이트리스트** (2026-05-10) — `core/knowledge/retrieve.py` `retrieve(dept, query, *, categories=None, top_k=3)` + ChromaDB `where={"category": {"$in": [...]}}` 조건부 + 빈 리스트 falsy fallback. `core/knowledge/compose.py` `load_shared_canon(canon_categories=None)` 폴더 path prefix 매칭 필터 + `build_pipeline_prompt(..., canon_categories=None)` + RAG 분기에서 `rag_dept` 매칭 카테고리만 추출해 `retrieve(categories=)` 전달 (canon block + RAG block 둘 다 좁아짐). `core/inference/run_analyst.py` `AnalystSpec.canon_categories` 필드 + manifest 로드 + 두 run 함수에 전달. `wealth_strategist` manifest 검증값 `canon_categories: [wealth_compounding/macro_roadmap]` (M3 SPEC 정식 정의 시 6 카테고리 복귀 예정). `tests/test_retrieve_categories.py`(4) + `test_compose_canon_categories.py`(7) 신규 = pytest **122 passed** (111 → +11). 통합 검증: canon 18,726 → 3,935 chars (79% 감소), RAG block macro_roadmap 청크만 회수. 1 commit + push (`7158cd0`)
 - **Phase 2 M2: sync run + DB run log + delta 인덱싱** (2026-05-11) — `core/db/schema.sql` 에 `knowledge_index_runs` (sync_id PK / dept / started_at / ended_at / status / files_{added,modified,deleted} / chunks_{upserted,deleted} / proposal_path / release_note_path / error) + `idx_kir_dept_started` 인덱스 + schema_version 4. `core/knowledge/sync.py` 신규 — `sync_dept(dept, *, since_run_id=None)` + `sync_all()`. ingest 의 `_iter_reference_files`/`_build_metadata`/`_chunk_text` 재사용. collection metadata 비교로 `source_id → file_hash` 맵 추출 → delta 분류 (added/modified/deleted) → upsert + hard delete (`where source_id`). modified 는 청크 수 감소 케이스 위해 pre-delete + upsert. `_allocate_sync_id` 분→초→ms PK fallback. CLI = `python -m core.knowledge.sync <dept>` (생략 시 8 dept). `tests/test_knowledge_sync.py`(6) 신규 = pytest **128 passed** (122 → +6). 4-단계 회로 검증 (add 1 / modify 1 / delete 1 / DB 4 row) 정확. 1 commit + push (`0aadf8a`)
+- **Phase 2 M3: watchdog 자동 색인 + justfile 정리** (2026-05-11, 같은 날 두 번째 세션) — `core/knowledge/watcher.py` 신규 (watchdog Observer + `_Debouncer` threading.Timer dept 단위 coalesce + `_extract_dept` `_` prefix dept None + `_build_handler` `is_directory` skip / `moved` 시 src+dest 둘 다 처리 + `start_observer`/`stop_observer`/`run_forever` standalone + CLI `--reference-root`/`--debounce`). `core/knowledge/sync.py` 확장 (`sync_dept(force=False)` drop 직전 prev 카운트를 deleted 로 적재 → collection drop → 전체 added 재구축, `recent_runs(limit, dept)` helper, `_format_status_row` 1줄, CLI `--force`/`--status`/`--limit`, `_open_collection(drop_existing=)`). `server/main.py` lifespan startup 에 `start_observer()` 자동 등록 + `sync_all` fire-and-forget reconcile (BGE-m3 cold load 회피) / shutdown 에 reconcile_task cancel + `stop_observer`. `justfile` 정리 — 기존 3 명령 (`knowledge-sync` 구 OneDrive 추출 / `-ingest` / `-reingest`) 제거, 신규 5 명령 (`knowledge-sync` delta / `-rebuild` force / `-status` DB log / `-watch` standalone / `-browse` 유지). 외부→reference 이동은 사용자 manual 결정. `tests/test_knowledge_watcher.py`(7 cases: `_extract_dept` 3 + `_Debouncer` 3 + Observer 통합 1) 신규 = pytest **134 passed** (128 → +7, 회귀 0). 수동 회로 검증 4-단계 (add 1 +1/~0/-0 / modify 1 +0/~1/-0 / delete 1 +0/~0/-1) 적재 정확. server log: `watcher_started` + `knowledge_reconcile_done` 자동 등록 확인. 2 commits + push (`3228eb5` M3 코드 + `c078541` chore: sqlite-db MCP entry 제거).
 
 ### 미완 또는 의도적 공백
 - **9 분석가 페르소나 작성 (M3 SPEC)** — 자료 있는 4 (원칙수호자/트레이더/종목분석가/자산전략가) + 자료 0 시드 5 (시장상태분석가/종목선정가/매매저널리스트/수급분석가/뉴스큐레이터). 8-섹션 portable 양식. Phase 2 풀세트 완료 후 본격 진입. **프로토타입 가동의 핵심**
-- **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 M1 ✅ (retrieve 카테고리 필터 + compose canon_categories) / Phase 2 M2 ✅ (DB knowledge_index_runs + sync.py delta 인덱싱) / **Phase 2 M3** watchdog + just 명령 4종 (다음 세션 Top 1) / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증
+- **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 M1 ✅ (retrieve 카테고리 필터 + compose canon_categories) / Phase 2 M2 ✅ (DB knowledge_index_runs + sync.py delta 인덱싱) / Phase 2 M3 ✅ (watchdog 60s debounce + justfile 5 명령 정리 + server lifespan 자동 등록) — **Phase 2 풀세트 = 프로토타입 1차 동작점** / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 (M3 분석가 분화 SPEC 후) / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증
+- **사전 부채: `tests/test_market_snapshot.py::test_render_data_source_line_mixed`** — 시간-의존 mock 누락으로 `미국=DB` assert 실패. M3 작업 무관. 베이스라인 -1 (134/135). `kr/us_threshold_seconds(now_kst)` cron 시각 freezegun mock + DB latest part fixture 적재 보강 필요 (~30분)
 - **다른 dept 재인덱싱** (principles / trading / stock-analysis 등) — Phase 2 sync 로 자동화 또는 수동 force re-index. stock-analysis 는 5형식 자료 풍부해 어댑터 검증 풍부 (백로그)
 - **이미지 PDF OCR 미실행** — 박종훈 Vol 2/3 4 파일 + `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 30페이지 0 chars. `ocrmypdf` + tesseract 백로그
 - **png 어댑터 vision 활성화** — 비용 가시화 후 `enabled_by_default=True` flag + Anthropic vision API + extraction cache (`data/chroma/<dept>/_extraction_cache/<file_hash>.txt`). 현재 silent skip
@@ -139,12 +141,17 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-11 Phase 2 M2)**
-- **delta baseline = collection metadata, DB = 운영 로그**: SoT 분리. `since_run_id` 인자는 인터페이스 호환성만 받고 실제 비교는 collection 의 `source_id → file_hash` 맵 단일 모드. 미래 cross-run 분석에 reserve. SPEC L488-489 의도 그대로
-- **modified 의 pre-delete + upsert**: 본문 길이 감소로 청크 수 5→3 케이스 시 stale id (3,4) 가 남으면 retrieve 가 빈 청크 hit. `where source_id` hard delete 후 upsert. ingest.py 의 멱등 upsert (id 충돌 시 덮어쓰기) 와 다른 점. modified 한정 안전망
-- **PK 충돌 fallback (분→초→ms)**: `_allocate_sync_id` 가 sqlite IntegrityError 잡고 다음 fallback. 같은 분 내 두 sync 떨어져도 안전. 동시 호출 race 는 현 운영 (수동 트리거) 비현실. 테스트의 ORDER BY started_at 비결정 (동초 충돌) 도 이 fallback 으로 sync_id 자체는 항상 분리
-- **테스트 monkeypatch: ingest_mod + sync_mod 양쪽**: sync 가 `from core.knowledge.ingest import _iter_reference_files` 로 헬퍼 직접 import 했으므로 `REFERENCE_ROOT` redirect 시 ingest_mod 도 함께 patch 필요. 단순 sync_mod 만 patch 하면 ingest 가 실 경로 그대로 봄
-- **M2 단일 마일스톤 끊기 + 회로 검증 패턴 재현**: M1 직후 곧장 M2 만 끊어 마감 → 4-단계 회로 (add/modify/delete + no-op) 수동 검증 가능 → M3 (자동 트리거) 도입 전 sync 함수 자체 신뢰도 확보. small_milestones 가 회로 검증과 자연스럽게 결합
+**이번 세션에 굳힌 판단 (2026-05-11 Phase 2 M3)**
+- **watcher 진입점 함수 1개 = 2곳 호출**: `start_observer()` 가 server lifespan + `just knowledge-watch` 둘 다에서 호출. "자동 등록 + standalone" 안 = 코드 비용 0 (함수 1개 정의 + 2 호출). 의사결정 시 "진입점 2군데" 처럼 보였으나 실제로는 동일 함수.
+- **외부→reference 이동 = 사용자 manual**: `scripts/sync_knowledge.py` (OneDrive PDF 추출) 는 파일만 남기고 justfile 에서 제거. just 명령은 reference drop 이후 자동화만 담당. 의미 분리 + 명령 셋 간결화. 다음 세션 진입 시 헷갈리지 말 것
+- **fire-and-forget reconcile (sync_all)**: server lifespan startup 에서 `asyncio.create_task(asyncio.to_thread(sync_all))`. BGE-m3 cold load 가 startup blocking 될 가능성이 있어 비동기. gap_filler 와 패턴 다름 (gap_filler 는 lightweight 라 await). 절전 후 fsevents 누락 안전망
+- **logger keyword `event` 충돌**: `core.logging` 의 첫 positional 이 `event` 라 `log.debug("x", event=...)` 시 `_nop() got multiple values for argument 'event'`. `event_type=` 등 다른 이름 사용. 향후 logger keyword 신중
+
+**직전 세션 판단 (2026-05-11 Phase 2 M2)**
+- **delta baseline = collection metadata, DB = 운영 로그**: SoT 분리. `since_run_id` 인자는 인터페이스 호환성만 받고 실제 비교는 collection 의 `source_id → file_hash` 맵 단일 모드. 미래 cross-run 분석에 reserve
+- **modified 의 pre-delete + upsert**: 본문 길이 감소로 청크 수 5→3 케이스 시 stale id 가 남으면 retrieve 가 빈 청크 hit. `where source_id` hard delete 후 upsert. modified 한정 안전망
+- **PK 충돌 fallback (분→초→ms)**: `_allocate_sync_id` 가 sqlite IntegrityError 잡고 다음 fallback. 같은 분에 두 sync 떨어져도 안전
+- **테스트 monkeypatch: ingest_mod + sync_mod 양쪽**: sync 가 ingest 헬퍼 직접 import 했으므로 `REFERENCE_ROOT` redirect 시 ingest_mod 도 함께 patch 필요. 비슷한 re-export 패턴 가진 다른 모듈도 동일
 
 **직전 세션 판단 (2026-05-10 Phase 2 M1)**
 - **canon_categories 형식 = `<dept>/<category>`**: 한 분석가가 여러 dept 의 카테고리를 받을 수 있도록 다 dept 친화 설계. compose 가 RAG retrieve 호출 시 `rag_dept` 와 일치하는 항목만 추출 — ChromaDB 는 dept 별 collection 이라 카테고리는 단일 dept 안에서만 의미 (cross-dept 카테고리 retrieve 는 multi-collection 호출이 미래 옵션)
