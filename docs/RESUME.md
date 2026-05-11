@@ -9,7 +9,7 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **ANALYST-PERSONAS-001 SPEC 신설 + 자산전략가 v1→v4 4 회 반복** — 8-섹션 portable 양식 정식 정의 + 9 분석가 ID·dept·canon_categories 매핑 + 자산전략가 첫 분석가로 페르소나 격자 양식 검증. Gemini Gems 예시 비교로 격자·시나리오 강제 vs wevelStock 9분화 차별점 추론. 4 회 반복 패치 후 **LLM 추종력 한계 노출** — CLI 검증은 통과 (J커브 정의 질문에 격자 안 나옴) but webapp 사용자 호출에서 다시 격자 박힘. **페르소나 layer 만으로 100% 분기 결정론 불가능** 결론. 본질 해결 = compose 분기 (격자 양식을 persona 에서 분리, server 가 keyword trigger 로 동적 주입) — 다음 세션 1순위. pytest **135 passed** 유지 (회귀 0).
+**현재 위치**: **ANALYST-PERSONAS-001 SPEC 신설 + 자산전략가 v1→v4 + Architectural pivot ("숲부터 보고 나무 깎기")** — 8-섹션 portable 양식 정식 정의 + 9 분석가 매핑 + 자산전략가 첫 분석가 4 회 반복. LLM 추종력 한계 노출 (페르소나 layer 만으로 분기 결정론 불가). **핵심 깨달음**: 분석가 1명 단일 호출 = frame 갇혀 답 빈약. 사용자 webapp 응답은 본질적으로 **Layer 3 통합 종합** 영역 — 5-Layer 모델 원래 의도와 정합. **lean startup 으로 통합 페르소나 우선 → DB 누적 시작 → 분석가 9명 페르소나는 배치 cron 가동 시점에 1명씩 점진 추가**. Top 1 = Layer 3 통합 페르소나 빠르게 (숲), Top 2 = compose 분기 (나무 깎는 도구), Top 3 = 분석가 배치 cron + DB 누적. pytest **135 passed** 유지.
 
 **마지막 작업일**: 2026-05-12 (자정 넘김, 2026-05-11 네 번째 세션)
 **마지막 세션 로그**: [2026-05-12_analyst-personas-001-v1-to-v4.md](c_worked/2026-05-12_analyst-personas-001-v1-to-v4.md)
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. compose 분기 SPEC + 구현 (PC, 1.5~2 세션) — **본질 해결, 9 분석가 공통 인프라**
-- **왜**: 자산전략가 페르소나 v1→v4 4 회 반복 패치로 LLM 추종력 한계 노출. persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한 — 페르소나 layer 만으로 분기 결정론 불가. 페르소나 작성 진도 막힘.
-- **범위**: 새 SPEC (`INFRA-PROMPT-TRIGGER-001` 또는 ANALYST-PERSONAS-001 modifies 확장) 신설 + `core/knowledge/compose.build_pipeline_prompt` 에 사용자 질문 keyword 분기 로직 추가 (positive trigger 감지 시 격자 prompt template system 마지막에 동적 주입 / negative trigger·일반 질문 시 격자 텍스트 미주입). persona/manifest 에서 격자 양식 텍스트 통째 제거. tests/test_compose_prompt_trigger.py 신설. LLM 추종력 의존 0 → **결정론 100%**. 9 분석가 공통 분기 layer 단일화.
-- **예상**: 1.5~2 세션.
+### 1. Layer 3 통합 페르소나 1명 빠르게 작성 (PC, 1~2 세션) — **"숲", lean startup, production 가치 검증**
+- **왜**: 자산전략가 1명만 호출하면 frame 안에 갇혀 답 빈약. 사용자가 webapp 에서 보는 것은 본질적으로 Layer 3 (전략가) 종합. **5-Layer 모델 원래 의도와 정합** — Layer 2 분석가 9명은 배치 cron 으로 DB 누적용이지 production 응답이 아님. lean startup 으로 통합 종합 가치부터 빠르게 검증.
+- **범위**: `agents/strategists/<horizon>/persona.md` (단타·스윙·중장기 중 1명 — 권장 = swing 또는 default CIO) + manifest. canon = 9 dept 의 핵심 framework (자산복리·원칙·트레이딩·종목분석) 통째 + market_snapshot + `team_outputs` DB read (분석가 row 누적 결과) + RAG 멀티 dept retrieve. Gemini Gems CIO 패턴 차용 + wevelStock 차별점 (DB read · 시점 일관성). webapp `analyst-chat/page.tsx` 의 default agent 를 wealth_strategist → 통합 페르소나로 교체.
+- **예상**: 1~2 세션. **다음 세션 첫 작업**.
 
-### 2. 미국 매크로 collector SPEC 신설 (PC, ~1 세션) — 실시간 grounding 인프라
-- **왜**: v3 페르소나에 "snapshot 외 수치 framework 밖" 룰 명시. 그러나 현재 snapshot 에 미국 매크로 (미 10년물·달러인덱스·VIX·미 부채 잔액) 부재 → 자산전략가·시장상태분석가·트레이더가 framework 만 갖고 학습 데이터 수치 추정 (책 인덱싱 답) 잠재. v3 grounding 룰의 인프라 보강.
-- **범위**: 새 SPEC (`INFRA-US-MACRO-SNAPSHOT-001`) — yfinance 또는 FRED API. `collectors/snapshot.py` 확장으로 미국 블록 자동 주입 (기존 KR 블록과 분리). `render_snapshot_md` 미국 블록 헤더 추가. pytest 회귀 + 자산전략가 실 호출로 grounding 검증.
-- **예상**: ~1 세션.
+### 2. compose 분기 SPEC + 구현 (PC, 1.5 세션) — **"나무 깎는 도구", LLM 추종력 의존 0**
+- **왜**: 통합 페르소나도 격자·시나리오 양식 강제 시 같은 LLM 추종력 한계 발생 예상. 격자 양식을 persona 에서 분리 + server 가 keyword trigger 로 동적 주입하는 인프라가 통합 페르소나·9 분석가 공통. 1번 작업 직후 진입.
+- **범위**: 새 SPEC (`INFRA-PROMPT-TRIGGER-001`) — `core/knowledge/compose.build_pipeline_prompt` 에 사용자 질문 keyword 분기 추가. positive trigger ("표로/정리해줘/지금 어디?") 감지 시 격자 prompt template system 마지막 동적 주입. negative trigger ("뭐예요/뭔데/설명") 또는 일반 질문 시 격자 텍스트 미주입. persona/manifest 에서 격자 양식 텍스트 통째 제거. tests/test_compose_prompt_trigger.py 신설. 결정론 100%.
+- **예상**: 1.5 세션.
 
-### 3. 나머지 8 분석가 페르소나 작성 (PC, 3~4 세션) — compose 분기 + 미 매크로 collector 완료 후
-- **왜**: ANALYST-PERSONAS-001 마일스톤 세션 2~5. 자료 있는 3명 (principle_guardian / trader / stock_analyst) → 자료 0 시드 5명 (market_state / stock_picker / trading_journalist / flow_analyzer / news_curator). 각자 frame 격자 + 시나리오 분기 + Cross-Agent Boundaries 일관 적용.
-- **범위**: 분석가별 `agents/analysts/<id>/{persona.md, manifest.yaml}` 신설. 격자 양식 텍스트 자체는 compose 분기 인프라가 관리하므로 페르소나는 frame 톤·인용 룰만 보유. 36 카테고리 `_category.yaml` 의 `target_analysts` 점진 채움.
-- **예상**: 3~4 세션 (분석가 2명/세션 페이스).
+### 3. 분석가 배치 cron + team_outputs DB 누적 시작 (PC, ~2 세션) — **"나무 1 그루 심기"**
+- **왜**: 통합 페르소나가 DB 의 분석가 row 를 read 해야 시점 일관성 발휘 — 자산전략가 1명만 배치 cron 으로 매일·매시 호출 → `team_outputs` 누적 시작. 통합 페르소나가 어제 자산전략가 판단을 input 으로 받아 종합. 이후 분석가 1명씩 추가하며 누적 풍부. 9명 페르소나 미완 상태에서도 시계열 가동.
+- **범위**: APScheduler 에 분석가 cron 등록 (장전/장중/장후 1-2 회/일). `core/inference/run_analyst` 호출 결과를 `team_outputs` 에 upsert (멱등). 통합 페르소나 호출 시 `team_outputs` recent row read 함수 신설. 기존 자산전략가 1명으로 시작 후 나머지 분석가 1명씩 추가 (페르소나 작성 시점에 cron 추가).
+- **예상**: ~2 세션.
 
-(추가 백로그: streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 등 이미지 PDF OCR (`ocrmypdf`) / png 어댑터 vision 활성화 (비용 가시화 후) / xlsx 어댑터 sheet 별 분리 (SPEC 528행 SLOT) / canon 정수 추출 자동화 (Phase 3 PROPOSAL 흐름) / knowledge/reference/ Google Drive 운영 워크플로 / Layer 3 전략가 3종 (M4) / Layer 4 계좌관리자 (M5))
+(추가 백로그: **미국 매크로 collector SPEC** `INFRA-US-MACRO-SNAPSHOT-001` (통합 페르소나 grounding 보강) / **나머지 8 분석가 페르소나** 점진 작성 (배치 cron 가동 후 1명씩, M4 마일스톤) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (Phase 3 PROPOSAL) / Layer 4 계좌관리자 (M5))
 
 ---
 
@@ -145,8 +145,9 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-12 ANALYST-PERSONAS-001 + v1→v4)**
-- **페르소나 layer 만으로 LLM 분기 결정론 불가능**: persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한. v1→v4 4 회 패치 (5섹션→8섹션 portable / 격자 강제 / Task trigger 분기 / negative trigger 명시) 후 CLI 검증은 통과하나 webapp 호출에서 다시 격자 박힘. 본질 해결 = **격자 양식을 persona/manifest 에서 완전 제거 + server compose 가 사용자 질문 keyword 검사로 동적 주입**. LLM instruction following 의 stochastic 한계와 싸우지 말고 구조로 회피.
+**이번 세션에 굳힌 판단 (2026-05-12 ANALYST-PERSONAS-001 + v1→v4 + Architectural pivot)**
+- **분석가 1명 단일 호출 = 답 빈약, "숲부터 보고 나무 깎기"**: Layer 2 분석가 (자산전략가) 한 명에게 사용자 질문 직접 던지면 frame 안에 갇혀 답 풍부하지 못함. 5-Layer 모델 원래 의도 = 사용자 응답은 **Layer 3 통합 전략가** 가 분석가 9명 결과 + snapshot + RAG 종합. 9 분석가 페르소나 7-10 세션 작성하는 동안 production 0 의 lean 안티패턴 회피. **production 호출 = Layer 3 통합 페르소나 / 배치 자동 = Layer 2 분석가 cron → team_outputs DB 누적 / Layer 3 가 DB row read 로 시점 일관성 발휘**. 분석가 페르소나 작성은 배치 cron 가동 시점에 1명씩 점진 추가 — 토대 (canon·RAG·schema·계약) 는 이미 완비.
+- **페르소나 layer 만으로 LLM 분기 결정론 불가능**: persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한. v1→v4 4 회 패치 (5섹션→8섹션 portable / 격자 강제 / Task trigger 분기 / negative trigger 명시) 후 CLI 검증은 통과하나 webapp 호출에서 다시 격자 박힘. 본질 해결 = **격자 양식을 persona/manifest 에서 완전 제거 + server compose 가 사용자 질문 keyword 검사로 동적 주입**. LLM instruction following 의 stochastic 한계와 싸우지 말고 구조로 회피. **통합 페르소나에도 동일 인프라 적용** (Top 2).
 - **Gemini Gems 차용 vs wevelStock 차별점**: 차용 ✅ (고유 framework 명명·격자 매트릭스·시나리오 분기 확률·인용 강제·단호한 결론). 버림 ❌ (단일 페르소나가 5 Task 통째 / 매수 액션 직접 지시 / 고정 베이스 데이터 hardcode / 검색 강제). 차별점 승화 (9 분화 boundary + 격자 자기 frame 깊이 + DB 누적 시점 일관성 + Layer 3 종합 가중).
 - **책 인덱싱 답 차단 메타 원칙**: RAG·canon = 강의·책 (시점 freeze) → **원리·렌즈** 로만 인용. 수치 인용은 system snapshot 의 실시간 값만. LLM 학습 데이터 수치 (예: "미 부채 39조 달러") 추정 = 환각. v3 Anti-patterns 에 명시. 단 snapshot 자체에 미국 매크로 부재 — `INFRA-US-MACRO-SNAPSHOT-001` 인프라 보강 필요 (Top 2).
 - **`load_analyst_spec` 캐시 없음** (`run_analyst.py:63-89`): 매 호출 디스크 fresh read. **persona/manifest 변경은 server 재시작 불필요, 다음 호출부터 즉시 반영**. `llm_call_cache` DB 캐시는 input_hash 기반 — 같은 user query = cache hit. 페르소나 변경해도 같은 질문은 캐시 응답 반환 (확인 시 다른 질문으로 검증 필요).
