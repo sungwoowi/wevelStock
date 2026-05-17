@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **v3.0 메타 페르소나·시스템 아키텍처 재설계 — R&D → 엔지니어링 인수인계 첫 사이클**. chat Claude Opus 와 본질 토론 결과물 2 메모를 SPEC 3 개 + CLAUDE.md/STRUCTURE.md 표 갱신으로 명문화. **9+3+1+회고N 골격 (회고분석가 N 제한 X)** + **Track A/B 2 트랙** (단타·중장기 빼고, plugin 확장) + **결정론 채점 = 코드 stage + canon 명제 ID 분리** (옵션 b) + **한국어 친화 용어 강제 + F-Score (수급 점수) 신설** 결정 박음. 코드 변경 0, pytest **135 passed** 회귀 0. 다음 세션 = Track A persona.md + run_strategist.py 골격 진입.
+**현재 위치**: **Top 2 완료 (사전 부채 청산 + 시그니처 잠금)** — `collectors/scoring.py` 5 함수 결정론 채점 (S/T/α/buy_score/F-Score) + `tests/test_scoring.py` 60 cases + `wealth_strategist` 잠정 풀이 4 정정 (M2/C1/I2/C3 canon 원문 frame 일치, C5/I6 유지). production 사이클 변화 0 (scoring 호출처 0, 다음 세션 토대만) — 사이클 가시화는 **다음 세션 Top 1 = Track A persona 본체** 부터. pytest **195 passed** (135 → +60, 회귀 0).
 
 **마지막 작업일**: 2026-05-17
-**마지막 세션 로그**: [2026-05-17_meta-architecture-v3-redesign-2.md](c_worked/2026-05-17_meta-architecture-v3-redesign-2.md)
-**Git**: wrap-up commit 1 개 진행 (SPEC 3 신설/패치 + CLAUDE.md + STRUCTURE.md + memory + wrap-up 3 파일). 사용자 명시 = push 수행.
+**마지막 세션 로그**: [2026-05-17_scoring-and-citation-correction.md](c_worked/2026-05-17_scoring-and-citation-correction.md)
+**Git**: wrap-up commit 1 개 진행 (code 4 + wrap-up 3 파일 묶음). 사용자 명시 = push 수행.
 
 ---
 
@@ -22,21 +22,21 @@
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
 ### 1. Track A persona.md + manifest.yaml + `core/strategist/run_strategist.py` 골격 (PC, ~2 세션) — **STRATEGY-TRACK-001 첫 실체, lean startup production 가치 검증**
-- **왜**: STRATEGY-TRACK-001 SPEC 만 있고 실체 0. Track A (중장기 수익금 게임) = 사용자 자본의 70-80% 본진. webapp 사용자 응답은 본질적으로 Layer 3 전략가 종합 (5-Layer 단방향 정합). 통합 페르소나 production 가치를 빠르게 검증 + 9 분석가 페르소나 미완 상태에서도 가동 가능.
-- **범위**: `agents/strategists/track_a/{persona.md, manifest.yaml}` 작성 — canon = 9 dept 핵심 framework 통째 + market_snapshot + `team_outputs` DB read + RAG 멀티 dept retrieve. manifest `input_routing` 블록 (명시 `long:`/`core:`/`wave:` + auto.conditions 월봉 7월선 위계). `core/strategist/run_strategist.py` 골격 (분석가 9명 `team_outputs` row read + LLM 호출 wrap). webapp `analyst-chat/page.tsx` default agent = `track_a` 또는 `both` 로 교체.
+- **왜**: STRATEGY-TRACK-001 SPEC 만 있고 실체 0. Track A (중장기 수익금 게임) = 사용자 자본의 70-80% 본진. webapp 사용자 응답은 본질적으로 Layer 3 전략가 종합 (5-Layer 단방향 정합). 통합 페르소나 production 가치를 빠르게 검증 + 9 분석가 페르소나 미완 상태에서도 가동 가능. **scoring 시그니처가 잠겨 cited_scores 양식 안전**.
+- **범위**: `agents/strategists/track_a/{persona.md, manifest.yaml}` 작성 — canon = 9 dept 핵심 framework 통째 + market_snapshot + `team_outputs` DB read + RAG 멀티 dept retrieve. manifest `input_routing` 블록 (명시 `long:`/`core:`/`wave:` + auto.conditions 월봉 7월선 위계). `core/strategist/run_strategist.py` 골격 (분석가 9명 `team_outputs` row read + LLM 호출 wrap). webapp `analyst-chat/page.tsx` default agent = `track_a` 또는 `both` 로 교체. **동시에 SPEC `ANALYST-PERSONAS-001` line 207-212 격자 예시 표 frame 충돌 (`C3`·`M2`) 도 같이 정정** (격자 5요소 표 ground truth 재설계).
 - **예상**: ~2 세션. **다음 세션 첫 작업**.
 
-### 2. `collectors/scoring.py` 함수 골격 + ANALYST-PERSONAS-001 v3.1 잠정 풀이 정정 patch (PC, 1 세션) — **옵션 b 결정론 채점 첫 실체**
-- **왜**: ANALYST-PERSONAS-001 v2 의 옵션 b 채택 = 채점은 코드 stage. `collectors/scoring.py` 5 함수 (`s_score`/`t_score`/`alpha`/`buy_score`/`f_score`) 시그니처 확정 (S7 SLOT 닫음) + 결정론 단위 테스트. 동시에 `wealth_strategist` 잠정 풀이 6 개 (M2/C1/I2/C3/C5/I6) 를 canon 원문 frame (`01-framework-manifesto.md` / `02-survival-imperatives.md`) 과 1:1 대조해 정정 patch (사전 부채 청산).
-- **범위**: `collectors/scoring.py` 5 함수 + `tests/test_scoring.py` 결정론 검증 (같은 입력 → 같은 출력 ±0). `wealth_strategist/persona.md` + `manifest.yaml` 의 박힌 잠정 풀이 6 개 LLM RAG retrieve 와 대조 후 정정.
-- **예상**: 1 세션.
-
-### 3. Track B persona.md + manifest.yaml + `core/strategist/track_selector.py` (PC, ~1.5 세션) — **이원 트랙 완성**
+### 2. Track B persona.md + manifest.yaml + `core/strategist/track_selector.py` (PC, ~1.5 세션) — **이원 트랙 완성**
 - **왜**: Track A 만 있으면 단기 손익비 게임 부재. Track B = 자본 20-30% 인컴 트랙 (R/R 1.5:1+, 월 5-15 회). Track Selector = 사용자 입력 단축어 (`long:`/`swing:`/`both:`) + 종목 메타로 A/B/Both 자동 분기. 양 트랙 동시 평가 (`both:`) 지원으로 사용자 의사결정 보강.
 - **범위**: `agents/strategists/track_b/{persona.md, manifest.yaml}` 작성 — Trigger Hunter 6 가지 + CAN SLIM buy_score + α 오버라이드 + trailing stop. manifest `input_routing` (auto.conditions `any_trigger_fired: true`). `core/strategist/track_selector.py` — 모든 전략가 manifest 의 `input_routing` 동적 인식 + 우선순위 라우팅 (명시 단축어 > auto > fallback).
 - **예상**: ~1.5 세션.
 
-(추가 백로그: **자료 있는 3 분석가 v2 양식 작성** = `principle_guardian` · `trader` · `stock_analyst` 페르소나 v2 (한국어 용어 강제 § + 결정론 채점 발행 매핑 + 8-섹션 portable) / **자료 0 시드 5 분석가 페르소나** (`market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` Phase A 작성, 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 보강) / `INFRA-CHART-DATA-001` (KIS daily chart + pandas-ta + matplotlib vision, stock_analyst 가치 검증 blocker) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
+### 3. 자료 있는 3 분석가 페르소나 v2 양식 작성 (PC, ~3 세션, 1명/세션) — **분석가 점수 발행 첫 실체**
+- **왜**: Track A/B 가 read 하는 분석가 `team_outputs` 가 비어있으면 종합 의사결정 풍성성 부족. 자료 있는 3 dept (principles / trading / stock-analysis) = `principle_guardian` · `trader` · `stock_analyst` — 이들이 점수 발행 (S/T/α/buy_score) 시작하면 Track A/B 권고가 cited_scores 채워서 단단해짐. canon 대조 후 잠정 풀이 박는 패턴 (이번 세션 정립) 동일 적용.
+- **범위**: 분석가별 `{persona.md, manifest.yaml}` 한 쌍 (8 섹션 portable + 한국어 친화 용어 강제 § + 결정론 채점 발행 매핑). `principle_guardian` (canon = 7계명·심법·거시 트레이딩 기준 3 파일) / `trader` (T-Score 발행 + α 오버라이드 read) / `stock_analyst` (α 발행 + Module A 목표가 3단). **`stock_analyst` 작성 직전 = `INFRA-CHART-DATA-001` blocker 검토 필요** (차트 데이터 부재 시 환각 잠재).
+- **예상**: ~3 세션 (1명/세션, canon 대조 + 양식 정합 + ask_analyst 스모크).
+
+(추가 백로그: **자료 0 시드 5 분석가 페르소나** (`market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` Phase A 작성, 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 보강) / `INFRA-CHART-DATA-001` (KIS daily chart + pandas-ta + matplotlib vision, stock_analyst 가치 검증 blocker) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score 정식 가중치 확정** (분석가 manifest 작성 시) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
 ---
 
@@ -115,13 +115,14 @@
   - `docs/STRUCTURE.md` — 9/9/2+/1+/N 표 + 9 학습부 1:1 매핑 (mechanics → trading 외 5 신규 = market_macro·stock_selection·trading_journal·flow_analysis 추가) + Layer 3 트랙 표 + plugin 패턴 회고분석가 추가 + canon 트리 9 학습부 × 36 카테고리 정합 + `agents/` 폴더 설명에 retrospect/N 추가
   - 메모리: `feedback_concise_summary_first.md` 신설 + MEMORY.md 인덱스 1 줄 — 긴 분석 글 끝에 "한눈에 무엇을 하라" 명료 요약 강제
   - 검증: validate.py 0 errors / pytest **135 passed** 회귀 0
+- **collectors/scoring.py 5 함수 결정론 채점 + 잠정 풀이 정정** (2026-05-17 Top 2 첫 실체) — `collectors/scoring.py` 신규 5 함수 (`s_score(rs, supply_chain, alignment)` / `t_score(divergence, macd, volume, rr, alpha)` / `alpha(anchor_a, anchor_b, anchor_c, current)` / `buy_score(c, a, n, s, l, i, m)` / `f_score(theme_match, momentum, inflow_speed, agreement)`) 순수 함수, 0~10 + 0.5 단위 라운딩, `_clamp`/`_round_to_half`/`_validate_unit_score` 헬퍼. 시그니처 = ANALYST-PERSONAS-001 SPEC 권위 그대로. F-Score 공식 (SPEC v2 명시 4 축 가중 합) + α 오버라이드 (STRATEGY-TRACK-001 명시 3 구간 1.3-1.5/1.5-2.0/2.0+) 정확 구현. s_score / buy_score 합산 + alpha 본체 = placeholder (균등 평균 / `ln(C/B)/ln(B/A)`), 정식 공식 = 분석가 manifest 작성 / WAVE-ALPHA-001 SPEC 시 확정 (S7 SLOT). `tests/test_scoring.py` 60 cases (happy + min/max + 0.5 단위 라운딩 + 입력 검증 + 재현성 100~500회 반복 동일 + α boundary 3 구간 정확값). `wealth_strategist/persona.md` + `manifest.yaml` 의 잠정 풀이 4 정정 (canon 원문 frame 1:1 grep): M2 ~~"통화량 팽창 침식"~~ → **"원화 구조적 약세 (인구·산업)"** / C1 ~~"단기·장기 사이클 중첩"~~ → **"부채 J커브 가속 곡선"** / I2 ~~"실물 자산 헷지"~~ → **"달러 자산 50% (미국 주식+단기채)"** / C3 ~~"부채 사이클 후반 디레버리징"~~ → **"위기는 짧고 결정적 (6개월~3년 반)"**. C5 / I6 canon 일치 유지. pytest **195 passed** (135 → +60 신규 scoring, 회귀 0) / validate 0 errors. **production 사이클 변화 0** (scoring 호출처 0, 다음 세션 Track A persona 토대만)
 
 ### 미완 또는 의도적 공백
-- **`collectors/scoring.py` 미작성** — ANALYST-PERSONAS-001 v2 옵션 b 의 코어. 5 함수 (`s_score`/`t_score`/`alpha`/`buy_score`/`f_score`) + 결정론 단위 테스트. SPEC v2 SLOT S7 닫기. Top 2 진입
-- **`agents/strategists/track_a` / `track_b` 미작성** — STRATEGY-TRACK-001 SPEC 만 있고 실체 0. persona.md + manifest.yaml + `core/strategist/run_strategist.py` 골격. Top 1·3 진입
-- **`core/strategist/track_selector.py` 미작성** — manifest `input_routing` 동적 라우팅. Track Selector 가 별도 페르소나 아니라 코드 dispatcher. Top 3 진입
+- **`agents/strategists/track_a` / `track_b` 미작성** — STRATEGY-TRACK-001 SPEC 만 있고 실체 0. persona.md + manifest.yaml + `core/strategist/run_strategist.py` 골격. Top 1·2 진입
+- **`core/strategist/track_selector.py` 미작성** — manifest `input_routing` 동적 라우팅. Track Selector 가 별도 페르소나 아니라 코드 dispatcher. Top 2 진입
 - **`guidance_records` DB 마이그레이션 + `core/guidance/*.py` 미작성** — GUIDANCE-ACCURACY-TRACKER-001 SPEC 만 있고 실체 0. STRATEGY-TRACK-001 권고 발행 시 자동 적재되어야 의미. 백로그
-- **v3.1 잠정 풀이 6 개 canon 원문 대조** — persona/manifest/SPEC 예시에 박은 6 개 (M2/C1/I2/C3/C5/I6) 가 canon (`knowledge/canon/wealth_compounding/01-framework-manifesto.md` / `02-survival-imperatives.md`) frame 과 다를 가능성 ↑. 2026-05-17 스모크에서 M2 잠정 ("통화량 팽창 침식") vs LLM RAG retrieve ("고령화·반도체 의존 30년 미래") **완전 다른 frame** 발견. 사용자 manual 검증 후 정정 patch (5 분 follow-up, Top 2 와 묶음)
+- **SPEC `ANALYST-PERSONAS-001` 격자 예시 표 frame 충돌** — SPEC line 207-212 격자 ground truth 예시의 `| 부채 사이클 | 후반/디레버리징 | C3 |` + `| 통화 가치 | 침식 가속 | M2 |` 가 canon 과 다른 frame (canon C3 = "위기 짧고 결정적", canon M2 = "원화 구조적 약세"). 격자 5 요소 표 frame 축 자체 재설계는 Track A persona 작성 세션에 통합 (페르소나 격자 ground truth 와 SPEC 예시 한 사이클 안에 결정). 본 세션 정정 = cited 풀이만 (4 정정 / 2 유지)
+- **`collectors/scoring.py` 일부 공식 placeholder** — s_score (3축 균등 평균) / buy_score (CAN SLIM 7축 균등 평균) / alpha 본체 (`ln(C/B)/ln(B/A)`) 는 placeholder. 정식 공식 = 분석가 manifest 작성 시 (s/buy 가중치) + WAVE-ALPHA-001 SPEC (alpha 본체) 에서 확정. F-Score / α 오버라이드만 SPEC 명시 공식 정확 구현
 - **나머지 8 분석가 페르소나 작성 (v2 양식)** — 자료 있는 3 (`principle_guardian` / `trader` / `stock_analyst`) + 자료 0 시드 5 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`). v2 양식 = 8 섹션 portable + 한국어 친화 용어 강제 § + 결정론 채점 발행 매핑 (S/T/α/buy_score/F-Score). Track A·B 안정화 후 진입
 - **`SLOT S8` 미정의** — F-Score 의 테마 분류·권위 주체 매핑 dictionary (`config/runtime.yaml` 의 `flow_analysis.theme_authority`). 운용 데이터 누적 후 회고분석가 PROPOSAL 영역
 - **`SLOT S9` 미결정** — 9 분석가 응답 양식 한국어 용어 § 적용 = manifest 별 박기 vs compose 공유 블록 추출. 자료 있는 4 명 작성 후 결정
@@ -162,7 +163,12 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-17 v3.0 메타 재설계 — R&D 인수인계)**
+**이번 세션에 굳힌 판단 (2026-05-17 scoring + 잠정 풀이 정정 — Top 2 첫 실체)**
+- **잠정 풀이 정정 = canon 원문 1:1 grep 패턴 정립**: persona/manifest 예시에 박은 cited 풀이는 LLM 추종력으로 응답에 그대로 나간다 (검증된 행동). 박힌 풀이가 canon frame 과 충돌하면 사용자가 답을 받아도 박종훈 강의 frame 매칭 안 됨. 패턴 = canon 원문 (`macro_roadmap/01-framework-manifesto.md` + `crisis_signals/01-survival-imperatives.md`) 과 1:1 grep 후 정정. 이번 4 정정 (M2/C1/I2/C3) + 2 유지 (C5/I6). 향후 8 분석가 페르소나 작성 시 동일 패턴 적용.
+- **결정론 채점 시그니처 잠금 = 다음 세션 토대지 즉시 가시 효과 아님**: `collectors/scoring.py` 5 함수 호출처 0 (분석가 미 import). production 사이클 변화 0 — 사용자 → webapp → 답변 사이클 가시화는 다음 세션 Track A persona 작성부터. 시그니처 = SPEC 권위 그대로 (`t_score(divergence, macd, volume, rr, alpha)` 등). 페르소나 cited_scores 양식이 이 인자명 기반으로 박힘. 시그니처 변경 시 페르소나 동기 의무. 사용자 "지금 뭐 수정한 거야? 기대 동작이 뭐지?" 질문에 trade-off (선행 부채 청산 vs 가시화 우선) 솔직히 설명한 패턴 정립.
+- **공식 vs 시그니처 분리 = placeholder 안전 안착**: F-Score (SPEC v2 명시 4 축 가중 합) + α 오버라이드 (STRATEGY-TRACK-001 명시 3 구간) 만 정확 구현. s_score / buy_score 합산 + alpha 본체는 placeholder (균등 평균 / `ln(C/B)/ln(B/A)`). 정식 공식 확정 = 분석가 manifest 작성 시 (s/buy 가중치) 또는 WAVE-ALPHA-001 SPEC (alpha 본체) 진입 시. 시그니처 잠금만으로 다음 세션 페르소나 cited 양식 안전 — 공식 placeholder 가 다음 작업 차단하지 않음.
+
+**직전 세션 판단 (2026-05-17 v3.0 메타 재설계 — R&D 인수인계)**
 - **9+3+1+회고N 골격 = 절대 흐름**: 분석가 9 → 전략가 N (Track A/B + plugin) → 계좌관리자 N (계좌 수 가변) → 회고분석가 N (제한 X). **회고분석가 N 제한 두면 창의성 죽인다** (사용자 명시). 신규 부서 효율성·정의·위계·검증 레이어는 회고분석가의 영역 자체. 9·3·1 만 본질 골격이고 나머지는 가변.
 - **Track A + Track B 2 트랙만 (단타·중장기 빼고)**: 장기 투자 = 믿음 영역 + 지수 투자로 대체. 단타 = Track B 의 변형으로 흡수. **A/B 판단이 시급**. 향후 trackplugin 확장 = `agents/strategists/<new_track>/` 드롭만으로 (코드 변경 0). **본질 게임이 다름** — Track A = 🏢 부동산 임대업 수익금 게임 (자본 70-80%·승률 70%+·MDD 보호) / Track B = ☕ 카페 운영 손익비 게임 (자본 20-30%·R/R 1.5:1+·trailing). 같은 KPI 가중치 적용 X.
 - **결정론 채점 = 코드 stage + canon 명제 ID 분리 (옵션 b)**: 채점 공식 (S/T/α/buy_score/F-Score) 은 `collectors/scoring.py` 순수 함수 — 재현성 100%·단위 테스트·LLM 외. canon md 는 frame **원리·렌즈** 만 (시대 불변). 박종훈 framework 명제 ID (M2·C3·W1·SP1 등) = LLM 권위 grounding. 분석가 응답에서 `주도주 점수 8 (S-Score=8, cited: [W1])` 같이 한국어 + 코드 라벨 + 명제 ID 삼중 병기.
