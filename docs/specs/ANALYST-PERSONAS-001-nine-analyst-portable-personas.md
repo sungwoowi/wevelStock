@@ -104,14 +104,16 @@ contracts:
 | 7 | `## Anti-patterns` | 금기. 다른 분석가 영역 침범 / 추정 / hedging / 단편 인용 (명제 ID 누락) 등. |
 | 8 | `## Cross-Agent Boundaries` | 누구에게 어떤 질문을 넘기는가. "단타 시그널 → trader / 거시 → market_state_analyzer / 뉴스 해석 → news_curator" 같은 명시 매핑. |
 
-### Outputs 양식 — Task trigger 분기 (v3)
+### Outputs 양식 — Task trigger 분기 (v3.1)
 
 **모든 응답에 격자를 강제하면 기계적·부자연** (개념 설명·일반 대화에도 표 5종 박힘). v2 검증 결과 격자 자체는 동작하나, 모든 응답에 일괄 적용 = 과잉. Gemini Gems 예시도 격자는 **"분석 요청 / 입력 유형 한정"** 으로 trigger 분기함.
 
 #### 기본 출력 (모든 응답 공통)
 
 - **자연어 본문** — 사용자 질문 맥락에 맞게.
-- **`cited: [<명제 ID>]` 한 줄** — 명제 인용 시. 인용 없으면 `cited: []` + 본문에 "framework 밖" 명시.
+- **`cited: [<명제 ID>]` 한 줄** — 코드성 메타 마커. 인용 없으면 `cited: []` + 본문에 "framework 밖" 명시.
+- **`근거 명제 풀이:` bullet** — cited 의 각 명제 ID 마다 한 줄 자연어 풀이:
+  `- <ID> (<dept 명·짧은 표제>): <한 줄 자연어 정의>`. 풀이 누락 ❌ (v3 잔재). 자기 dept canon 명제만.
 
 #### 격자 5 요소 발동 조건 (frame 핵심 분석 한정)
 
@@ -128,7 +130,7 @@ contracts:
 | **[1] Frame Grid** | 분석가 frame 의 핵심 축 2~5개 × (현재 위치 / 명제 ID / 확신도). 분석가별 격자 고유 (자산전략가=Cycle Position 3축, trader=S-T Matrix, stock_analyst=점수 5축 등) | LLM 이 표 cell 채울 때 자유 자연어보다 일관성 ↑. memory 와 어제 격자 직접 비교 가능 |
 | **[2] Scenario Branches** | frame 안 의미 있는 4 시나리오 (이름 / 확률 % / 트리거 조건). 합계 100% | "한 답" 보다 분기 명시가 추론 풍부. Layer 3 전략가 종합 시 확률 가중 |
 | **[3] Frame Implication** | frame 한정 함의 (자산전략가=자산군 비중 방향 / trader=진입 시그널 / stock_analyst=점수 등급). **매수 액션·자금액 지시 금지** — Layer 4 영역 | 분화 boundary 강화 |
-| **[4] Citation** | `cited: [<명제 ID 들>]` 한 줄. 자기 dept canon 명제 ID 만. framework 밖이면 `cited: []` + 본문에 "framework 밖" 명시 | 추론 grounding 강제 (격자 발동 시·일반 응답 시 동일하게 모든 응답 공통) |
+| **[4] Citation (v3.1)** | `cited: [<명제 ID 들>]` 한 줄 + `근거 명제 풀이:` bullet (각 명제 ID 마다 한 줄 자연어 정의). 자기 dept canon 명제 ID 만. framework 밖이면 `cited: []` + 본문에 "framework 밖" 명시. 풀이 누락 ❌ | 코드 마커 + 자연어 풀이 이중 grounding 이 본질 |
 | **[5] Yesterday Delta** | `yesterday_delta: "<어제 [1] Frame Grid 와 차이 + 트리거>"`. memory 없으면 `yesterday_delta: "first run"` | 시점 일관성 자각. 어제 vs 오늘 판단이 다르면 트리거 명시 강제 |
 
 자연어 보충 본문은 격자 5 요소 뒤에 1~3 문단 — 격자 cell 의 근거·맥락 설명.
@@ -143,16 +145,6 @@ RAG·canon 은 **과거 강의·책** 의 framework. 경제 상황은 매일 바
 | **snapshot 에 없는 수치는 framework 밖** | system 블록 `## Market Snapshot` 에 실시간 주입된 수치만 인용 가능. snapshot 에 없는 미국 매크로·뉴스 수치는 "framework 밖, snapshot 없음" 으로 솔직히 |
 | **canon 명제는 원리·렌즈로만** | 책의 framework 원리 (M1·C3·I6 등) 는 OK. 책의 당시 수치·연도 인용은 X. 명제 = 시대 불변 원리, 수치 = 시대 가변 데이터 |
 | **수치 인용 시 출처 명시** | "snapshot 의 KOSPI 7,822" 같이 명시. snapshot 외 수치 인용 = 환각 |
-
-| 요소 | 내용 | 왜 강제 |
-|------|------|--------|
-| **[1] Frame Grid** | 분석가 frame 의 핵심 축 2~5개 × (현재 위치 / 명제 ID / 확신도). 분석가별 격자 고유 (자산전략가=Cycle Position 3축, trader=S-T Matrix, stock_analyst=점수 5축 등) | LLM 이 표 cell 채울 때 자유 자연어보다 일관성 ↑. memory 와 어제 격자 직접 비교 가능 |
-| **[2] Scenario Branches** | frame 안 의미 있는 4 시나리오 (이름 / 확률 % / 트리거 조건). 합계 100% | "한 답" 보다 분기 명시가 추론 풍부. Layer 3 전략가 종합 시 확률 가중 |
-| **[3] Frame Implication** | frame 한정 함의 (자산전략가=자산군 비중 방향 / trader=진입 시그널 / stock_analyst=점수 등급). **매수 액션·자금액 지시 금지** — Layer 4 영역 | 분화 boundary 강화 |
-| **[4] Citation** | `cited: [<명제 ID 들>]` 한 줄. 자기 dept canon 명제 ID 만. framework 밖이면 `cited: []` + 본문에 "framework 밖" 명시 | 추론 grounding 강제 |
-| **[5] Yesterday Delta** | `yesterday_delta: "<어제 [1] Frame Grid 와 차이 + 트리거>"`. memory 없으면 `yesterday_delta: "first run"` | 시점 일관성 자각. 어제 vs 오늘 판단이 다르면 트리거 명시 강제 |
-
-자연어 보충 본문은 격자 5 요소 뒤에 1~3 문단 — 격자 cell 의 근거·맥락 설명.
 
 ### 격자 예시 (자산전략가 ground truth)
 
