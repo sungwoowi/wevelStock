@@ -42,6 +42,7 @@ data/memory/
 data/notifications/
 data/snapshots/
 data/analyst_queries/
+data/strategist_queries/
 
 # === 시드 데이터는 커밋 ===
 !data/seed/

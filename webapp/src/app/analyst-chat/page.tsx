@@ -7,8 +7,9 @@ type Role = "user" | "assistant";
 type ChatMessage = { role: Role; content: string };
 type ProviderName = "gemini" | "claude_code" | "anthropic" | "mock";
 type ProviderChoice = ProviderName | "auto";
+type Layer = "analyst" | "strategist";
 type ChatMetadata = {
-  analyst_id?: string;
+  // 공통 필드 (analyst + strategist)
   display_name?: string;
   rag_dept?: string;
   rag_chunks_returned?: number;
@@ -26,6 +27,17 @@ type ChatMetadata = {
   upstream_error?: string | null;
   provider_requested?: ProviderName | null;
   provider_used?: string;
+  // analyst 전용
+  analyst_id?: string;
+  learning_dept?: string;
+  // strategist 전용
+  strategist_id?: string;
+  track?: string;
+  target?: string;
+  reads_analysts?: string[];
+  analyst_published_count?: number;
+  analyst_missing_count?: number;
+  analyst_missing_ids?: string[];
 };
 type AnalystMeta = {
   id: string;
@@ -34,6 +46,20 @@ type AnalystMeta = {
   reads: string[];
   model: string | null;
 };
+type StrategistMeta = {
+  id: string;
+  display_name: string;
+  track: string;
+  reads_analysts: string[];
+  reads: string[];
+  canon_categories: string[];
+  model: string | null;
+  max_tokens: number;
+  temperature: number;
+};
+type AgentMeta =
+  | { kind: "analyst"; data: AnalystMeta }
+  | { kind: "strategist"; data: StrategistMeta };
 
 const CONTEXT_LIMIT = 200_000;
 
@@ -68,11 +94,30 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
     providerRequested && providerRequested !== providerUsed
       ? `[${providerUsed} ← req:${providerRequested}]`
       : `[${providerUsed}]`;
+  // strategist 전용 라벨 (track / target / scores X/Y)
+  const isStrategist = meta.strategist_id != null;
+  const published = meta.analyst_published_count ?? 0;
+  const missing = meta.analyst_missing_count ?? 0;
+  const total = published + missing;
+  const missingIds = meta.analyst_missing_ids || [];
   return (
     <div
       className={`text-[11px] font-mono text-neutral-500 border-l-2 ${borderColor} pl-3 mt-1 leading-relaxed`}
     >
-      <span className="text-neutral-400">{providerLabel}</span> · prompt{" "}
+      <span className="text-neutral-400">{providerLabel}</span>
+      {isStrategist && (
+        <>
+          {" "}· track {meta.track || "?"} · target {meta.target || "global"} ·{" "}
+          <span
+            className={
+              missing > 0 ? "text-amber-400" : "text-emerald-400"
+            }
+            title={missing > 0 ? `missing: ${missingIds.join(",")}` : "all analysts published"}
+          >
+            scores {published}/{total}
+          </span>
+        </>
+      )}{" "}· prompt{" "}
       {meta.system_prompt_chars?.toLocaleString()} chars · RAG{" "}
       {meta.rag_chunks_returned} chunks · cache {cacheLabel} · turn tokens{" "}
       {meta.tokens_in?.toLocaleString()}/{meta.tokens_out?.toLocaleString()} ·
@@ -100,8 +145,10 @@ function MetadataBar({ meta }: { meta: ChatMetadata }) {
 }
 
 export default function AnalystChatPage() {
-  const [analystId, setAnalystId] = useState("wealth_strategist");
-  const [analystMeta, setAnalystMeta] = useState<AnalystMeta | null | undefined>(
+  const [layer, setLayer] = useState<Layer>("analyst");
+  const [agentId, setAgentId] = useState("wealth_strategist");
+  const [target, setTarget] = useState("global");
+  const [agentMeta, setAgentMeta] = useState<AgentMeta | null | undefined>(
     undefined,
   );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -113,16 +160,38 @@ export default function AnalystChatPage() {
   const [llmConfig, setLlmConfig] = useState<LlmConfigInfo | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
+  // Layer 토글 시 default agentId 자동 전환 (사용자 수정 가능)
+  function switchLayer(next: Layer) {
+    if (next === layer) return;
+    setLayer(next);
+    setAgentId(next === "analyst" ? "wealth_strategist" : "track_a");
+    setAgentMeta(undefined);
+    setMessages([]);
+    setPerTurnMeta([]);
+    setError(null);
+  }
+
   useEffect(() => {
     let aborted = false;
-    fetch(`${API_BASE}/api/analysts/${analystId}`)
+    const endpoint =
+      layer === "analyst"
+        ? `${API_BASE}/api/analysts/${agentId}`
+        : `${API_BASE}/api/strategists/${agentId}`;
+    fetch(endpoint)
       .then((r) => (r.ok ? r.json() : Promise.reject(`${r.status}`)))
-      .then((m: AnalystMeta) => !aborted && setAnalystMeta(m))
-      .catch(() => !aborted && setAnalystMeta(null));
+      .then((m) => {
+        if (aborted) return;
+        if (layer === "analyst") {
+          setAgentMeta({ kind: "analyst", data: m as AnalystMeta });
+        } else {
+          setAgentMeta({ kind: "strategist", data: m as StrategistMeta });
+        }
+      })
+      .catch(() => !aborted && setAgentMeta(null));
     return () => {
       aborted = true;
     };
-  }, [analystId]);
+  }, [agentId, layer]);
 
   useEffect(() => {
     let aborted = false;
@@ -171,20 +240,28 @@ export default function AnalystChatPage() {
     setLoading(true);
 
     try {
-      const body: { messages: ChatMessage[]; provider?: ProviderName } = {
+      const body: {
+        messages: ChatMessage[];
+        provider?: ProviderName;
+        target?: string;
+      } = {
         messages: next,
       };
       if (provider !== "auto") {
         body.provider = provider;
       }
-      const res = await fetch(
-        `${API_BASE}/api/analysts/${analystId}/chat/stream`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
+      if (layer === "strategist") {
+        body.target = target || "global";
+      }
+      const endpoint =
+        layer === "analyst"
+          ? `${API_BASE}/api/analysts/${agentId}/chat/stream`
+          : `${API_BASE}/api/strategists/${agentId}/chat/stream`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         throw new Error(`${res.status} ${res.statusText}: ${detail}`);
@@ -282,27 +359,80 @@ export default function AnalystChatPage() {
           ← wevelStock 메인
         </a>
         <h1 className="text-2xl font-bold tracking-tight mt-2">
-          분석가 추론부 데모
+          {layer === "analyst" ? "분석가 추론부 데모" : "전략가 권고 데모"}
           <span className="ml-3 text-sm font-normal text-neutral-500">
-            Layer 2 · 자유 질문 → canon + RAG + persona 응답
+            {layer === "analyst"
+              ? "Layer 2 · 자유 질문 → canon + RAG + persona 응답"
+              : "Layer 3 · 분석가 점수 종합 → 권고 발행 (track A/B/...)"}
           </span>
         </h1>
         <div className="mt-3 flex items-center gap-3 text-sm flex-wrap">
-          <label className="text-neutral-400">분석가</label>
+          <label className="text-neutral-400">Layer</label>
+          <div className="inline-flex rounded border border-neutral-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => switchLayer("analyst")}
+              disabled={loading}
+              className={
+                layer === "analyst"
+                  ? "px-3 py-1 text-xs bg-emerald-700 text-white"
+                  : "px-3 py-1 text-xs bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
+              }
+              title="Layer 2 분석가 — 단일 dept 점수 발행"
+            >
+              분석가 (L2)
+            </button>
+            <button
+              type="button"
+              onClick={() => switchLayer("strategist")}
+              disabled={loading}
+              className={
+                layer === "strategist"
+                  ? "px-3 py-1 text-xs bg-emerald-700 text-white"
+                  : "px-3 py-1 text-xs bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
+              }
+              title="Layer 3 전략가 — 분석가 점수 종합 → 권고"
+            >
+              전략가 (L3)
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex items-center gap-3 text-sm flex-wrap">
+          <label className="text-neutral-400">
+            {layer === "analyst" ? "분석가" : "전략가"}
+          </label>
           <input
-            value={analystId}
-            onChange={(e) => setAnalystId(e.target.value)}
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
             className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 font-mono text-xs"
           />
-          {analystMeta === undefined ? (
-            <span className="text-xs text-neutral-500">분석가 메타 로딩…</span>
-          ) : analystMeta ? (
+          {layer === "strategist" && (
+            <>
+              <label className="text-neutral-400">target</label>
+              <input
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder="005930 또는 global"
+                className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 font-mono text-xs w-32"
+                title="team_outputs 의 target. 종목 ticker 또는 'global'"
+              />
+            </>
+          )}
+          {agentMeta === undefined ? (
+            <span className="text-xs text-neutral-500">메타 로딩…</span>
+          ) : agentMeta?.kind === "analyst" ? (
             <span className="text-xs text-neutral-500">
-              {analystMeta.display_name} · 학습부:{" "}
-              {analystMeta.learning_dept} · RAG: {analystMeta.reads.join(",")}
+              {agentMeta.data.display_name} · 학습부:{" "}
+              {agentMeta.data.learning_dept} · RAG:{" "}
+              {agentMeta.data.reads.join(",")}
+            </span>
+          ) : agentMeta?.kind === "strategist" ? (
+            <span className="text-xs text-neutral-500">
+              {agentMeta.data.display_name} · track {agentMeta.data.track} ·
+              reads: {agentMeta.data.reads_analysts.join(",")}
             </span>
           ) : (
-            <span className="text-xs text-red-500">분석가 메타 로드 실패</span>
+            <span className="text-xs text-red-500">메타 로드 실패</span>
           )}
         </div>
         <div className="mt-2 flex items-center gap-3 text-sm flex-wrap">
@@ -337,8 +467,9 @@ export default function AnalystChatPage() {
       >
         {messages.length === 0 && (
           <div className="text-sm text-neutral-500 italic">
-            예: "지금 자산 비중을 어떻게 가져가야 할까?" "원달러 1450 돌파
-            시그널 어떻게 봐?" — 멀티턴으로 캐치볼 가능
+            {layer === "analyst"
+              ? '예: "지금 자산 비중을 어떻게 가져가야 할까?" "원달러 1450 돌파 시그널 어떻게 봐?" — 멀티턴으로 캐치볼 가능'
+              : '예: "long: 삼성전자 분석해줘" "core: 6개월 보유 권고" — target 필드에 종목 ticker (005930 등) 지정 시 분석가 점수 6명 종합'}
           </div>
         )}
         {messages.map((m, i) => {
@@ -355,7 +486,9 @@ export default function AnalystChatPage() {
                     : "text-xs uppercase tracking-wide text-emerald-500 mb-1"
                 }
               >
-                {m.role === "user" ? "you" : analystMeta?.display_name || analystId}
+                {m.role === "user"
+                  ? "you"
+                  : agentMeta?.data.display_name || agentId}
               </div>
               <div className="whitespace-pre-wrap text-sm leading-relaxed">
                 {m.content}
@@ -366,7 +499,7 @@ export default function AnalystChatPage() {
         })}
         {loading && (
           <div className="text-xs text-neutral-500 italic">
-            분석가가 생각 중…
+            {layer === "analyst" ? "분석가가 생각 중…" : "전략가가 종합 중…"}
           </div>
         )}
       </div>

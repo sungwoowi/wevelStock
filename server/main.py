@@ -140,6 +140,7 @@ from server.api import config as config_route  # noqa: E402
 from server.api import notifications as notif_route  # noqa: E402
 from server.api import pipelines as pipelines_route  # noqa: E402
 from server.api import positions as positions_route  # noqa: E402
+from server.api import strategist_chat as strategist_chat_route  # noqa: E402
 from server.api import teams as teams_route  # noqa: E402
 
 app.include_router(pipelines_route.router, prefix="/api", tags=["pipelines"])
@@ -152,6 +153,7 @@ app.include_router(
 )
 app.include_router(positions_route.router, prefix="/api", tags=["positions"])
 app.include_router(analyst_chat_route.router, prefix="/api", tags=["analysts"])
+app.include_router(strategist_chat_route.router, prefix="/api", tags=["strategists"])
 
 
 @app.get("/api/health")

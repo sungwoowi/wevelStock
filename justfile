@@ -118,6 +118,18 @@ chat analyst_id *flags="":
 ask analyst_id query *flags="":
     uv run python -m scripts.ask_analyst {{analyst_id}} "{{query}}" {{flags}}
 
+# === 전략가 (Layer 3 — Track A·B + plugin) ===
+
+# 전략가와 멀티턴 대화 (REPL). /exit /clear /save /target <ticker> 명령. 종료 시 JSONL 자동 저장.
+# 예: just chat-strategist track_a --target 005930 --provider claude_code
+chat-strategist strategist_id *flags="":
+    uv run python -m scripts.chat_strategist {{strategist_id}} {{flags}}
+
+# 전략가에 일회성 단발 질문. JSONL 1 turn 저장.
+# 예: just ask-strategist track_a "long: 삼성전자 어때" --target 005930 --provider claude_code
+ask-strategist strategist_id query *flags="":
+    uv run python -m scripts.ask_strategist {{strategist_id}} "{{query}}" {{flags}}
+
 # === 린트 ===
 
 lint:
