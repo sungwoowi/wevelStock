@@ -55,6 +55,7 @@ plan_file: C:\Users\HOME\.claude\plans\eager-percolating-teacup.md
 - **plan 모드 안에서 마이크로 정정 사이클**: 외부 리뷰 받고 plan 파일 통째 새로 쓰는 패턴 효과적 (Edit 대신 Write 로 갱신). ExitPlanMode 후 task list + 정합 작업
 - **production 첫 호출 = 환각 차단 검증의 골든 모먼트**: 분석가 미발행 상태가 LLM 환각 시험 최적 — Anti-patterns 잘 박혀있으면 정직하게 wait. 이번 호출 1 회로 모든 양식 정합 (cited 풀이 v3.1 / 한국어 용어 / yesterday_verdict_delta / verdict 매핑) 동시 검증
 - **사용자 의도 "하나의 LLM 화면, 백단 0 노출"** = 메모리 영구화. 다음 webapp 작업 시 즉시 인지
+- **페르소나·agent 작업 속도 전략** = `feedback_persona_agent_speedup.md` 박힘. 5 전략 (자료 0 시드 5명 병렬 dispatch / 자료 있는 3명 병렬 / template 추출 / canon grep 자동 검증 / R&D 비동기 핑퐁 / 마이크로 정정 자체 검증) — 본질 설계는 자동화 한계, 양식·검증·차용은 큰 단축. 12+ 세션 → ~4.5 세션 예상. **다음 세션 Top 1 부터 적용**: `superpowers:dispatching-parallel-agents` 스킬로 Track B + 자료 0 시드 5명 1 세션 안에 병렬 처리
 
 ## 다음에 이어서 할 작업 (우선순위)
 
