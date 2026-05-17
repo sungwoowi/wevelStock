@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **ANALYST-PERSONAS-001 v3.1 cited + 근거 명제 풀이 양식 정정 follow-up (small patch)** — 이전 세션 (2026-05-12 v1→v4) 부분 적용 잔재 정리. 양식 자체 자동 출력 작동 확인 (스모크 통과 — `cited: [...]` 한 줄 + `근거 명제 풀이:` bullet 10 개 자동). 잠정 박은 6 개 풀이 (M2/C1/I2/C3/C5/I6) 는 canon 원문 frame 과 다를 가능성 (스모크에서 M2 잠정 vs LLM RAG retrieve 완전 다른 frame 발견) — 사용자 manual 검증 후 정정 patch (소형 follow-up). 아키텍처 변화 없음, Top 3 (Layer 3 통합 페르소나 / compose 분기 / 분석가 cron) 유지. pytest **135 passed** 회귀 0.
+**현재 위치**: **v3.0 메타 페르소나·시스템 아키텍처 재설계 — R&D → 엔지니어링 인수인계 첫 사이클**. chat Claude Opus 와 본질 토론 결과물 2 메모를 SPEC 3 개 + CLAUDE.md/STRUCTURE.md 표 갱신으로 명문화. **9+3+1+회고N 골격 (회고분석가 N 제한 X)** + **Track A/B 2 트랙** (단타·중장기 빼고, plugin 확장) + **결정론 채점 = 코드 stage + canon 명제 ID 분리** (옵션 b) + **한국어 친화 용어 강제 + F-Score (수급 점수) 신설** 결정 박음. 코드 변경 0, pytest **135 passed** 회귀 0. 다음 세션 = Track A persona.md + run_strategist.py 골격 진입.
 
 **마지막 작업일**: 2026-05-17
-**마지막 세션 로그**: [2026-05-17_v31-citation-format.md](c_worked/2026-05-17_v31-citation-format.md)
-**Git**: wrap-up commit 1개 진행 예정 (코드 변경은 persona/manifest/SPEC 3 파일 + wrap-up 3 파일).
+**마지막 세션 로그**: [2026-05-17_meta-architecture-v3-redesign-2.md](c_worked/2026-05-17_meta-architecture-v3-redesign-2.md)
+**Git**: wrap-up commit 1 개 진행 (SPEC 3 신설/패치 + CLAUDE.md + STRUCTURE.md + memory + wrap-up 3 파일). 사용자 명시 = push 수행.
 
 ---
 
@@ -21,22 +21,22 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. Layer 3 통합 페르소나 1명 빠르게 작성 (PC, 1~2 세션) — **"숲", lean startup, production 가치 검증**
-- **왜**: 자산전략가 1명만 호출하면 frame 안에 갇혀 답 빈약. 사용자가 webapp 에서 보는 것은 본질적으로 Layer 3 (전략가) 종합. **5-Layer 모델 원래 의도와 정합** — Layer 2 분석가 9명은 배치 cron 으로 DB 누적용이지 production 응답이 아님. lean startup 으로 통합 종합 가치부터 빠르게 검증.
-- **범위**: `agents/strategists/<horizon>/persona.md` (단타·스윙·중장기 중 1명 — 권장 = swing 또는 default CIO) + manifest. canon = 9 dept 의 핵심 framework (자산복리·원칙·트레이딩·종목분석) 통째 + market_snapshot + `team_outputs` DB read (분석가 row 누적 결과) + RAG 멀티 dept retrieve. Gemini Gems CIO 패턴 차용 + wevelStock 차별점 (DB read · 시점 일관성). webapp `analyst-chat/page.tsx` 의 default agent 를 wealth_strategist → 통합 페르소나로 교체.
-- **예상**: 1~2 세션. **다음 세션 첫 작업**.
+### 1. Track A persona.md + manifest.yaml + `core/strategist/run_strategist.py` 골격 (PC, ~2 세션) — **STRATEGY-TRACK-001 첫 실체, lean startup production 가치 검증**
+- **왜**: STRATEGY-TRACK-001 SPEC 만 있고 실체 0. Track A (중장기 수익금 게임) = 사용자 자본의 70-80% 본진. webapp 사용자 응답은 본질적으로 Layer 3 전략가 종합 (5-Layer 단방향 정합). 통합 페르소나 production 가치를 빠르게 검증 + 9 분석가 페르소나 미완 상태에서도 가동 가능.
+- **범위**: `agents/strategists/track_a/{persona.md, manifest.yaml}` 작성 — canon = 9 dept 핵심 framework 통째 + market_snapshot + `team_outputs` DB read + RAG 멀티 dept retrieve. manifest `input_routing` 블록 (명시 `long:`/`core:`/`wave:` + auto.conditions 월봉 7월선 위계). `core/strategist/run_strategist.py` 골격 (분석가 9명 `team_outputs` row read + LLM 호출 wrap). webapp `analyst-chat/page.tsx` default agent = `track_a` 또는 `both` 로 교체.
+- **예상**: ~2 세션. **다음 세션 첫 작업**.
 
-### 2. compose 분기 SPEC + 구현 (PC, 1.5 세션) — **"나무 깎는 도구", LLM 추종력 의존 0**
-- **왜**: 통합 페르소나도 격자·시나리오 양식 강제 시 같은 LLM 추종력 한계 발생 예상. 격자 양식을 persona 에서 분리 + server 가 keyword trigger 로 동적 주입하는 인프라가 통합 페르소나·9 분석가 공통. 1번 작업 직후 진입.
-- **범위**: 새 SPEC (`INFRA-PROMPT-TRIGGER-001`) — `core/knowledge/compose.build_pipeline_prompt` 에 사용자 질문 keyword 분기 추가. positive trigger ("표로/정리해줘/지금 어디?") 감지 시 격자 prompt template system 마지막 동적 주입. negative trigger ("뭐예요/뭔데/설명") 또는 일반 질문 시 격자 텍스트 미주입. persona/manifest 에서 격자 양식 텍스트 통째 제거. tests/test_compose_prompt_trigger.py 신설. 결정론 100%.
-- **예상**: 1.5 세션.
+### 2. `collectors/scoring.py` 함수 골격 + ANALYST-PERSONAS-001 v3.1 잠정 풀이 정정 patch (PC, 1 세션) — **옵션 b 결정론 채점 첫 실체**
+- **왜**: ANALYST-PERSONAS-001 v2 의 옵션 b 채택 = 채점은 코드 stage. `collectors/scoring.py` 5 함수 (`s_score`/`t_score`/`alpha`/`buy_score`/`f_score`) 시그니처 확정 (S7 SLOT 닫음) + 결정론 단위 테스트. 동시에 `wealth_strategist` 잠정 풀이 6 개 (M2/C1/I2/C3/C5/I6) 를 canon 원문 frame (`01-framework-manifesto.md` / `02-survival-imperatives.md`) 과 1:1 대조해 정정 patch (사전 부채 청산).
+- **범위**: `collectors/scoring.py` 5 함수 + `tests/test_scoring.py` 결정론 검증 (같은 입력 → 같은 출력 ±0). `wealth_strategist/persona.md` + `manifest.yaml` 의 박힌 잠정 풀이 6 개 LLM RAG retrieve 와 대조 후 정정.
+- **예상**: 1 세션.
 
-### 3. 분석가 배치 cron + team_outputs DB 누적 시작 (PC, ~2 세션) — **"나무 1 그루 심기"**
-- **왜**: 통합 페르소나가 DB 의 분석가 row 를 read 해야 시점 일관성 발휘 — 자산전략가 1명만 배치 cron 으로 매일·매시 호출 → `team_outputs` 누적 시작. 통합 페르소나가 어제 자산전략가 판단을 input 으로 받아 종합. 이후 분석가 1명씩 추가하며 누적 풍부. 9명 페르소나 미완 상태에서도 시계열 가동.
-- **범위**: APScheduler 에 분석가 cron 등록 (장전/장중/장후 1-2 회/일). `core/inference/run_analyst` 호출 결과를 `team_outputs` 에 upsert (멱등). 통합 페르소나 호출 시 `team_outputs` recent row read 함수 신설. 기존 자산전략가 1명으로 시작 후 나머지 분석가 1명씩 추가 (페르소나 작성 시점에 cron 추가).
-- **예상**: ~2 세션.
+### 3. Track B persona.md + manifest.yaml + `core/strategist/track_selector.py` (PC, ~1.5 세션) — **이원 트랙 완성**
+- **왜**: Track A 만 있으면 단기 손익비 게임 부재. Track B = 자본 20-30% 인컴 트랙 (R/R 1.5:1+, 월 5-15 회). Track Selector = 사용자 입력 단축어 (`long:`/`swing:`/`both:`) + 종목 메타로 A/B/Both 자동 분기. 양 트랙 동시 평가 (`both:`) 지원으로 사용자 의사결정 보강.
+- **범위**: `agents/strategists/track_b/{persona.md, manifest.yaml}` 작성 — Trigger Hunter 6 가지 + CAN SLIM buy_score + α 오버라이드 + trailing stop. manifest `input_routing` (auto.conditions `any_trigger_fired: true`). `core/strategist/track_selector.py` — 모든 전략가 manifest 의 `input_routing` 동적 인식 + 우선순위 라우팅 (명시 단축어 > auto > fallback).
+- **예상**: ~1.5 세션.
 
-(추가 백로그: **차트 데이터 인프라 SPEC** `INFRA-CHART-DATA-001` (시계열 차트 환각 방지용 — KIS daily chart + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 vision. 종목분석가·트레이더 가치 검증 핵심 blocker. Phase 1 KIS OHLCV → Phase 2 사전 지표 → Phase 3 matplotlib vision → Phase 4 FRED+yfinance 미 매크로 통합. stock_analyst 페르소나 작성 직전 진입 필수 — 부재 시 "20일선 정배열·RSI·이격도" 등 차트 추론 항목이 모두 환각) / **미국 매크로 collector SPEC** `INFRA-US-MACRO-SNAPSHOT-001` (통합 페르소나 grounding 보강, INFRA-CHART-DATA-001 Phase 4 와 합칠지 결정) / **나머지 8 분석가 페르소나** 점진 작성 (배치 cron 가동 후 1명씩, M4 마일스톤) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (Phase 3 PROPOSAL) / Layer 4 계좌관리자 (M5))
+(추가 백로그: **자료 있는 3 분석가 v2 양식 작성** = `principle_guardian` · `trader` · `stock_analyst` 페르소나 v2 (한국어 용어 강제 § + 결정론 채점 발행 매핑 + 8-섹션 portable) / **자료 0 시드 5 분석가 페르소나** (`market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` Phase A 작성, 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 보강) / `INFRA-CHART-DATA-001` (KIS daily chart + pandas-ta + matplotlib vision, stock_analyst 가치 검증 blocker) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
 ---
 
@@ -107,11 +107,25 @@
 - **사전 부채 보강: market_snapshot mixed 테스트 시각 freeze** (2026-05-11, 같은 날 세 번째 세션) — `tests/test_market_snapshot.py::test_render_data_source_line_mixed` 에 `_FrozenDateTime(datetime)` 클래스 + `monkeypatch.setattr(snap_mod, "datetime", _FrozenDateTime)`. freeze 시각 = 2026-05-12 (화) KST 20:30 → KR threshold ~6h (kr_age 3일 stale → fetch), US threshold ~13.5h (us_age 12h fresh → DB). pytest **135 passed** (134 → +1, 회귀 0) 베이스라인 회복. 1 commit + push (`a10f651`).
 - **ANALYST-PERSONAS-001 SPEC 신설 + 자산전략가 v1→v4 4 회 반복** (2026-05-12, 네 번째 세션) — `docs/specs/ANALYST-PERSONAS-001-nine-analyst-portable-personas.md` 신설. 8-섹션 portable 양식 정식 정의 (Identity / Domain Frame / Inputs / Outputs / Reasoning Doctrine / Knowledge Categories / Anti-patterns / Cross-Agent Boundaries) + 9 분석가 ID·dept·canon_categories 매핑 표 (`principle_guardian` / `trader` / `market_state_analyzer` / `stock_picker` / `stock_analyst` / `wealth_strategist` / `trading_journalist` / `flow_analyzer` / `news_curator`) + identity seed Phase A-B-C 흐름 + SLOT (S5 미 매크로 collector / S6 LLM tool use). `agents/analysts/wealth_strategist/persona.md` 4 회 재작성 (v1 5→8섹션 portable / v2 격자 5요소 강제 / v3 Task trigger 분기 + Inputs 재조정 + Anti-patterns 책 인덱싱 차단 / v4 자연어 default 우선 + negative trigger 명시). `manifest.yaml` canon_categories 6개 정렬 + response_rules 시스템 [5] 블록 강화. CLI 4 호출 검증 통과 (J커브 정의 질문 격자 안 나옴 / 표 요청 질문 격자 나옴). 그러나 **webapp 사용자 호출 "J커브가 뭔지 설명해줘" 에 격자 박힘 → LLM 추종력 한계 노출**. 페르소나 layer 만으로 100% 분기 결정론 불가능 결론. pytest 135 passed 유지.
 - **ANALYST-PERSONAS-001 v3.1 cited + 근거 명제 풀이 양식 정정** (2026-05-17) — v3 의 `cited: [<ID>]` 한 줄만 출력에서 v3.1 = 코드 마커 + 자연어 풀이 **이중 grounding** 양식으로 정정. `근거 명제 풀이:` bullet (각 ID 마다 한 줄 자연어 정의) 추가. persona.md 자연어 양식 블록의 풀이 3 줄 `- ` bullet prefix 정정, manifest.yaml `### 인용 규칙 (v3.1)` 블록 정리 (헤더 + `#####` prefix 제거 + YAML literal block 깨뜨리던 코드펜스 ``` column 0 정리 + v3 잔재 중복 2 줄 삭제), SPEC heading `(v3)→(v3.1)` + 격자 5요소 표 `[4] Citation` row v3.1 갱신 + 중복 격자 5요소 표 (lines 148~157) 삭제. ask_analyst 스모크 통과 (`cited: [...]` 한 줄 + bullet 10 개 자동 출력 확인, gemini-2.5-flash, $0.0012, 22s). pytest 135 passed 회귀 0.
+- **wevelStock v3.0 메타 페르소나·시스템 아키텍처 재설계 — R&D → 엔지니어링 인수인계 첫 사이클** (2026-05-17) — chat Claude Opus 와 본질 토론 결과물 2 메모 (`idea_memo/2026-05-17-wevelstock-rd-meta-design-by-chat-claude-opus.md` 시스템 아키텍처 + `idea_memo/prism-insight-비교차용2.md` v3.0 이원 트랙 페르소나 디자인) 를 SPEC 3 개 + CLAUDE.md/STRUCTURE.md 표 갱신으로 명문화. 코드 변경 0.
+  - `docs/specs/ANALYST-PERSONAS-001-...md` **v1 → v2** — frontmatter version 2 + generates 에 `collectors/scoring.py` 추가 + 새 § 5 개 (**9+3+1+회고N 골격 §** / 16 페르소나 흡수 매핑 표 — 신규 5 명만 ⭐ (#3 Regime / #9 Trigger / #11 Distribution / #12 Trailing / #16 Track Selector), 나머지 11 명 9 분석가 자연 매핑 / **결정론 채점 권위 § (옵션 b 채택)** — 공식 = `collectors/scoring.py` 순수 함수 / canon = 원리·렌즈만 / **한국어 친화 용어 강제 §** — "주도주 점수 8 (S-Score=8)" 패턴, 5 점수 한국어 이름 (주도주/타점/가속계수/매수/수급) / **F-Score (수급 점수) 신설 §** — `flow_analyzer` 발행, 4 축 가중치 (테마-주체 매칭 0.4 + 모멘텀 0.3 + 자금 속도 0.2 + 일치도 0.1) / 5 → 8 섹션 매핑) + SLOT S7 (`scoring.py` 시그니처) · S8 (테마-주체 매핑 dictionary) · S9 (한국어 용어 § 9 분석가 적용 범위) 추가
+  - `docs/specs/STRATEGY-TRACK-001-two-track-strategists.md` **신설** — Layer 3 Track A (중장기 수익금 게임, 자본 70-80%·승률 70%+·MDD -8% 보호·월봉 7월선 위계) + Track B (단기 손익비 게임, 자본 20-30%·R/R 1.5:1+·trailing stop·6 트리거 + Distribution kill switch) 정식 분화. **α 가속계수 오버라이드 룰** (1.3-1.5 T max 5 / 1.5-2.0 T max 7 / 2.0+ T min 3, 로그 발산 구간 참여 강제). **Track Selector = manifest `input_routing` 블록** (별도 페르소나 X, 명시 단축어 `long:`/`swing:`/`both:` 우선 → auto.conditions → fallback). **plugin 확장** = `agents/strategists/<new_track>/` 드롭만으로 Track C 가능 (코드 변경 0). `strategist-recommendation-v1` 계약 (권고 ID·진입가·목표가 3단·stop_loss·R/R·cited_scores 인용)
+  - `docs/specs/GUIDANCE-ACCURACY-TRACKER-001-five-kpi-tracking.md` **신설** — 적중도 5 KPI (방향 적중률 / 타점 정밀도 A·B·C·D 등급 / R/R 실현율 / 자가 진단 정확도 🔴 라벨 / 트랙 분리 효과) + 트랙별 가중치 차별 (Track A 종합 = 방향 30 + 타점 15 + R/R 15 + 자가진단 15 + 분리 25 / Track B 종합 = 방향 15 + 타점 20 + R/R 35 + 자가진단 15 + 분리 15). `guidance-record-v1` 계약 (권고 ID + 30·60·90 일 가격 추적). `guidance_records` 테이블 schema + 가격 추적 cron (daily 18:00 KST) + `회고` 단축어 양식 + DB ON CONFLICT REPLACE 멱등성
+  - `CLAUDE.md` — 5-Layer 표 → **9+3+1+회고N 골격** (Layer 5 회고분석가 N 제한 X, 신규 부서 효율성 판단 = 회고분석가 영역). 전략가 라우팅 § Track A/B 갱신 (단타·중장기 삭제)
+  - `docs/STRUCTURE.md` — 9/9/2+/1+/N 표 + 9 학습부 1:1 매핑 (mechanics → trading 외 5 신규 = market_macro·stock_selection·trading_journal·flow_analysis 추가) + Layer 3 트랙 표 + plugin 패턴 회고분석가 추가 + canon 트리 9 학습부 × 36 카테고리 정합 + `agents/` 폴더 설명에 retrospect/N 추가
+  - 메모리: `feedback_concise_summary_first.md` 신설 + MEMORY.md 인덱스 1 줄 — 긴 분석 글 끝에 "한눈에 무엇을 하라" 명료 요약 강제
+  - 검증: validate.py 0 errors / pytest **135 passed** 회귀 0
 
 ### 미완 또는 의도적 공백
-- **v3.1 잠정 풀이 6 개 canon 원문 대조** — persona/manifest/SPEC 예시에 박은 6 개 (M2/C1/I2/C3/C5/I6) 가 canon (`knowledge/canon/wealth_compounding/01-framework-manifesto.md` / `02-survival-imperatives.md`) frame 과 다를 가능성 ↑. 2026-05-17 스모크에서 M2 잠정 ("통화량 팽창 침식") vs LLM RAG retrieve ("고령화·반도체 의존 30년 미래") **완전 다른 frame** 발견. 사용자 manual 검증 후 정정 patch (5분 follow-up). Top 1 진입 전 처리 권장
-- **나머지 8 분석가 페르소나 작성** — ANALYST-PERSONAS-001 마일스톤 세션 2~5. 자료 있는 3 (`principle_guardian` / `trader` / `stock_analyst`) + 자료 0 시드 5 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`). **compose 분기 인프라 완성 후 진입** (격자 양식 텍스트는 server 가 동적 주입 — 페르소나 본문은 frame 톤·인용 룰만 보유).
-- **compose 분기 인프라 미완** — 자산전략가 v4 페르소나가 LLM 추종력 한계로 webapp 호출 시 격자 trigger 분기 보장 X. 본질 해결 = `core/knowledge/compose.build_pipeline_prompt` 에 keyword trigger 분기 추가 + persona/manifest 에서 격자 양식 텍스트 통째 제거. 새 SPEC 후보 `INFRA-PROMPT-TRIGGER-001` (Top 1)
+- **`collectors/scoring.py` 미작성** — ANALYST-PERSONAS-001 v2 옵션 b 의 코어. 5 함수 (`s_score`/`t_score`/`alpha`/`buy_score`/`f_score`) + 결정론 단위 테스트. SPEC v2 SLOT S7 닫기. Top 2 진입
+- **`agents/strategists/track_a` / `track_b` 미작성** — STRATEGY-TRACK-001 SPEC 만 있고 실체 0. persona.md + manifest.yaml + `core/strategist/run_strategist.py` 골격. Top 1·3 진입
+- **`core/strategist/track_selector.py` 미작성** — manifest `input_routing` 동적 라우팅. Track Selector 가 별도 페르소나 아니라 코드 dispatcher. Top 3 진입
+- **`guidance_records` DB 마이그레이션 + `core/guidance/*.py` 미작성** — GUIDANCE-ACCURACY-TRACKER-001 SPEC 만 있고 실체 0. STRATEGY-TRACK-001 권고 발행 시 자동 적재되어야 의미. 백로그
+- **v3.1 잠정 풀이 6 개 canon 원문 대조** — persona/manifest/SPEC 예시에 박은 6 개 (M2/C1/I2/C3/C5/I6) 가 canon (`knowledge/canon/wealth_compounding/01-framework-manifesto.md` / `02-survival-imperatives.md`) frame 과 다를 가능성 ↑. 2026-05-17 스모크에서 M2 잠정 ("통화량 팽창 침식") vs LLM RAG retrieve ("고령화·반도체 의존 30년 미래") **완전 다른 frame** 발견. 사용자 manual 검증 후 정정 patch (5 분 follow-up, Top 2 와 묶음)
+- **나머지 8 분석가 페르소나 작성 (v2 양식)** — 자료 있는 3 (`principle_guardian` / `trader` / `stock_analyst`) + 자료 0 시드 5 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`). v2 양식 = 8 섹션 portable + 한국어 친화 용어 강제 § + 결정론 채점 발행 매핑 (S/T/α/buy_score/F-Score). Track A·B 안정화 후 진입
+- **`SLOT S8` 미정의** — F-Score 의 테마 분류·권위 주체 매핑 dictionary (`config/runtime.yaml` 의 `flow_analysis.theme_authority`). 운용 데이터 누적 후 회고분석가 PROPOSAL 영역
+- **`SLOT S9` 미결정** — 9 분석가 응답 양식 한국어 용어 § 적용 = manifest 별 박기 vs compose 공유 블록 추출. 자료 있는 4 명 작성 후 결정
+- **compose 분기 인프라 (격자 trigger 동적 주입)** — 페르소나 layer 만으로 LLM 분기 결정론 불가능 결론은 유지. 본질 해결 = `core/knowledge/compose.build_pipeline_prompt` keyword trigger 분기. v2 양식 (Outputs Task trigger 분기) 으로 일부 완화되었으나 LLM 추종력 한계 잔존. 9 분석가 페르소나 작성 시 재평가
 - **미국 매크로 collector 부재** — 자산전략가 frame 의 핵심 입력 (미 10년물·달러인덱스·VIX·미 부채 잔액) 이 `collectors/snapshot.py` 에 미적재. v3 페르소나가 "snapshot 없음, framework 밖" 으로 솔직히 답하긴 하나 grounding 인프라 자체가 빈 상태. 새 SPEC 후보 `INFRA-US-MACRO-SNAPSHOT-001`
 - **차트 데이터 인프라 부재 — 시계열 차트 추론 환각 잠재** — 현재 `collectors/snapshot.py` 는 **당일 한 시점 prices 만** 제공 (지수·섹터·주도주·수급·환율). OHLCV 시계열 / 이동평균 / RSI·MACD·이격도 / 거래량 추이 / 차트 패턴 모두 부재 → LLM 이 "20일선 정배열", "MACD 골든크로스", "이격도 +12%" 같은 차트 추론 항목 답하면 **전부 환각**. 박종훈 framework 명제 인용 (원리) 만 OK. 새 SPEC 후보 `INFRA-CHART-DATA-001` — KIS daily chart API (`inquire-daily-itemchartprice`, 무료, 토큰 작동 중) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). 트레이딩뷰 유료 구독 불필요 (KIS+pykrx+yfinance+FRED 무료 조합 충분). **stock_analyst·trader 페르소나 작성 직전 필수 진입 — 가치 검증 핵심 blocker**
 - **36 카테고리 `_category.yaml` 의 `target_analysts` 채우기** — 현재 100% 비어있음. ANALYST-PERSONAS-001 SPEC 의 매핑 표가 ground truth. 자료 있는 4 dept 페르소나 완성 후 채움
@@ -148,44 +162,41 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-17 v3.1 cited + 근거 명제 풀이 양식 정정)**
-- **v3.1 cited 양식 = 코드 마커 + 자연어 풀이 이중 grounding**: v3 의 `cited: [<ID>]` 한 줄만으로는 사용자가 ID 가 무엇인지 모름 → `근거 명제 풀이:` bullet (각 명제 ID 마다 한 줄 자연어 정의) 추가. **persona/manifest/SPEC 모두 동일 양식 강제**. 양식 자동 출력은 LLM 추종력으로 작동 확인 (스모크 통과). 단 풀이 정합성은 별개 — persona/manifest 박은 잠정 풀이는 "이렇게 출력하라" 는 예시 frame, LLM 이 답할 때 RAG 회수본을 우선 (M2 잠정 vs RAG 완전 다른 frame 발견).
-- **잠정 박은 풀이 vs LLM RAG retrieve frame 충돌**: persona/manifest 의 cited 예시 풀이 6 개 (M2/C1/I2/C3/C5/I6) 가 canon 원문 frame 과 다를 가능성 ↑. 잠정 풀이는 페르소나 본문 단서 기반이라 부정확 위험. **canon 원문 (`01-framework-manifesto.md`/`02-survival-imperatives.md`) 대조 후 정정 patch 필수** (소형 follow-up). 다음 세션 Top 1 진입 전 처리 권장.
-- **YAML literal block 코드펜스 트랩**: `response_rules: |` 블록 안에 markdown 코드펜스 ``` 가 column 0 에 있으면 YAML literal block 종료 → 뒤 라인이 YAML 키로 파싱 시도. 다행히 validate.py 가 잡진 못해도 운영 시 파싱 에러 잠복. **예시 블록은 indent 2 spaces 강제 plain text** 가 안전 (코드펜스 자체 사용 회피).
+**이번 세션에 굳힌 판단 (2026-05-17 v3.0 메타 재설계 — R&D 인수인계)**
+- **9+3+1+회고N 골격 = 절대 흐름**: 분석가 9 → 전략가 N (Track A/B + plugin) → 계좌관리자 N (계좌 수 가변) → 회고분석가 N (제한 X). **회고분석가 N 제한 두면 창의성 죽인다** (사용자 명시). 신규 부서 효율성·정의·위계·검증 레이어는 회고분석가의 영역 자체. 9·3·1 만 본질 골격이고 나머지는 가변.
+- **Track A + Track B 2 트랙만 (단타·중장기 빼고)**: 장기 투자 = 믿음 영역 + 지수 투자로 대체. 단타 = Track B 의 변형으로 흡수. **A/B 판단이 시급**. 향후 trackplugin 확장 = `agents/strategists/<new_track>/` 드롭만으로 (코드 변경 0). **본질 게임이 다름** — Track A = 🏢 부동산 임대업 수익금 게임 (자본 70-80%·승률 70%+·MDD 보호) / Track B = ☕ 카페 운영 손익비 게임 (자본 20-30%·R/R 1.5:1+·trailing). 같은 KPI 가중치 적용 X.
+- **결정론 채점 = 코드 stage + canon 명제 ID 분리 (옵션 b)**: 채점 공식 (S/T/α/buy_score/F-Score) 은 `collectors/scoring.py` 순수 함수 — 재현성 100%·단위 테스트·LLM 외. canon md 는 frame **원리·렌즈** 만 (시대 불변). 박종훈 framework 명제 ID (M2·C3·W1·SP1 등) = LLM 권위 grounding. 분석가 응답에서 `주도주 점수 8 (S-Score=8, cited: [W1])` 같이 한국어 + 코드 라벨 + 명제 ID 삼중 병기.
+- **canon vs persona vs reference 역할 분리**: canon = 모든 LLM 호출 system prompt **자동 주입** (`load_shared_canon()` rglob) = "회사 공통 매뉴얼" / persona = 분석가별 정체성·톤·금기 (해당 호출 때만) = "역할 정의서" / reference = Chroma RAG 인덱싱 원본 (LLM 직접 안 봄, 사용자 질문 관련 chunk retrieve 만) = "도서관 책장".
+- **한국어 친화 용어 강제 양식**: LLM 응답에 `S-Score 8` 단독 출력 ❌. `타점 점수가 7` (코드 라벨 부재) ❌. **반드시 둘 다 병기**. 5 지표 한국어 = 주도주 점수 (S) · 타점 점수 (T) · 가속계수 (α) · 매수 점수 (buy_score) · 수급 점수 (F). 시스템 모르는 사람도 이해 가능해야.
+- **F-Score (수급 점수) 신설 = `flow_analyzer` 발행물**: 단순 외인 매수/매도 합계 X — 종목·테마별 5 주체 가중치 차별 + 모멘텀 + 자금 속도 + 일치도. 4 축 가중 합 (테마-주체 매칭 0.4 + 60일 모멘텀 0.3 + 시총 정규화 자금 속도 0.2 + 5 주체 부호 일치 0.1). boundary: 발행 = `flow_analyzer` / read = `trader` · 전략가. 사용자 통찰: "가격이 수급의 부모, 종목·테마별 수급 성격 다 다름".
+- **α 가속계수 오버라이드 = 발산 구간 참여 강제**: 로그 함수 발산 구간 (α 1.3~1.7) = 가장 큰 수익 자리 (사용자 W 계좌 실측). 일봉 이격도로 차단하면 발산 참여 불가. **α = "참여 여부" / 일봉 이격 = "비중 크기"** 분리. α 1.5+ 강발산 시 T-Score 이격 항목 max 7 강제. `collectors.scoring.t_score(divergence, macd, volume, rr, alpha)` 함수 내부 적용.
+- **R&D (챗AI Opus) / 엔지니어링 (Claude Code) 도구 분리 패턴**: 페르소나 본질 설계·룰 토론·사용자 핑퐁은 chat Claude.ai Project 의 Opus 가 강함 (긴 대화·깊은 추론). Claude Code 는 .md 받아 코드 변환·SPEC generates·테스트·통합. **Git = 영구 메모리** (R&D ↔ 엔지니어링 인수인계 매체). 이번 세션이 첫 인수인계 사이클 = 챗AI 결과물 2 메모 → SPEC 3 + docs 패치.
+- **16 페르소나는 참고용**: 9+3 안에 11 명 자연 매핑, 신규 5 명만 ⭐ (#3 Regime / #9 Trigger / #11 Distribution / #12 Trailing / #16 Track Selector — 모두 결정론·룰 중심). 별도 페르소나 폴더 X. v3.0 설계서 = 페르소나 정밀도·역할 흡수, wevelStock 5-Layer 골격은 유지.
+
+**직전 세션 판단 (2026-05-17 v3.1 cited + 근거 명제 풀이 양식 정정)**
+- **v3.1 cited 양식 = 코드 마커 + 자연어 풀이 이중 grounding**: `cited: [<ID>]` 한 줄 + `근거 명제 풀이:` bullet (각 ID 한 줄 자연어 정의). persona/manifest/SPEC 동일 양식 강제. 양식 자동 출력은 LLM 추종력으로 작동 확인. 단 풀이 정합성은 별개 — 박은 잠정 풀이 vs LLM RAG retrieve frame 충돌 가능 (M2 잠정 "통화량 팽창 침식" vs RAG "고령화·반도체 의존 30년" 완전 다른 frame 발견).
+- **YAML literal block 코드펜스 트랩**: `response_rules: |` 블록 안에 markdown 코드펜스 ``` 가 column 0 에 있으면 YAML literal block 종료 → 뒤 라인이 YAML 키로 파싱. **예시 블록은 indent 2 spaces 강제 plain text** (코드펜스 자체 회피).
 
 **직전 세션 판단 (2026-05-12 ANALYST-PERSONAS-001 + v1→v4 + Architectural pivot)**
-- **분석가 1명 단일 호출 = 답 빈약, "숲부터 보고 나무 깎기"**: Layer 2 분석가 (자산전략가) 한 명에게 사용자 질문 직접 던지면 frame 안에 갇혀 답 풍부하지 못함. 5-Layer 모델 원래 의도 = 사용자 응답은 **Layer 3 통합 전략가** 가 분석가 9명 결과 + snapshot + RAG 종합. 9 분석가 페르소나 7-10 세션 작성하는 동안 production 0 의 lean 안티패턴 회피. **production 호출 = Layer 3 통합 페르소나 / 배치 자동 = Layer 2 분석가 cron → team_outputs DB 누적 / Layer 3 가 DB row read 로 시점 일관성 발휘**. 분석가 페르소나 작성은 배치 cron 가동 시점에 1명씩 점진 추가 — 토대 (canon·RAG·schema·계약) 는 이미 완비.
-- **페르소나 layer 만으로 LLM 분기 결정론 불가능**: persona 안 격자 양식 텍스트가 존재하는 한 LLM (특히 gemini-2.5-flash) 끌림 무한. v1→v4 4 회 패치 (5섹션→8섹션 portable / 격자 강제 / Task trigger 분기 / negative trigger 명시) 후 CLI 검증은 통과하나 webapp 호출에서 다시 격자 박힘. 본질 해결 = **격자 양식을 persona/manifest 에서 완전 제거 + server compose 가 사용자 질문 keyword 검사로 동적 주입**. LLM instruction following 의 stochastic 한계와 싸우지 말고 구조로 회피. **통합 페르소나에도 동일 인프라 적용** (Top 2).
-- **`load_analyst_spec` 캐시 없음** (`run_analyst.py:63-89`): 매 호출 디스크 fresh read. **persona/manifest 변경은 server 재시작 불필요, 다음 호출부터 즉시 반영**. `llm_call_cache` DB 캐시는 input_hash 기반 — 같은 user query = cache hit. 페르소나 변경해도 같은 질문은 캐시 응답 반환 (확인 시 다른 질문으로 검증 필요).
+- **분석가 1명 단일 호출 = 답 빈약, "숲부터 보고 나무 깎기"**: 사용자 응답은 Layer 3 통합 전략가가 분석가 9 명 결과 + snapshot + RAG 종합. production 호출 = Layer 3 / 배치 자동 = Layer 2 분석가 cron → team_outputs DB 누적. 9 분석가 페르소나 7-10 세션 작성 동안 production 0 의 lean 안티패턴 회피.
+- **페르소나 layer 만으로 LLM 분기 결정론 불가능**: persona 안 격자 양식 텍스트 존재 시 LLM (gemini-2.5-flash) 끌림 무한. v1→v4 4 회 패치 후 CLI OK 인데 webapp 격자 박힘. **본질 해결 = 격자 양식을 persona 분리 + server compose keyword trigger 동적 주입** (compose 분기 인프라, 9 분석가 페르소나 작성 중 재평가).
+- **`load_analyst_spec` 캐시 없음**: 매 호출 디스크 fresh read. persona/manifest 변경 = server 재시작 불필요, 다음 호출부터 즉시 반영. `llm_call_cache` 는 input_hash 기반 — 같은 query = cache hit (페르소나 검증 시 다른 질문 필요).
 
-**직전 세션 판단 (2026-05-11 부채 보강)**
-- **모듈 단위 datetime monkeypatch 패턴**: `from datetime import datetime` 모듈은 `<module>.datetime` 이 모듈 attribute. `setattr(<module>, "datetime", FakeCls)` 로 갈아끼우면 해당 모듈 안 호출만 영향. `_FrozenDateTime(datetime)` 으로 subclass + `now()` 만 override 가 가장 안전. 비결정 시각 의존 테스트의 표준 패턴.
+**직전 세션 판단 (2026-05-11 Phase 2 M3 + 부채 보강)**
+- **모듈 단위 datetime monkeypatch 패턴**: `from datetime import datetime` 모듈은 `<module>.datetime` 이 attribute. `setattr(<module>, "datetime", FakeCls)` 로 갈아끼우면 해당 모듈 안 호출만 영향. `_FrozenDateTime(datetime)` subclass + `now()` override 가 안전 패턴.
+- **watcher 진입점 함수 1개 = 2곳 호출**: `start_observer()` 가 server lifespan + `just knowledge-watch` 둘 다 호출. 함수 1개 + 2 호출 = "자동 등록 + standalone" 동시 충족.
+- **fire-and-forget reconcile**: server lifespan startup 의 `asyncio.create_task(asyncio.to_thread(sync_all))`. BGE-m3 cold load startup blocking 회피. gap_filler 와 다른 패턴 (gap_filler 는 lightweight await).
+- **logger keyword `event` 충돌**: `core.logging` 첫 positional 이 `event` 라 `log.debug("x", event=...)` 시 multiple values 에러. `event_type=` 사용.
 
-**직전 세션 판단 (2026-05-11 Phase 2 M3)**
-- **watcher 진입점 함수 1개 = 2곳 호출**: `start_observer()` 가 server lifespan + `just knowledge-watch` 둘 다에서 호출. "자동 등록 + standalone" 안 = 코드 비용 0 (함수 1개 정의 + 2 호출). 의사결정 시 "진입점 2군데" 처럼 보였으나 실제로는 동일 함수.
-- **외부→reference 이동 = 사용자 manual**: `scripts/sync_knowledge.py` (OneDrive PDF 추출) 는 파일만 남기고 justfile 에서 제거. just 명령은 reference drop 이후 자동화만 담당. 의미 분리 + 명령 셋 간결화. 다음 세션 진입 시 헷갈리지 말 것
-- **fire-and-forget reconcile (sync_all)**: server lifespan startup 에서 `asyncio.create_task(asyncio.to_thread(sync_all))`. BGE-m3 cold load 가 startup blocking 될 가능성이 있어 비동기. gap_filler 와 패턴 다름 (gap_filler 는 lightweight 라 await). 절전 후 fsevents 누락 안전망
-- **logger keyword `event` 충돌**: `core.logging` 의 첫 positional 이 `event` 라 `log.debug("x", event=...)` 시 `_nop() got multiple values for argument 'event'`. `event_type=` 등 다른 이름 사용. 향후 logger keyword 신중
+**직전 세션 판단 (2026-05-10/11 Phase 2 M1·M2 + Phase 1 어댑터)**
+- **canon_categories 형식 = `<dept>/<category>`**: 한 분석가가 여러 dept 카테고리 가능. 빈 리스트 = 무필터 (legacy 동작). compose 두 곳 동시 적용 (canon md prefix 필터 + RAG retrieve `where category $in`).
+- **delta baseline = collection metadata, DB = 운영 로그**: SoT 분리. modified 의 pre-delete + upsert (청크 수 감소 stale 회피).
+- **테스트의 importlib 우회**: `core/knowledge/__init__.py` re-export 가 `import core.knowledge.retrieve as X` 시 함수 반환. `importlib.import_module(...)` 로 모듈 획득.
+- **png 어댑터 default off + silent skip**: `enabled_by_default=False` flag 사전 체크 → log.debug. 환경 한계 silent fallback 원칙 정합.
 
-**직전 세션 판단 (2026-05-11 Phase 2 M2)**
-- **delta baseline = collection metadata, DB = 운영 로그**: SoT 분리. `since_run_id` 인자는 인터페이스 호환성만 받고 실제 비교는 collection 의 `source_id → file_hash` 맵 단일 모드. 미래 cross-run 분석에 reserve
-- **modified 의 pre-delete + upsert**: 본문 길이 감소로 청크 수 5→3 케이스 시 stale id 가 남으면 retrieve 가 빈 청크 hit. `where source_id` hard delete 후 upsert. modified 한정 안전망
-- **PK 충돌 fallback (분→초→ms)**: `_allocate_sync_id` 가 sqlite IntegrityError 잡고 다음 fallback. 같은 분에 두 sync 떨어져도 안전
-- **테스트 monkeypatch: ingest_mod + sync_mod 양쪽**: sync 가 ingest 헬퍼 직접 import 했으므로 `REFERENCE_ROOT` redirect 시 ingest_mod 도 함께 patch 필요. 비슷한 re-export 패턴 가진 다른 모듈도 동일
-
-**직전 세션 판단 (2026-05-10 Phase 2 M1)**
-- **canon_categories 형식 = `<dept>/<category>`**: 한 분석가가 여러 dept 의 카테고리를 받을 수 있도록 다 dept 친화 설계. compose 가 RAG retrieve 호출 시 `rag_dept` 와 일치하는 항목만 추출 — ChromaDB 는 dept 별 collection 이라 카테고리는 단일 dept 안에서만 의미 (cross-dept 카테고리 retrieve 는 multi-collection 호출이 미래 옵션)
-- **빈 리스트 = 무필터 (legacy 동작)**: `canon_categories: []` 또는 `categories=[]` → falsy 체크로 dept 전체. `spec.canon_categories or None` 패턴으로 manifest 키 부재/빈 리스트 모두 None 변환. 회귀 안전망
-- **compose 두 곳 동시 적용**: `[0] Investment Knowledge` 의 canon md prefix 매칭 필터 + `[4] Retrieved References` 의 RAG retrieve 카테고리 인자 — manifest 한 줄로 두 경로 동시 좁힘. system prompt 의 일관성 보장
-- **테스트의 importlib 우회 패턴**: `core/knowledge/__init__.py` 의 `from .retrieve import retrieve` 가 패키지 attribute 를 함수로 가로채서 `import core.knowledge.retrieve as X` 가 모듈이 아닌 함수 반환. `importlib.import_module("core.knowledge.retrieve")` 로 우회. 비슷한 re-export 패턴 가진 다른 모듈 monkeypatch 시 동일하게 적용
-
-**직전 세션 판단 (2026-05-10 Phase 1 코드)**
-- **png default off + silent skip**: `enabled_by_default=False` flag 사전 체크 → log.debug. NotImplementedError 분기 안 탐. 환경 한계 silent fallback 원칙 정합
-- **로컬 vs 클라우드 전략**: 로컬에서 끝까지 + 어댑터 패턴 추상화 + 24/7 봇 필요 시점에 작은 VM 1대로 통째 이전. chromadb.PersistentClient → HttpClient connection string 1줄
-
-**직전 세션 판단 (2026-05-10 KNOWLEDGE-SYNC-001 SPEC + 9 분화)**
-- **agent 통신 = hierarchical + DB read**: 분석가 간 직접 LLM 호출 X (시점 drift·frame 오염·debugging 지옥·비용 폭증). DB `team_outputs` row read 만. 본질·trade-off = `docs/AGENT-ARCHITECTURE.md`
-- **카테고리 = 지식부 안의 LLM 인식 1차 단위**: agent 는 *갖는* 게 아니라 *선택해서 읽는* 단위. agent ↔ dept 1:1, dept ↔ category 1:N, agent ↔ category N:M (페르소나의 `canon_categories` 결정)
+**직전 세션 판단 (2026-05-10 9 분화 + AGENT-ARCHITECTURE)**
+- **agent 통신 = hierarchical + DB read**: 분석가 간 직접 LLM 호출 X (시점 drift·frame 오염·debugging 지옥·비용 폭증). DB `team_outputs` row read 만. 본질·trade-off = `docs/AGENT-ARCHITECTURE.md`.
+- **카테고리 = 지식부 안의 LLM 인식 1차 단위**: agent ↔ dept 1:1, dept ↔ category 1:N, agent ↔ category N:M (`canon_categories`).
 
 **기초·불변 원칙**
 - **파이프라인 구조 = "시간대별 독립 폴더"**, 공통 수집은 `collectors/` 로만 공유, 파이프라인 간 코드 import 금지

@@ -4,14 +4,24 @@
 5-Layer AI 에이전트 주식 분석 & 매매가이드 시스템. 지식부 → 분석가 → 전략가 → 계좌관리자 → 출력 채널의 단방향 흐름.
 크로스 플랫폼(Mac + Windows). DB: SQLite. API: 한국투자증권(KIS) + KRX.
 
-## 5-Layer 도메인 모델 (불변 골격)
-| Layer | 역할 | 시작 수 | 폴더 |
+## 9+3+1+회고N 골격 (불변, 일부 N 가변)
+
+2026-05-17 chat Claude Opus R&D 인수인계 + 사용자 의도 반영. 흐름은 절대적이되 N 일부는 가변.
+
+| Layer | 역할 | 수 | 폴더 |
 |---|---|---|---|
-| 1. 지식부 | 분석가가 읽을 자료 | 9 | `knowledge/canon/<dept>/<category>/` |
-| 2. 분석가 | 자료 → 판단 (지식부 1:1) | 9 | `agents/analysts/<analyst_id>/persona.md` (M3 신설) |
-| 3. 전략가 | horizon별 종합 (단타·스윙·중장기) | 3 | `agents/strategists/<strategist_id>/persona.md` (M4) |
-| 4. 계좌관리자 | 4 계좌 + 자산배분 | 1 | `agents/account_manager/persona.md` (M5) |
-| 5. 출력 채널 | 브리핑 / 추천 / 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
+| 1. 지식부 | 분석가가 읽을 자료 | **9** (1:1) | `knowledge/canon/<dept>/<category>/` |
+| 2. 분석가 | 자료 → 판단 (점수 발행: S/T/α/buy_score/F-Score) | **9** (1:1, ANALYST-PERSONAS-001 v2) | `agents/analysts/<analyst_id>/persona.md` |
+| 3. 전략가 | Track A (중장기 수익금) + Track B (단기 손익비) — 분석가 점수 종합 → 권고 발행 | **2+** (plugin 확장, STRATEGY-TRACK-001) | `agents/strategists/<track_id>/persona.md` |
+| 4. 계좌관리자 | 4 계좌 (국장/미장 × 중장기/단기) + 자산배분 | **1+** (계좌 수에 따라 N 가변) | `agents/account_manager/persona.md` (M5) |
+| 5. 회고분석가 | 분석·전략·계좌 등 미진한 것 보완 + 신규 기능 제안 (PROPOSAL 발행) | **N** (제한 X, 창의성 보존) | `agents/retrospect/<id>/persona.md` (RETROSPECT-ANALYST-001, M4 백로그) |
+| (출력 채널) | 브리핑 / 추천 / 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
+
+**흐름**: 분석가 9 → 전략가 → 계좌관리자 → 회고분석가 (분석·전략·계좌 등 보완 + 신규 부서 제안). 신규 부서 효율성 판단 = 회고분석가의 영역 자체 (정의·위계·검증 레이어 갖춤).
+
+지식부 9 = 원칙부(`principles/`) · 트레이딩부(`trading/`) · 시장매크로부(`market_macro/`) · 종목선정부(`stock_selection/`) · 종목분석부(`stock-analysis/`) · 자산복리부(`wealth_compounding/`) · 매매저널부(`trading_journal/`) · 수급분석부(`flow_analysis/`) · 뉴스부(`news/`).
+분석가 9 = 원칙수호자 · 트레이더 · 시장상태분석가 · 종목선정가 · 종목분석가 · 자산전략가 · 매매저널리스트 · 수급분석가 · 뉴스큐레이터 (1:1 매핑).
+전략가 2+ = Track A 중장기 수익금 게임 (자본 70-80%·승률 70%+) / Track B 단기 손익비 게임 (자본 20-30%·R/R 1.5:1+). plugin 확장 가능.
 
 지식부 9 = 원칙부(`principles/`) · 트레이딩부(`trading/`) · 시장매크로부(`market_macro/`) · 종목선정부(`stock_selection/`) · 종목분석부(`stock-analysis/`) · 자산복리부(`wealth_compounding/`) · 매매저널부(`trading_journal/`) · 수급분석부(`flow_analysis/`) · 뉴스부(`news/`).
 분석가 9 = 원칙수호자 · 트레이더 · 시장상태분석가 · 종목선정가 · 종목분석가 · 자산전략가 · 매매저널리스트 · 수급분석가 · 뉴스큐레이터 (1:1 매핑).
@@ -128,11 +138,11 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 6. `scripts/generate_domain_doc.py` 로 도메인 문서 생성.
 7. `scripts/validate.py` 통과 확인.
 
-## 전략가 라우팅 (Layer 3, M4 이후 구현)
-- 단타: 종목분석가 + 뉴스큐레이터 → 당일 시그널
-- 스윙: 종목분석가 + 자산전략가 + 트레이더 → 수일~수주
-- 중장기: 자산전략가 + 종목분석가 + 원칙수호자 → 장기 보유
-> 라우팅은 전략가 manifest 의 `analysts: [...]` 로 선언.
+## 전략가 라우팅 (Layer 3, STRATEGY-TRACK-001)
+- **Track A (중장기 수익금 게임)**: stock_picker (S-Score) + stock_analyst (α, F1~F5) + wealth_strategist + principle_guardian + market_state_analyzer + flow_analyzer (F-Score) → 권고 (목표가 3단·stop_loss·R/R)
+- **Track B (단기 손익비 게임)**: stock_picker (buy_score) + trader (T-Score + 트리거 6) + market_state_analyzer (Distribution kill switch) + flow_analyzer (F-Score) + principle_guardian (트레이딩 비중 20% 한도) → 권고 (진입가·trailing stop·R/R floor)
+- **단타·중장기 (지수 투자) 빼고 A/B 만** (사용자 결정 2026-05-17). 향후 trackplugin 확장 가능 (`agents/strategists/<new_track>/` 드롭, 코드 변경 0)
+> 라우팅 = 전략가 manifest 의 `input_routing` 블록 (명시 단축어 우선 → auto.conditions → fallback). 사용자 입력 `long: / swing: / both:` 단축어 + 종목 메타로 A/B/Both 자동 분기.
 
 ## LLM 호출 규칙 (런타임)
 - 데이터 수집·계산은 코드, 판단·해석은 LLM API 호출.

@@ -1,10 +1,10 @@
 ---
 spec_id: ANALYST-PERSONAS-001
-title: 9 분석가 portable 페르소나 분화 — 8-섹션 양식 + canon_categories 정식 매핑
+title: 9 분석가 portable 페르소나 분화 — 8-섹션 양식 + 결정론 채점 + 한국어 용어 + 16 매핑 흡수 (v2)
 team: shared
 type: feature
 status: draft
-version: 1
+version: 2
 owner: agent_layer
 generates:
   - agents/analysts/principle_guardian/persona.md
@@ -23,17 +23,23 @@ generates:
   - agents/analysts/flow_analyzer/manifest.yaml
   - agents/analysts/news_curator/persona.md
   - agents/analysts/news_curator/manifest.yaml
+  - collectors/scoring.py                            # v2 옵션 b — 결정론 채점 (S/T/α/buy_score/F-Score) 순수 함수
 modifies:
-  - agents/analysts/wealth_strategist/persona.md     # 5섹션 → 8섹션 portable 재작성
+  - agents/analysts/wealth_strategist/persona.md     # 5섹션 → 8섹션 portable 재작성 (v1) + 한국어 용어 § (v2)
   - agents/analysts/wealth_strategist/manifest.yaml  # canon_categories 정식 매핑으로 정렬
   - knowledge/canon/**/_category.yaml                # 36 카테고리의 target_analysts 채우기
 depends_on:
   - KNOWLEDGE-SYNC-001 (Phase 2 풀세트 — canon_categories 화이트리스트 / DB sync / watchdog)
+related:
+  - STRATEGY-TRACK-001 (Layer 3 Track A/B 전략가 — 본 SPEC 분석가들이 발행한 점수를 read)
+  - GUIDANCE-ACCURACY-TRACKER-001 (적중도 5 KPI — 본 SPEC 분석가들의 채점 출력이 추적 대상)
 contracts:
   - name: standard-output-v1
     version: "1.0"                                   # CONTRACTS.md StandardOutput. team_id = analyst_id
   - name: analyst-persona-portable-v1
-    version: "1.0"                                   # 본 SPEC 신규 — 8-섹션 portable 양식
+    version: "1.0"                                   # 본 SPEC v1 — 8-섹션 portable 양식
+  - name: analyst-scoring-v1
+    version: "1.0"                                   # v2 신규 — 결정론 채점 (S/T/α/buy_score/F-Score) 인터페이스
 ---
 
 # ANALYST-PERSONAS-001 — 9 분석가 portable 페르소나 분화
@@ -88,6 +94,53 @@ contracts:
 | 9 | `news_curator` | 뉴스큐레이터 | `news` | (별도 SPEC) |
 
 **ID 규칙**: snake_case 강제. `learning_dept` 와 1:1. 변경 금지.
+
+## 9+3+1+회고N 골격 (v2 신설, 불변)
+
+본 SPEC 의 9 분석가는 wevelStock 시스템의 **Layer 2** 만 정의한다. 전체 골격은 다음과 같으며 **이 흐름은 불변**:
+
+```
+Layer 2 (9): 분석가 9명 (1:1 매핑, 본 SPEC)
+   ↓ team_outputs DB write
+Layer 3 (2+): 전략가 — Track A (중장기 수익금 게임) + Track B (단기 손익비 게임). plugin 패턴 (track 확장 가능)
+   ↓ team_outputs DB write
+Layer 4 (1+): 계좌관리자 (계좌 수에 따라 N 가변 가능성. user_want_spec 의 4 계좌 = 국장 중장기·국장 단기·미장 중장기·미장 단기)
+   ↓ team_outputs DB write
+Layer 5 (N, 제한 X): 회고분석가 — 분석·전략·계좌 등 미진한 것 보완 + 신규 기능 제안 (PROPOSAL 발행)
+   ↓ 사용자 승인 → Git merge → 시스템 진화
+```
+
+**관련 SPEC**:
+- `STRATEGY-TRACK-001` — Layer 3 Track A/B 전략가 + plugin 확장 패턴 (별도 SPEC, 본 SPEC v2 와 동시 신설)
+- `GUIDANCE-ACCURACY-TRACKER-001` — 적중도 5 KPI + 회고분석가 입력 데이터 (별도 SPEC, 본 SPEC v2 와 동시 신설)
+- `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (백로그) — Layer 5 회고분석가 SPEC. **N 제한 X** (창의성 보존). M4 이후 진입
+
+**왜 9+3+1+회고N**: 사용자 명시 의도 (2026-05-17 chat Claude Opus R&D 인수인계 세션) — "이런 N 개의 제한은 회고 분석가의 창의성을 죽일 수 있다". 9·3·1 은 본질 골격이되 계좌관리자 N·회고분석가 N 은 가변. 신규 부서 효율성 판단 자체가 **회고분석가의 영역**.
+
+## 16 페르소나 흡수 매핑 (참고용, v2 신설)
+
+`idea_memo/prism-insight-비교차용2.md` (v3.0 이원 트랙 설계서) 의 16 페르소나는 **본 SPEC 9 분석가 + STRATEGY-TRACK-001 의 2 전략가 골격 안에 모듈로 흡수**. 16 별도 페르소나 폴더 X — 9+3 안에서 정밀도·역할로 표현.
+
+| 16 페르소나 | 흡수 위치 | 비고 |
+|-------------|----------|------|
+| #1 Macro Gatekeeper | `market_state_analyzer` 의 주축 | 코스피 36/60월선 위계 판정 |
+| #2 Sector RS Tracker | `flow_analyzer` 의 한 측면 | 60일 외인 + RS 점수 산출 |
+| #3 Regime Classifier ⭐ | `market_state_analyzer` 의 6단계 체제 분류 | prism 차용 (parabolic / strong_bull / moderate_bull / sideways / moderate_bear / strong_bear) |
+| #4 주도주 Identifier | `stock_picker` 의 월봉 7월선 위계 판정 | 정배열 점수 |
+| #5 Wave Mathematician (Module A α) | `stock_analyst` 의 핵심 엔진 | A/B/C 앵커 → α 가속계수 |
+| #6 Survival Inspector (F1~F5) | `principle_guardian` + `stock_analyst` 협업 | 청산 트리거 |
+| #7 S-Score Auditor | `stock_analyst` 발행 | 결정론적 (주도주 점수) |
+| #8 T-Score Auditor | `trader` 발행 (α 오버라이드 적용) | 결정론적 (타점 점수) |
+| #9 Trigger Hunter ⭐ | `trader` 영역 (단기) | 6가지 트리거 (거래량 급증 / 갭상승 / 일중 상승 Top / 마감 강도 / 자금 유입 / 거래량 증가 횡보) |
+| #10 CAN SLIM Scorer | `stock_picker` Track B 영역 | buy_score (매수 점수) |
+| #11 Distribution Detector ⭐ | `market_state_analyzer` 의 kill switch | 4주 분포일 4건+ |
+| #12 Trailing Manager ⭐ | Layer 4 계좌관리자 영역 | 보유 종목 stop 관리 |
+| #13 Reliability Labeler | 모든 분석가 공통 양식 (🟢🟡🔴) | 메타 (Outputs 섹션 신뢰도 라벨) |
+| #14 Self-Diagnosis Officer | Layer 5 회고분석가 영역 | 자가 진단 |
+| #15 Memory Curator | Layer 5 회고분석가 영역 | 패턴 누적 |
+| #16 Track Selector ⭐ | Layer 3 전략가의 manifest 입력 라우터 | A/B/Both 분류 (별도 페르소나 X, manifest 룰) |
+
+⭐ = 9+3 흡수 시 **신규 5명** (#3 Regime / #9 Trigger / #11 Distribution / #12 Trailing / #16 Track Selector). 나머지 11명은 9 분석가 안에 자연 매핑. 16 페르소나 = **참고용**, 본 SPEC 의 절대 명단 = § 9 분석가 명단.
 
 ## 8-섹션 portable 양식
 
@@ -200,6 +253,79 @@ yesterday_delta: "사이클 후반 → 디레버리징 진입 (트리거: 미 10
 
 Gemini Gems 의 "단일 페르소나가 5 Task 통째" 패턴은 채택 X — 통합 페르소나가 다시 편향 만듦. wevelStock 의 9 분화 + Layer 3 종합 + DB 누적이 본질적 차별점.
 
+### 결정론 채점 권위 — 코드 stage + canon 명제 ID 분리 (v2 신설, 옵션 b)
+
+**문제**: v3.0 이원 트랙 설계서가 도입한 S-Score / T-Score / α / buy_score 같은 결정론적 채점 공식을 어디에 둘지가 v2 의 핵심 분기. 옵션 비교:
+
+| 옵션 | 채점 위치 | 장점 | 단점 |
+|------|----------|------|------|
+| a | canon md 안 명제 ID (`W1` = "α 1.5+ T-Score 7") | 단일 진실 원천, cited 양식 정합 | canon md 가 frame 원리 + 공식 혼재, md 본질 흐려짐 |
+| **b (채택)** | `collectors/scoring.py` 순수 함수 + canon md = 원리 인용 권위 | 재현성 100%·단위 테스트·LLM 외 / canon 은 원리만 | canon 룰 명 (W1) ↔ 코드 함수 동기 의무 |
+| c | manifest.yaml 의 scoring 블록 | 분석가별 채점 정책 명시 | YAML 안 수학 공식 어색, 동기 의무 그대로 |
+
+**결정 = b**. wevelStock v3.0 결정론 본질 ("재현성 ±0.5점") = 순수 코드. canon 은 원리·권위 grounding 으로 분리.
+
+**채점 권위 발행 매핑** (analyst → produces score):
+
+| 분석가 (analyst_id) | 발행하는 점수 | 코드 함수 (SLOT) | canon 명제 ID 인용 (권위) |
+|--------------------|-------------|----------------|-----------------------|
+| `stock_picker` | **S-Score (주도주 점수)** | `collectors.scoring.s_score(rs, supply_chain, alignment)` | `principles/stock_selection` framework |
+| `trader` | **T-Score (타점 점수)** + α 오버라이드 적용 | `collectors.scoring.t_score(divergence, macd, volume, rr, alpha)` | `trading/entry_exit` framework |
+| `stock_analyst` | **α (가속계수)** | `collectors.scoring.alpha(anchor_a, anchor_b, anchor_c, current)` | `stock-analysis/fractal_wave` framework (W1·W5 등) |
+| `stock_picker` | **buy_score (매수 점수, Track B)** | `collectors.scoring.buy_score(c, a, n, s, l, i, m)` | `stock_selection/momentum_leaders` framework (CAN SLIM 7 축) |
+| `flow_analyzer` | **F-Score (수급 점수)** (v2 신설) | `collectors.scoring.f_score(theme_match, momentum, inflow_speed, agreement)` | `flow_analysis/sector_flow` + `flow_analysis/stock_flow` |
+
+**모든 점수 = 0~10 정수 + 0.5 단위. 재현성 ±0.5 강제. LLM 자유채점 금지.**
+
+**SDD 절차**:
+1. `collectors/scoring.py` 작성 시 각 함수는 입력 → 점수만 (LLM 호출 X).
+2. canon md 의 framework 명제는 공식의 **권위 출처** — 공식 자체는 박지 않음.
+3. 분석가가 LLM 응답에 점수 인용 시 양식: `주도주 점수 8 (S-Score=8, cited: [W1])` — 한국어 + 코드 라벨 + 명제 ID 인용 병합.
+4. `tests/test_scoring.py` — 모든 채점 함수의 결정론 검증 (같은 입력 → 같은 출력 ±0).
+
+### 한국어 친화 용어 강제 (v2 신설)
+
+LLM 응답에 코드 라벨 (`S-Score`, `T-Score`, `α`, `buy_score`, `F-Score`) 만 출력하면 시스템 모르는 사람은 이해 불가. **한국어 친화 용어 + 코드 라벨 병기 강제**:
+
+| 코드 지표 | 한국어 이름 | 의미 |
+|---------|------------|------|
+| **S-Score** | **주도주 점수** | 시장·섹터 내 강한 수급 + 산업 트렌드 중심 + 펀더멘털·가격 결정력 (RS·공급망·정배열) |
+| **T-Score** | **타점 점수** | 진입 시점 적합도 (이격·MACD·거래량·손익비) |
+| **α** | **가속계수** | 로그 파동의 발산 속도 (k₂/k₁) |
+| **buy_score** | **매수 점수** | CAN SLIM 7 축 통합 (Track B 단기 트리거 적격성) |
+| **F-Score** | **수급 점수** ⭐ v2 NEW | 종목·테마별 5 주체 수급 매칭 + 모멘텀 + 자금 속도 + 5 주체 일치도 |
+
+**응답 양식 강제** — 점수 인용 시 다음 패턴:
+
+- `주도주 점수 8 (S-Score=8)` — 한국어 + 코드 라벨 병기
+- `타점 점수 6.5 (T-Score=6.5, α=1.6 오버라이드 적용)` — 오버라이드 여부 명시
+- `매수 점수 7 (buy_score=7, CAN SLIM)` — 공식 출처 병기
+- `수급 점수 8 (F-Score=8, 외인·기관 일치)` — 핵심 축 짧게
+
+**Anti-pattern**: `T-Score 7.0` 단독 출력 (한국어 부재) ❌. `타점 점수가 7` (코드 라벨 부재) ❌. **반드시 둘 다 병기**.
+
+### F-Score (수급 점수) — `flow_analyzer` 신설 발행물 (v2)
+
+**배경**: v3.0 설계서 표준 S/T/α/buy_score 4 점수에 더해 **수급 점수 신설**. 사용자 통찰 (2026-05-17): "가격이 수급의 부모이지만, 종목·테마별 수급 성격이 다 다름". 단순 외인 누적 합계 X.
+
+**F-Score 공식 (4 축 가중 합)**:
+
+| 축 | 가중치 | 의미 |
+|----|-------|------|
+| **테마-주체 매칭** | 0.40 | 종목의 테마 분류 (AI·반도체 / 코스닥 테마주 / 방산·원전 / 화장품 등) 후 권위 주체가 매수하면 +, 어긋나면 -. 예: AI 종목인데 외인 매수 부재 = -2 / 화장품 외인 매수 trend = +2 |
+| **수급 모멘텀** | 0.30 | 60 일 외인·기관 누적 부호 변화. 매도→매수 turnaround = +2 / 매수→매도 = -2 |
+| **자금 유입 속도** | 0.20 | 시총 대비 자금 유입 %. 큰 종목 1조원 vs 작은 종목 1천억 정규화 |
+| **5 주체 일치도** | 0.10 | 외인↑·기관↓ 같은 분기 = 신호 약화 (-1) / 같은 방향 일치 = 가산 (+1) |
+
+`F-Score = round(2 × (0.4·테마매칭 + 0.3·모멘텀 + 0.2·자금속도 + 0.1·일치도)) / 2` — 0~10 정수 + 0.5 단위.
+
+**boundary** (Cross-Agent):
+- **발행** = `flow_analyzer` (Layer 2). `team_outputs.team_id = "flow_analyzer"` 의 `data.f_score`.
+- **read** = `trader` (T-Score 산출 시 수급 항목 입력) + Layer 3 Track A·B 전략가 (종합 의사결정).
+- `flow_analyzer` 외 분석가는 F-Score **계산 X**, read 만.
+
+**테마 분류 SLOT** (v2 의사결정 SLOT 추가): 테마-주체 매칭 (×0.4) 의 본질 = "이 종목은 어느 테마인가" + "그 테마의 권위 주체는 누구인가". 테마 분류·권위 주체 매핑 dictionary 는 `config/runtime.yaml` 의 `flow_analysis.theme_authority` 블록에 동적 정의. 운용 중 갱신.
+
 ### 5 섹션 → 8 섹션 매핑 (자산전략가 기준 ground truth)
 
 | 기존 5 섹션 | 8 섹션 흡수 위치 |
@@ -298,6 +424,8 @@ Gemini Gems 의 "단일 페르소나가 5 Task 통째" 패턴은 채택 X — �
 4. `scripts/validate.py` 통과 (frontmatter / generates 경로 / manifest 스키마).
 5. `TESTING=1 pytest tests/ -q` 회귀 0.
 6. 페르소나 추가 시 가벼운 `ask_analyst <id>` 스모크 1건.
+7. **v2**: 점수 인용 양식 검증 — `ask_analyst` 응답이 "주도주 점수 8 (S-Score=8)" 같이 **한국어 + 코드 라벨 병기** 따르는지 스모크 1건.
+8. **v2**: `collectors/scoring.py` 함수는 결정론 (`tests/test_scoring.py` 의 같은 입력 → 같은 출력 ±0).
 
 ## 의사결정 SLOT (운용 중 채워질 항목)
 
@@ -307,13 +435,20 @@ Gemini Gems 의 "단일 페르소나가 5 Task 통째" 패턴은 채택 X — �
 - (S4) 페르소나 톤 진화 (자산전략가 박종훈 톤이 모든 분석가 default 인지, 분석가마다 권위 출처마다 톤 분기인지) — 자료 있는 4명 작성 후 결정
 - (S5) **미국 매크로 collector 신설** (별도 SPEC 후보 = `INFRA-US-MACRO-SNAPSHOT-001`) — 미 10년물 / 달러인덱스 / VIX / 미 부채 잔액 yfinance 또는 FRED API. 자산전략가·시장상태분석가·트레이더가 RAG·canon 의 framework 만 갖고 학습 데이터로 수치 추정하는 책 인덱싱 패턴 차단. 우선순위 ↑ (v3 grounding 원칙의 인프라 보강)
 - (S6) LLM tool use (웹검색) 도입 — 시사·이벤트 즉시성 보강. (S5) collector 가 정적 지표 커버한 후 시사 분기로 검토
+- (S7) **v2**: `collectors/scoring.py` 함수 시그니처 확정 — 각 점수 함수 (`s_score` / `t_score` / `alpha` / `buy_score` / `f_score`) 의 입력 인자 명세. 채점 함수가 발행 분석가 (stock_picker / trader / stock_analyst / flow_analyzer) 의 manifest 와 정확히 맞물리도록. STRATEGY-TRACK-001 작성 시 동시 확정
+- (S8) **v2**: F-Score 의 **테마 분류·권위 주체 매핑** dictionary — `config/runtime.yaml` 의 `flow_analysis.theme_authority` 블록. 첫 정의 = 운용 데이터 누적 후 사용자·회고분석가 합의. 초안 SLOT (운용 0 일차): `{ "AI_semiconductor": ["foreign", "institution"], "kosdaq_theme": ["individual"], "defense_nuclear": ["pension", "institution"], "cosmetics_trend": ["foreign"] }`
+- (S9) **v2**: 한국어 친화 용어의 9 분석가 적용 범위 — 자산전략가 (`wealth_strategist`) 의 manifest response_rules 에 점수 양식 § 추가 (현 v3.1 cited 양식 § 옆). 다른 8 분석가는 각자 페르소나 작성 시 동일 § 박음. 9 회 중복 vs 공통 텍스트 추출 (compose 공유 블록) 결정 — 초안 = manifest 별 박음 + KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 로 정제
 
 ## 관련 문서
 
 - [KNOWLEDGE-SYNC-001](KNOWLEDGE-SYNC-001-reference-canon-rag-sync.md) — 카테고리 화이트리스트 / PROPOSAL release note 흐름 (depends_on)
+- [STRATEGY-TRACK-001](STRATEGY-TRACK-001-two-track-strategists.md) — **v2 동시 신설**. Layer 3 Track A/B 전략가가 본 SPEC 분석가들의 점수 read
+- [GUIDANCE-ACCURACY-TRACKER-001](GUIDANCE-ACCURACY-TRACKER-001-five-kpi-tracking.md) — **v2 동시 신설**. 본 SPEC 점수 출력의 적중도 KPI 추적
 - [INFRA-RAG-001](INFRA-RAG-001-knowledge-rag.md) — Chroma 인덱싱 엔진
 - [docs/AGENT-ARCHITECTURE.md](../AGENT-ARCHITECTURE.md) — hierarchical orchestration + DB read 원칙
 - [docs/CONTRACTS.md](../CONTRACTS.md) — StandardOutput 계약
 - [docs/STRUCTURE.md](../STRUCTURE.md) — `agents/analysts/<id>/` 폴더 규약
 - [docs/a_wanted/user_want_spec.md](../a_wanted/user_want_spec.md) — 본질 (페르소나 부여 가능성 검증)
 - [idea_memo/prism-insight-비교차용.md](../../idea_memo/prism-insight-비교차용.md) — `trading_journalist` 차용 포인트
+- [idea_memo/prism-insight-비교차용2.md](../../idea_memo/prism-insight-비교차용2.md) — **v3.0 이원 트랙 설계서** (v2 흡수 원천)
+- [idea_memo/2026-05-17-wevelstock-rd-meta-design-by-chat-claude-opus.md](../../idea_memo/2026-05-17-wevelstock-rd-meta-design-by-chat-claude-opus.md) — chat Opus 메타 설계 (R&D + 엔지니어링 분리·Layer 5 회고분석가 영감)

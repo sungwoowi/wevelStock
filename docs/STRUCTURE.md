@@ -20,8 +20,8 @@
 | 폴더 | 역할 | 특징 |
 |---|---|---|
 | `pipelines/` | 🔀 시간대별 AI 판단 파이프라인 | 각 파이프라인이 `manifest.yaml`에 stages + schedule 선언 (Layer 5 출력 채널의 한 형태) |
-| `agents/` | 🧠 페르소나 보관소 | 분석가(`analysts/`) · 전략가(`strategists/`) · 계좌관리자(`account_manager/`). 5-Layer 모델 Layer 2~4. M3 부터 점진 신설 |
-| `knowledge/` | 📚 학습부 (Layer 1) | `canon/<learning_dept>/` 5 폴더 = 분석가들이 읽는 자료 |
+| `agents/` | 🧠 페르소나 보관소 | 분석가(`analysts/`, 9) · 전략가(`strategists/`, 2+ track) · 계좌관리자(`account_manager/`, 1+ N 가변) · 회고분석가(`retrospect/`, N 가변). 5-Layer 모델 Layer 2~5. M3 부터 점진 신설 |
+| `knowledge/` | 📚 학습부 (Layer 1) | `canon/<learning_dept>/<category>/` 9 폴더 × 36 카테고리 = 분석가들이 읽는 자료 |
 | `collectors/` | 📥 공용 데이터 수집 라이브러리 | 파이프라인 간 import 허용되는 무상태 함수 모듈 |
 | `checkers/` | ✅ 공용 규칙/원칙 체커 | 7계명, 손절 체크 등 순수 로직 |
 | `connectors/` | 🔌 외부 API 커넥터 | KIS / yfinance 등 외부 시스템 어댑터 |
@@ -42,31 +42,49 @@
 
 ---
 
-## 🧠 5-Layer 도메인 모델
+## 🧠 9+3+1+회고N 도메인 모델 (5-Layer)
 
-> 시스템은 다섯 레이어로 구성된다. 각 레이어는 plugin 패턴 — 새 학습부/분석가/전략가는 폴더를 드롭하면 된다. starting count 는 5/5/3/1, 분화는 운용 중 trigger 시.
+> 시스템은 다섯 레이어로 구성된다. 9·3·1 은 본질 골격, 계좌관리자·회고분석가는 N 가변. 각 레이어는 plugin 패턴 — 새 학습부/분석가/전략가/트랙은 폴더 드롭만으로 확장.
 
-| Layer | 역할 | 시작 수 | 폴더 |
+| Layer | 역할 | 수 | 폴더 |
 |---|---|---|---|
-| **1. 학습부** | 분석가가 읽을 자료 | 5 | `knowledge/canon/<learning_dept>/` |
-| **2. 분석가** | 자료 → 판단. 학습부와 1:1 매핑 | 5 | `agents/analysts/<analyst_id>/persona.md` |
-| **3. 전략가** | horizon 별 종합 (단타·스윙·중장기) | 3 | `agents/strategists/<strategist_id>/persona.md` |
-| **4. 계좌관리자** | 4 계좌 + 자산배분 | 1 | `agents/account_manager/persona.md` |
-| **5. 출력 채널** | 시간대 브리핑 / 종목 추천 / 매매 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
+| **1. 학습부** | 분석가가 읽을 자료 | **9** (1:1, 카테고리 36) | `knowledge/canon/<learning_dept>/<category>/` |
+| **2. 분석가** | 자료 → 점수·verdict 발행 (S/T/α/buy_score/F-Score). 학습부 1:1 | **9** (1:1, ANALYST-PERSONAS-001 v2) | `agents/analysts/<analyst_id>/persona.md` |
+| **3. 전략가** | Track A (중장기 수익금) + Track B (단기 손익비). 분석가 점수 종합 → 권고 발행 | **2+** (plugin 확장, STRATEGY-TRACK-001) | `agents/strategists/<track_id>/persona.md` |
+| **4. 계좌관리자** | 4 계좌 (국장/미장 × 중장기/단기) + 자산배분 | **1+** (계좌 수 따라 N 가변, M5) | `agents/account_manager/persona.md` |
+| **5. 회고분석가** | 분석·전략·계좌 등 미진한 것 보완 + 신규 기능 제안 (PROPOSAL 발행) | **N** (제한 X, 창의성 보존, RETROSPECT-ANALYST-001 백로그) | `agents/retrospect/<id>/persona.md` |
+| (출력 채널) | 시간대 브리핑 / 종목 추천 / 매매 알림 / 매매일지 | — | `pipelines/` + `server/api/` + `server/telegram/` |
 
-### Layer 1 ↔ Layer 2 매핑 (1:1)
+**흐름**: 분석가 → 전략가 → 계좌관리자 → 회고분석가 (분석·전략·계좌 등 보완 + 신규 부서 제안). 신규 부서 효율성 판단 = 회고분석가의 영역 자체.
+
+### Layer 1 ↔ Layer 2 매핑 (9:9, 1:1, ANALYST-PERSONAS-001 v2)
 
 | 학습부 (Layer 1) | 폴더 | 분석가 (Layer 2) | analyst_id |
 |---|---|---|---|
 | 원칙부 | `knowledge/canon/principles/` | 원칙수호자 | `principle_guardian` |
-| 실전부 | `knowledge/canon/mechanics/` | 매매코치 | `trade_coach` |
-| 자산복리부 | `knowledge/canon/wealth_compounding/` | 자산전략가 | `wealth_strategist` |
+| 트레이딩부 | `knowledge/canon/trading/` | 트레이더 | `trader` |
+| 시장매크로부 | `knowledge/canon/market_macro/` | 시장상태분석가 | `market_state_analyzer` |
+| 종목선정부 | `knowledge/canon/stock_selection/` | 종목선정가 | `stock_picker` |
 | 종목분석부 | `knowledge/canon/stock-analysis/` | 종목분석가 | `stock_analyst` |
+| 자산복리부 | `knowledge/canon/wealth_compounding/` | 자산전략가 | `wealth_strategist` |
+| 매매저널부 | `knowledge/canon/trading_journal/` | 매매저널리스트 | `trading_journalist` |
+| 수급분석부 | `knowledge/canon/flow_analysis/` | 수급분석가 | `flow_analyzer` |
 | 뉴스부 | `knowledge/canon/news/` | 뉴스큐레이터 | `news_curator` |
 
+### Layer 3 트랙 (STRATEGY-TRACK-001)
+
+| 전략가 (Layer 3) | 본질 | 자본 | 폴더 |
+|------------------|------|-----|------|
+| **Track A** | 🏢 중장기 수익금 게임 (부동산 임대업) | 70-80% | `agents/strategists/track_a/` |
+| **Track B** | ☕ 단기 손익비 게임 (카페 운영) | 20-30% | `agents/strategists/track_b/` |
+
+단타·중장기 (지수 투자) 빼고 A/B 만 (사용자 결정 2026-05-17). 향후 plugin 확장 가능 (`agents/strategists/<new_track>/` 드롭).
+
 ### plugin 패턴 규칙
-- 새 학습부 추가 = `knowledge/canon/<id>/` + `README.md` 드롭. 별도 코드 변경 없이 `load_shared_canon()` 이 재귀로 자동 인식.
-- 새 분석가/전략가 추가 = `agents/<role>/<id>/persona.md` + 해당 manifest 의 `analysts: [...]` / `reads: [...]` 에 등재.
+- 새 학습부 추가 = `knowledge/canon/<id>/` + `README.md` 드롭. 코드 변경 0 — `load_shared_canon()` 자동 인식.
+- 새 분석가 추가 = `agents/analysts/<id>/{persona.md, manifest.yaml}` 드롭 + ANALYST-PERSONAS-001 v2 의 9 분석가 명단 갱신 (별도 SPEC 신설).
+- 새 전략가 트랙 추가 = `agents/strategists/<track_id>/{persona.md, manifest.yaml}` 드롭 + manifest 의 `input_routing` 정의. 코드 변경 0 (`core/strategist/run_strategist.py` 가 manifest 메타로 동적 호출).
+- 새 회고분석가 추가 = `agents/retrospect/<id>/{persona.md, manifest.yaml}` 드롭. N 제한 X.
 - 분산투자는 별도 Layer 가 아니라 **Layer 4 계좌관리자의 한 모드** (자산배분 = 계좌 단위 메타 결정).
 
 ---
@@ -366,27 +384,36 @@ webapp/
 
 ```
 knowledge/
-├── canon/                            # 항상 주입되는 compiled 지식 (5 학습부)
-│   ├── principles/                   # 원칙부 → 원칙수호자
-│   │   ├── README.md
-│   │   ├── 01-philosophy-7-commandments.md
-│   │   ├── 02-trading-doctrine.md
-│   │   ├── 03-market-regime-rules.md
-│   │   └── 99-operational-safeguards.md
-│   ├── mechanics/                    # 실전부 → 매매코치
-│   │   ├── README.md
-│   │   └── failure-lessons.md
-│   ├── wealth_compounding/           # 자산복리부 → 자산전략가
-│   │   ├── README.md
-│   │   └── (framework manifesto — M2.5 에서 작성)
-│   ├── stock-analysis/               # 종목분석부 → 종목분석가
-│   │   ├── README.md
-│   │   └── sector-insights.md
-│   └── news/                         # 뉴스부 → 뉴스큐레이터
-│       └── README.md
-└── reference/                        # Chroma RAG 용 원본 (LLM 비주입, Phase 3 인덱싱)
+├── canon/                            # 항상 주입되는 compiled 지식 (9 학습부 × 36 카테고리)
+│   ├── principles/                   # 원칙부 → principle_guardian (3 카테고리)
+│   │   ├── philosophy_seven_commandments/
+│   │   ├── trading_doctrine/
+│   │   └── market_regime_rules/
+│   ├── trading/                      # 트레이딩부 → trader (6 카테고리)
+│   │   ├── entry_exit/
+│   │   ├── position_sizing/
+│   │   ├── trading_styles/
+│   │   ├── market_regime_response/
+│   │   ├── failure_lessons/
+│   │   └── operational_safeguards/
+│   ├── market_macro/                 # 시장매크로부 → market_state_analyzer (4 카테고리, 시드)
+│   ├── stock_selection/              # 종목선정부 → stock_picker (4 카테고리, 시드)
+│   ├── stock-analysis/               # 종목분석부 → stock_analyst (5 카테고리)
+│   ├── wealth_compounding/           # 자산복리부 → wealth_strategist (6 카테고리)
+│   │   ├── monetary_evolution/
+│   │   ├── currency_pricing/
+│   │   ├── crisis_signals/
+│   │   ├── debt_rate_cycle/
+│   │   ├── macro_roadmap/
+│   │   └── asset_classes/
+│   ├── trading_journal/              # 매매저널부 → trading_journalist (4 카테고리, 시드)
+│   ├── flow_analysis/                # 수급분석부 → flow_analyzer (4 카테고리, 시드)
+│   └── news/                         # 뉴스부 → news_curator (별도 SPEC)
+└── reference/                        # Chroma RAG 용 원본 (LLM 비주입, INFRA-RAG-001 인덱싱)
     └── <learning_dept>/              # 학습부별 PDF 추출본 / 원자료
 ```
+
+각 카테고리는 `_category.yaml` (frontmatter: title, description, when_to_inject, target_analysts) 를 가진다. KNOWLEDGE-SYNC-001 Phase 2 = 카테고리 단위 화이트리스트·자동 색인.
 
 `core.knowledge.compose.load_shared_canon()` 이 `canon/` 을 **재귀로** (`rglob("*.md")`) 모두 읽어 모든 LLM 호출의 system prompt 에 주입한다. `README.md` 는 scaffolding 표시용이므로 자동 제외.
 
