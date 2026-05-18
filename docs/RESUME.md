@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **Layer 3 이원 트랙 본질 골격 닫힘** — Track B persona + manifest + `core/strategist/track_selector.py` (단축어 dispatch + both: + fallback, auto.conditions v1 placeholder) 완성 → 외부 R&D 피드백 4 사이클 (1주 미만 미지원 → 사용자 정정 / both: manifest / SPEC 가드 / **Track A·B 본질 재정의 — 기간 기준 → 전략 본질 기준** / 큰 진입 본질 정정 / display_name 본질 표기 / 분기 표 연결 + 자본 단위 SLOT). Track A = "추세 추적 + 분할 운용" (타점 맞으면 큰 진입, 애매하면 역피라미드 분할) / Track B = "프랙탈 1 파 사이클" (실적·장기 무관, 1 파 완성 시 Track A 인계). **production 첫 호출 검증 2회 ✅** (CLI claude_code $0.19 + webapp gemini-flash $0.0014 — 양쪽 환각 차단 + 한국어 친화 용어 정확). pytest **240 passed** (+25, 회귀 0).
+**현재 위치**: **Layer 2 분화의 첫 큰 사이클 완료** — 자료 0 시드 5 분석가 페르소나 v2 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`) = 5 subagent 병렬 dispatch 한 사이클 안에 완성 (~5 분, `superpowers:dispatching-parallel-agents` 첫 적용). 8 섹션 portable + 한국어 친화 용어 + cited 풀이 v3.1 + 박종훈 framework 직접 인용 금지 가드 일관 박힘. **박종훈 framework scope 메모리 정밀화** (사용자 2차 발화 — "거시적 경제 해석 통찰 = 트레이딩보다 한 차원 상위 frame, 시장 변곡점 시에만 들여다 보는 큰 길잡이", 변곡점 3 케이스 정의). **production 첫 호출 검증 (market_state_analyzer 3 시나리오) ✅** — 평상시 자료 0 자각 / 변곡점 trigger 시도 / boundary 침범 시 wealth_strategist 권위 영역 위임 명시 (분화 boundary 본질 정합 ✨). pytest **278 passed** (+38, 회귀 0).
 
 **마지막 작업일**: 2026-05-19
-**마지막 세션 로그**: [2026-05-19_track-b-selector-essence-redefine.md](c_worked/2026-05-19_track-b-selector-essence-redefine.md)
-**Git**: 이전 세션 (2026-05-18) 까지 `e8fc71f` push. 본 세션 wrap-up commit 진행.
+**마지막 세션 로그**: [2026-05-19_seed-analysts-v2-parallel-dispatch-2.md](c_worked/2026-05-19_seed-analysts-v2-parallel-dispatch-2.md)
+**Git**: 이전 사이클 (같은 날) 까지 `d340554` push. 본 세션 wrap-up commit + push 진행.
 
 ---
 
@@ -21,20 +21,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 자료 0 시드 5 분석가 페르소나 v2 — **병렬 dispatch 가능** (~1 세션)
-- **왜**: `market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` — canon 자료 0, 잠정 풀이 정정 단계 없음. 페르소나 정체성·boundary 만. **subagent 5 개 병렬 dispatch 가능** (canon grep 충돌 X). 1 세션 안에 5명 동시 완성 가능. `feedback_persona_agent_speedup.md` 의 "1 세션 안에 6 명 완성 목표" 패턴 첫 적용.
-- **범위**: 5 분석가 `{persona.md, manifest.yaml}` 동시 작성 + 각 dept reads / canon_categories / Anti-patterns / Cross-Agent Boundaries. v2 양식 = 8 섹션 portable + 한국어 친화 용어 + 결정론 채점 발행 매핑 (S/T/α/buy_score/F-Score). SPEC G1 (stock_picker S-Score + buy_score 양쪽 발행 강제) + 박종훈 framework 직접 인용 금지 (`feedback_park_jonghoon_scope.md`) 가드 강제. `superpowers:dispatching-parallel-agents` 스킬 활용.
-- **예상**: ~1 세션 (병렬 dispatch + 자료 0 시드라 본질 설계 가벼움).
+### 1. 자료 있는 3 분석가 페르소나 v2 — **canon 1:1 grep 신중** (~1.5 세션, 병렬 가능)
+- **왜**: `principle_guardian` · `trader` · `stock_analyst`. canon 자료 있는 4 dept 잠정 풀이 정정 패턴 필요. 점수 발행 (S/T/α/buy_score) 시작하면 Track A·B 권고 cited_scores 풍부성 ↑ (현재 4명 발행 가능 → Top 1 후 8 명 발행 가능 = 90% 풍부성). trader = SPEC G2 (6 트리거 영문 ID `volume_surge`/`intraday_top`/`gap_up`/`closing_strength`/`fund_inflow`/`volume_increase_sideways` 정식 정의 + Track B 명단 변경 시 동시 수정) 강제. **`stock_analyst` 작성 직전 = `INFRA-CHART-DATA-001` blocker** (차트 데이터 부재 시 환각).
+- **범위**: 분석가별 `{persona.md, manifest.yaml}` 한 쌍 (8 섹션 portable + 한국어 친화 용어 § + 결정론 채점 발행 매핑). principle_guardian (canon = 7계명·심법·거시 트레이딩 기준 4 파일) / trader (T-Score + 6 트리거 영문 ID 정식 정의 + α 오버라이드 read) / stock_analyst (α 발행 + Module A 목표가 3단 + holding_period_estimate_days 발행). 본 세션 5 subagent 패턴 동일 적용 (canon grep 충돌 X — 각자 다른 dept).
+- **예상**: ~1.5 세션 (병렬 dispatch + canon grep 신중).
 
-### 2. 자료 있는 3 분석가 페르소나 v2 — **canon grep 신중** (~1.5 세션)
-- **왜**: `principle_guardian` · `trader` · `stock_analyst`. canon 1:1 grep 패턴 필요 (자료 있는 4 dept 잠정 풀이 정정). 점수 발행 (S/T/α/buy_score) 시작하면 Track A·B 권고 cited_scores 채워서 풍부성 ↑. trader = SPEC G2 (6 트리거 영문 ID 고정 + Track B 명단 변경 시 동시 수정) 강제. **`stock_analyst` 작성 직전 = `INFRA-CHART-DATA-001` blocker** (차트 데이터 부재 시 환각).
-- **범위**: 분석가별 `{persona.md, manifest.yaml}` 한 쌍 (8 섹션 portable + 한국어 친화 용어 § + 결정론 채점 발행 매핑). principle_guardian (canon = 7계명·심법·거시 트레이딩 기준) / trader (T-Score + 6 트리거 영문 ID 정식 정의 + α 오버라이드 read) / stock_analyst (α 발행 + Module A 목표가 3단 + INFRA-CHART-DATA-001 의존).
-- **예상**: ~1.5 세션 (병렬 + canon grep 신중).
-
-### 3. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션)
-- **왜**: 자료 0 시드 5명 작성 후 Track A·B 모두 cited_scores 부분 채움 가능. `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.
+### 2. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션)
+- **왜**: Top 1 완성 후 = 8 분석가 발행 가능 (90% 풍부성). `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.
 - **범위**: webapp `both: 삼성전자` 호출 검증 + 응답 분석 + `feedback_webapp_production_ux.md` 의 자동 라우팅 사이클 (intent + 종목명 매핑 + Track Selector 백단 0 노출) 진입 결정.
 - **예상**: ~0.5 세션 (검증 + 결정 위주).
+
+### 3. INFRA-CHART-DATA-001 SPEC 진입 (~1 세션, Top 1 의 stock_analyst 작성 직전 진입 필요)
+- **왜**: KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `stock_analyst` 의 "20일선 정배열" "MACD 골든크로스" 같은 차트 추론 항목이 환각 안 되도록 시계열 인프라 사전 구축. Top 1 의 stock_analyst 작성 직전 진입 강제.
+- **범위**: SPEC 신설 + collectors/charts.py 구현 + matplotlib renderer + vision API 통합. `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
+- **예상**: ~1 세션.
 
 (추가 백로그: **자료 0 시드 5 분석가 페르소나** (`market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` Phase A 작성, 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 보강) / `INFRA-CHART-DATA-001` (KIS daily chart + pandas-ta + matplotlib vision, stock_analyst 가치 검증 blocker) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score 정식 가중치 확정** (분석가 manifest 작성 시) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
@@ -120,11 +120,15 @@
 - **Layer 3 production 사이클 가시화 — core/strategist/ + CLI + FastAPI + webapp Layer 2/3 토글** (2026-05-18, commit `e8fc71f`) — `core/strategist/{__init__.py, run_strategist.py}` Layer 3 호출 엔진 (분석가 점수 주입 패턴 + metadata 신규 키 track/target/analyst_published/missing_count/missing_ids), `scripts/{ask,chat}_strategist.py` CLI + justfile 2 레시피 + `/target <ticker>` 명령, `server/api/strategist_chat.py` 3 endpoint (POST /chat + /chat/stream SSE + GET meta) + `server/main.py` 라우터 등록, `webapp/src/app/analyst-chat/page.tsx` Layer 2/3 토글 + AgentMeta 유니온 + target 필드 + MetadataBar scores X/Y 라벨. `tests/test_run_strategist.py` 11 + `tests/test_strategist_chat.py` 9 신규. pytest **215 passed** (+20, 회귀 0). `.gitignore` 에 strategist_queries 추가
 - **production 첫 호출 검증** (2026-05-18, gemini-2.5-flash, $0.0019, 15.2s first 11142ms) — 사용자 webapp Track A 호출 (target='삼성전자'). 분석가 6명 모두 미발행 상태에서 Track A 가 `verdict=wait` + `confidence=10` + `cited_scores` 모두 null + `yesterday_verdict_delta="first run"` + cited 풀이 v3.1 + 한국어 친화 용어 (주도주 점수·가속계수·수급 점수) 정확 발행. **결정론 시그니처 잠금 + Anti-patterns 환각 차단이 production 작동 검증** ✨
 - **Track B persona + manifest + track_selector + 테스트 25** (2026-05-19) — `agents/strategists/track_b/{persona.md, manifest.yaml}` 8 섹션 portable (1 파 사이클 카페 운영 비유 + reads_analysts 5 + canon_categories 3 principles/market_regime_rules·trading_doctrine + trading/operational_safeguards + input_routing shortcuts ["swing:", "short:", "trigger:", "both:"] + temperature 0.4 max_tokens 5000 + response_rules). `core/strategist/track_selector.py` (모든 전략가 manifest input_routing 동적 인식 + 단축어 dispatch + both: fast-path + fallback, auto.conditions v1 placeholder). `core/strategist/__init__.py` select_tracks export. `tests/test_track_b_strategist.py` 7 + `tests/test_track_selector.py` 18 신규 = pytest **240 passed** (215 → +25, 회귀 0). production 첫 호출 검증 2회 (CLI claude_code $0.19 OAuth 무료 67.5s + webapp gemini $0.0014 20.6s scores 0/5, 양쪽 환각 차단 + 한국어 친화 용어 + canon 명제 ID 풀어쓰기 작동) ✨
+- **자료 0 시드 5 분석가 페르소나 v2 — 5 subagent 병렬 dispatch** (2026-05-19) — `agents/analysts/market_state_analyzer/` (시장 체제 6단계 + DD kill switch, 풍향계 비유, 변곡점 3 케이스 cross-reference trigger) / `agents/analysts/stock_picker/` (S-Score + buy_score G1 양쪽 발행 강제, 두 모자 비유) / `agents/analysts/trading_journalist/` (매매 일지 + post-mortem + prism-insight 차용 PROPOSAL, Layer 5 boundary 분리) / `agents/analysts/flow_analyzer/` (F-Score 4축 가중 합 0.4·0.3·0.2·0.1, 4-tier 비유, "가격은 수급의 부모" 인용) / `agents/analysts/news_curator/` (단기 테마 / 장기 흐름 / 지정학 3 분류, 자료원 SLOT S2 미결정, canon_categories 빈 list). 모두 8 섹션 portable + 한국어 친화 용어 + cited 풀이 v3.1 + 박종훈 framework 직접 인용 금지 가드 일관 박힘. **`superpowers:dispatching-parallel-agents` 첫 적용** = 1 message 5 Agent tool calls, 소요 ~5 분, 총 ~1,800 줄. `tests/test_seed_analysts_v2.py` 38 cases 신규 = pytest **278 passed** (240 → +38, 회귀 0). production 첫 호출 검증 (market_state_analyzer, gemini-flash, 3 시나리오 합산 ~$0.0025): 평상시 자료 0 자각 / 변곡점 trigger 시도 (자료 0 자각 우선) / boundary 침범 시 wealth_strategist 권위 영역 위임 명시 ✨
+- **박종훈 framework scope 메모리 정밀화** (2026-05-19, 사용자 2차 발화) — `feedback_park_jonghoon_scope.md` 본문 갱신: "거시적 경제 해석 통찰 = 트레이딩보다 한 차원 상위 frame", "시장 변곡점 발생 시에만 들여다 보는 큰 길잡이", 변곡점 3 케이스 정의 (regime 전환 / DD 4건+ / 사이클 단계 변화) 추가. market_state_analyzer 특수 가드 항목 추가. MEMORY.md 인덱스 1 줄 갱신
 - **Track A·B 본질 재정의** (2026-05-19, 외부 R&D 피드백 + 사용자 본질 의도 정합) — 기간 기준 → 전략 본질 기준. **Track A = "추세 추적 + 분할 운용"** (월봉 7월선 위계 유지·F1 이탈 시까지 보유·연 5-15회 회전·MDD -8%·결과적 보유 3 개월~수년·**타점 맞으면 큰 진입 / 애매하면 역피라미드 분할** 저점 50%·중간 30%·상단 20% 저점 비중 크게 평단 머리 무겁지 않게). **Track B = "프랙탈 1 파 사이클"** (저점~고점 1 파 회수가 최대 목표·실적·장기 무관·R/R 1.5+ 백업 가드·결과적 보유 일~수주·1 파 완성 시 trailing stop 잔여 확장·1 파 완성 후 추세 더 가는 종목 Track A 자연 인계). display_name 본질 표기 (Track A 추세 추적 전략가 / Track B 프랙탈 1 파 전략가). SPEC § 분석가 페르소나 작성 가드 (G1 stock_picker S-Score + buy_score 양쪽 발행 강제 / G2 trader 6 트리거 영문 ID 고정 + Track B 명단 변경 시 동시 수정) + § 의사결정 SLOT (S8 자본 단위 분모 통일 — Layer 4 계좌관리자 작성 시 동시 갱신 강제). Track A persona + manifest + Track B persona + manifest + STRATEGY-TRACK-001 SPEC + 테스트 키워드 일관 박힘 (persona ↔ SPEC ↔ test 균열 회피)
 
 ### 미완 또는 의도적 공백
-- **`team_outputs` DB 적재 인프라 부재** — Track A·B 호출 결과를 DB 적재하는 호출처 0 (run_strategist 는 LLM 호출까지만, persist_output 호출은 wrap 측). GUIDANCE-ACCURACY-TRACKER-001 SPEC 후속
-- **9 분석가 페르소나 v2 미작성** — Layer 2 점수 발행 X 라 Track A·B 권고 cited_scores 다 null. **자료 0 시드 5명 = 병렬 dispatch 가능** (Top 1) / 자료 있는 3명 = canon grep 신중 (Top 2). SPEC G1·G2 가드 + 박종훈 framework 직접 인용 금지 (`feedback_park_jonghoon_scope.md`) 작성 시 강제
+- **`team_outputs` DB 적재 인프라 부재** — Track A·B + 9 분석가 호출 결과를 DB 적재하는 호출처 0 (run_strategist/run_analyst 는 LLM 호출까지만, persist_output 호출은 wrap 측). GUIDANCE-ACCURACY-TRACKER-001 SPEC 후속
+- **자료 있는 3 분석가 페르소나 v2 미작성** — `principle_guardian` / `trader` / `stock_analyst` (Top 1). 본 세션 5 명 완성 후 다음 단계. canon 1:1 grep 패턴 신중 + SPEC G2 (trader 6 트리거 영문 ID 정식 정의) 강제. stock_analyst 작성 직전 = INFRA-CHART-DATA-001 blocker
+- **`stock_analyst` 작성 blocker = INFRA-CHART-DATA-001 SPEC 미진입** — 차트 데이터 인프라 부재 시 환각 잠재. Top 3 진입 (Top 1 stock_analyst 작성 직전 필수). KIS daily chart + pandas-ta + matplotlib vision
+- **트레이딩 관점 분석가 framework 추후 정의** (백로그) — 박종훈 framework 와 분리된 트레이딩 일반 framework. 회고분석가 PROPOSAL 영역 또는 별도 SPEC. Top 1+2+3 안정 운용 후 진입 검토
 - **자본 단위 분모 SLOT (S8) 미통일** — Track A persona § 분할 매수 룰 "50% 또는 한도의 70%" 두 분모 모호 (의도 비중 / 단일 종목 한도 / 계좌 전체). Layer 4 계좌관리자 페르소나 작성 시 자본 단위 합의 후 persona + SPEC 동시 갱신 강제 (이중 박음으로 SLOT 인지)
 - **selector.py BOTH_SHORTCUT fast-path 처리 vs manifest opt-in 양식** — SPEC L218-225 의 외부 input_routing_both 권위와 manifest 양식 (track_a/b 모두 "both:" 박힘) 양립. fast-path 제거는 별도 SPEC 후속 (사용자 피드백 #2 "구현 별도 SPEC" 명시)
 - **양 트랙 통합 production 검증 미진행** — `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 자연 인계 메커니즘 (응답 본문 명시) 검증 미진행. Top 3 (자료 0 시드 5명 작성 후)
@@ -172,7 +176,13 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-19 Track B + selector + 본질 재정의 + 박종훈 framework scope)**
+**이번 세션에 굳힌 판단 (2026-05-19 자료 0 시드 5 분석가 v2 — 5 subagent 병렬 dispatch 첫 적용)**
+- **`superpowers:dispatching-parallel-agents` 패턴 검증 ✨**: 5 subagent 동시 dispatch (1 message 안에 5 Agent tool calls), 각 subagent = `general-purpose` type + 본인 분석가 분량 prompt (~2-3 KB) 받아 2 파일 직접 write. 소요 ~5 분, 총 ~1,800 줄. 충돌 0 (각자 다른 디렉토리). **`feedback_persona_agent_speedup.md` 의 "12+ 세션 → ~4.5 세션 (3배 단축)" 패턴 검증 통과** — 본 세션 = 5명 1 사이클 = 이전 1명 6-12 시간 페이스 대비 ~60배 단축. 다음 사이클 (자료 있는 3명 + canon grep) 도 동일 패턴 적용 가능 (canon grep 충돌 X — 각자 다른 dept).
+- **박종훈 framework scope 정밀화 = 변곡점 3 케이스 정의 영구화**: 사용자 2차 발화 ("거시적 경제 해석 통찰 = 트레이딩보다 한 차원 상위 frame, 시장 변곡점 시에만 들여다 보는 큰 길잡이") 가 메모리 본문 박힘. **변곡점 3 케이스 정의** (regime 전환 / Distribution Day 4건+ kill switch / 사이클 단계 변화 시그널) = market_state_analyzer cross-reference 발동 trigger 표준. 미래 트레이딩 관점 분석가 (stock_analyst·trader·flow_analyzer 등) 작성 시 동일 가드 일관 적용.
+- **분화 boundary 본질 = production 첫 호출 호출 3 (boundary 침범 케이스) 의 골든 모먼트**: market_state_analyzer 가 "2026년 코스피 PER 평균" 같이 본인 frame 밖 질문 시 거부 + wealth_strategist 권위 영역 위임 명시 ✨. persona Cross-Agent Boundaries 표가 LLM 응답에 그대로 작동 = 한 호출 ~$0.0008 로 분화 boundary 본질 검증. 미래 분석가 작성 후 동일 시나리오 (frame 밖 질문) 검증 권유.
+- **테스트 negation 검증 패턴 = 가드 컨텍스트 인정 필수**: 박종훈 framework 직접 인용 검증 시 negation 키워드 list 가 너무 좁아 가드 컨텍스트 (Anti-patterns / Cross-Agent Boundaries / Identity 메타-가드 §) 도 false positive. **확장 키워드**: wealth_strategist / 권위 / 위임 / 본인은 / 자산복리부만 / 별도 자료원 추가. 미래 분석가 페르소나 작성 시 동일 negation 패턴 유효.
+
+**직전 세션 판단 (2026-05-19 Track B + selector + 본질 재정의 + 박종훈 framework scope)**
 - **외부 R&D 피드백 vs 사용자 본질 의도 충돌 발견 패턴**: 외부 chat AI Opus 의 "1주 미만 미지원" 피드백을 채택했다가 사용자 직접 발화 ("1주 미만도 소화 / buy_score 높은데 1주 이상 비효율") 와 충돌 발견 → revert + 본질 재정의 사이클로 격상. **외부 피드백은 검증 대상, 사용자 본질 의도가 절대 권위**. 다음 외부 R&D 사이클에서도 사용자 직설 정합 우선 검토.
 - **본질 재정의 = 기간 기준 → 전략 본질 기준 = 사용자 발화에서 frame 추출**: 사용자 직설 통찰 ("기간보다 본질이 중요") 을 SPEC + persona + manifest 일관 박힘. Track A = "추세 추적 + 분할 운용" (타점 맞으면 큰 진입, 애매하면 역피라미드 분할) / Track B = "프랙탈 1 파 사이클" (저점~고점 1 파 회수, 실적·장기 무관) + 추세 인계 메커니즘 (Track B 1 파 완성 후 Track A 인계). display_name 도 본질 표기로 갱신 — 기간 어휘 잔재 (LLM 자기 식별 시 옛 frame 회귀 위험) 해소.
 - **박종훈 framework scope = 트레이딩 관점 분석가 작성 시 핵심 가드**: 박종훈 framework (M·C·I·SP·W 명제 + Dalio 5단계) = 장기 자문 통찰 영역. 트레이딩 의사결정 직접 인용하면 "지금 부채 J커브 가속이라 매매 보류" 같은 보수 응답 → 트레이딩 마비. wealth_strategist (Track A read) 의 거시 frame 격자 영역만 인용 OK. Track A·B 등 트레이딩 페르소나 본문 framework 직접 인용 금지. canon `wealth_compounding/macro_roadmap` + `crisis_signals` = wealth_strategist 전용. 트레이딩 관점 분석가 (stock_analyst·stock_picker·news_curator·market_state_analyzer·trader·flow_analyzer) framework 추후 정의. `feedback_park_jonghoon_scope.md` 박힘.
