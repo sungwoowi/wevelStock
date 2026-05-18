@@ -16,6 +16,7 @@ from core.strategist.run_strategist import (
     run_strategist,
     run_strategist_stream,
 )
+from core.strategist.track_selector import select_tracks
 
 __all__ = [
     "StrategistNotFoundError",
@@ -26,4 +27,5 @@ __all__ = [
     "render_analyst_scores_block",
     "run_strategist",
     "run_strategist_stream",
+    "select_tracks",
 ]

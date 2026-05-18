@@ -1,9 +1,10 @@
-# Track A 중장기 전략가 manifest
+# Track A 추세 추적 + 분할 운용 전략가 manifest
 # Layer 3 — STRATEGY-TRACK-001 SPEC 권위.
-# 사용자 자본 70-80% 본진 (중장기 수익금 게임, 부동산 임대업 비유).
+# 사용자 자본 70-80% 본진 (추세 추적 + 분할 운용 본진, 분할 운용 임대업 비유).
+# 본질 = 추세 추적 (월봉 7월선 위계 유지) + 분할 매수·분할 매도 유기 운용. 기간은 결과 (3개월~수년).
 
 id: track_a
-display_name: Track A 중장기 전략가
+display_name: Track A 추세 추적 전략가
 track: A
 
 # 이 전략가가 team_outputs DB read 하는 분석가 ID 들.
@@ -44,17 +45,22 @@ llm:
   temperature: 0.4
 
 # 입력 라우팅 룰 — STRATEGY-TRACK-001 § Track Selector.
-# server 측 dispatcher (core/strategist/track_selector.py, 다음 세션 작성) 가 본 블록 read.
+# server 측 dispatcher (core/strategist/track_selector.py) 가 본 블록 read.
 # 라우팅 우선순위: 명시 단축어 > auto.conditions > fallback.
 input_routing:
   # 임계값 (auto.conditions 의 market_cap_min / sector_rs_min) 은 운용 슬롯 — Layer 5 회고분석가 PROPOSAL 영역.
   # 초기값은 STRATEGY-TRACK-001 SPEC 권위이지만 운용 데이터 누적 (적중도 5 KPI) 후 미세 조정 가능.
   # 예: "시총 5천억 미만에서도 Track A 의 70%+ 승률 검증 → 1조 → 5천억 완화 PROPOSAL" 같은 진화.
+  #
+  # both: 단축어 = 양쪽 트랙 동시 발동 (Track A + Track B 동시 권고).
+  # Track Selector (core/strategist/track_selector.py) 가 처리. 양 트랙 manifest 에 모두 박혀
+  # 있으므로 plugin 트랙 추가 시 자기 manifest 에 both: 박는 것이 양쪽 동시 평가 참여 opt-in.
   shortcuts:
     explicit:                                   # 사용자 명시 단축어
       - "long:"
       - "core:"
       - "wave:"
+      - "both:"                                 # 양 트랙 동시 발동 (selector 처리, 구현 별도 SPEC)
   auto:
     conditions:
       - monthly_7ma_aligned: true               # 월봉 7월선 위계 정합
@@ -159,6 +165,6 @@ response_rules: |
 
   - hedging 금지 ("다만/그러나/혹시" 깔지 말 것). 결론 (verdict + entry/target/stop) 먼저, 분석가 점수 인용은 reasons 에.
   - 자금액·계좌 비중 지시 금지 (Layer 4 계좌관리자 영역).
-  - 1주 미만 단기 권고 금지 (Track B 영역).
+  - 1 파 사이클 단위 권고 금지 (Track B 영역). Track A 본질 = 추세 추적 + 분할 운용 유기적 — 1 파 완성 후에도 추세 살아있으면 보유 유지.
 
 contract_version: "1.0"
