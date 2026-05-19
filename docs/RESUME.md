@@ -9,11 +9,13 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **MS0 도달 — `INFRA-RUNTIME-EFFICIENCY-001` v2 (Phase 1·2·4 완료, Phase 3 (c) 백로그 강등) + cycle 3 production 차단 본질 해소** (cycle 4 풀세트, 2026-05-19). Phase 1 (b) `retrieve.py:_get_collection` 가드 + Phase 2 (a) `ask_analyst`/`chat_analyst` httpx wrap + Phase 4 production 검증 통과: `market_state_analyzer` (자료 0 시드, RAG 0 chunks, 17.4s, $0.0007) + `principle_guardian` (자료 있음, verdict=violation, cited=[C2,C6,OS2], 12.4s, $0.0013, **메모리 충돌 0** = cycle 3 본질 해소). server 로그 `chroma_skip_empty dept=market_macro` 발화 = (b) 작동 확인. Phase 3 (c) embedding_cache = 측정된 latency 효과 < 0.4% (LLM 11s dominant) 로 **백로그 강등** (별도 SPEC `INFRA-EMBEDDING-CACHE-001` 으로 다중 dept 동시 호출이 실제 bottleneck 으로 나타날 때 진입). pytest **341 passed** (331 → +10, 회귀 0).
+**현재 위치**: **MS3 진입 직전 — `INFRA-CHART-DATA-001` SPEC frozen (5 라운드 면담 완료, 구현 0)** (cycle 5 SPEC only, 2026-05-20). `docs/specs/INFRA-CHART-DATA-001-chart-data.md` 신규 340 줄 = frontmatter (generates 8 / modifies 9 / depends_on 2 / contracts 1 dict `chart-data-md-v1`) + 12 본문 섹션 (Phase 1 텍스트 지표 + Phase 2 vision 분리 / Default 6 지표 + SLOT 2 / `chart_data_md` kwarg [4] 블록 / `chart_ohlcv` 테이블 schema_version 4→5 / 3-tier fallback / 15 단계 구현 순서 / 6 묶음 ~33 케이스 / 7 SLOT). 회장 결단 = SPEC frozen 만 (구현 다음 세션). **MS0 (양 트랙 시연) 은 cycle 4 풀세트에서 이미 도달**, MS1·MS2 도달 (Track A·B production 호출 가능). MS3 = `INFRA-CHART-DATA-001` 구현 + stock_analyst v3 마이크로 정정 후 부분 도달 (F5 분기 실적만 잔존 → `INFRA-FUNDAMENTAL-DATA-001` 후 완전).
 
-**마지막 작업일**: 2026-05-19 (cycle 4 풀세트 완결)
-**마지막 세션 로그**: [2026-05-19_phase-4-validation-and-tracks-5.md](c_worked/2026-05-19_phase-4-validation-and-tracks-5.md) (Phase 4 검증 + Top 2 양 트랙 호출 + (c) 백로그 강등).
-**Git**: cycle 3 = `d5ee9e0`. cycle 4 partial 본체 = `7a49e65`. cycle 4 partial wrap-up = `504e50c`. 본 wrap-up (SPEC v2 정정 + 메모리·c_worked·SESSIONS) commit + push 진행.
+**별도 부채 발견** (다음 사이클 누락 방지): `scripts/validate.py` 실행 중 `docs/specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md` v2 frontmatter 2 validation 에러 — `generates` 가 `None` (status=implemented bump 시 비워둔 영향) + `contracts.0` 가 str (`"없음 (런타임 효율 — ...)"`). Top 2 작업 시 동일 commit 으로 정정.
+
+**마지막 작업일**: 2026-05-20 (cycle 5 SPEC only)
+**마지막 세션 로그**: [2026-05-20_infra-chart-data-spec.md](c_worked/2026-05-20_infra-chart-data-spec.md) (`INFRA-CHART-DATA-001` SPEC 5 라운드 면담 신설).
+**Git**: cycle 4 풀세트 완결 wrap-up = `320652e`. 본 wrap-up (SPEC 신규 + c_worked + RESUME + SESSIONS) commit + push 진행.
 
 ---
 
@@ -21,19 +23,19 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 (~0.5 세션) — MS1·MS2 도달
-- **왜**: MS0 도달 후 (cycle 4 풀세트), 8 분석가 발행 가능 = `cited_scores` 90% 풍부성 확보. `both: 삼성전자` 양 트랙 동시 권고 시연 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증.
-- **범위**: `scripts/ask_strategist.py` 로 `track_a` + `track_b` 동시 호출 또는 webapp `both:` 호출. 응답 분석: scores·verdict·cited_scores·자연 인계 문구. webapp default agent 교체 결정 진입 검토.
-- **선행 의문**: `ask_strategist`/`chat_strategist` 도 `ask_analyst` 와 같은 (a) httpx wrap 변경이 필요한지 확인 — 현재는 in-process 일 가능성. cycle 3 같은 메모리 압박 위험 재발 케이스라면 본 SPEC 의 v3 patch 로 묶음.
+### 1. `INFRA-CHART-DATA-001` 구현 풀세트 + `stock_analyst` v3 마이크로 정정 (~1 세션) — MS3 부분 도달
+- **왜**: cycle 5 (2026-05-20) 에서 SPEC 신설 완료 (340 줄, frozen). 구현 진입만 남음. stock_analyst 환각 가드 2 해제 = α·F1·F4·목표가 3 단 정상 발행 = MS3 부분 도달 (F5 분기 실적만 잔존, `INFRA-FUNDAMENTAL-DATA-001` 후속).
+- **범위**: SPEC 의 15 단계 그대로 진입 — (1) DB 마이그레이션 (`v5_chart_ohlcv.sql`, schema_version 4→5) → (2) `connectors/kis/client.py` 에 `get_daily_chart` + `get_current_price` 메서드 추가 → (3) `collectors/charts.py` 신규 (Default 6 지표 + 60s TTL snapshot) → (4) 테스트 묶음 A 21 케이스 → (5) `core/knowledge/compose.py` `chart_data_md` kwarg `[4]` 블록 → (6-8) 테스트 + `run_analyst.py` `AnalystSpec.reads_chart_data` → (9-11) `stock_analyst` persona v3 정정 3 위치 + manifest + 테스트 → (12-13) APScheduler `0 18 * * 1-5` cron + `just refresh-charts` → (14-15) production 첫 검증 `just ask stock_analyst "삼성전자 분석"` + `scripts/validate.py` 통과.
+- **예상**: 33 신규 케이스 / 341 → 374 passed. SPEC 본문 = 모호성 0.
 
-### 2. `stock_analyst` v3 마이크로 정정 + `INFRA-CHART-DATA-001` SPEC 묶음 (~1.3 세션) — MS3 도달
-- **왜**: cycle 3 stock_analyst persona 에 환각 가드 2 (INFRA 미구현) 박혔음. INFRA 진입 시 가드 빼고 정상 발행 로직 추가. 정정 위치 3 곳 (Anti-patterns 가드 2 / Outputs 격자 [1] Quality Grid 차트 추론 / manifest response_rules) persona 본문 trace 명시됨.
-- **범위**: `INFRA-CHART-DATA-001` = KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
-- **예상**: stock_analyst v3 정정 ~0.3 세션 + `INFRA-CHART-DATA-001` ~1 세션 = 묶음 ~1.3 세션.
+### 2. `ask_strategist`/`chat_strategist` httpx wrap (INFRA-RUNTIME-EFFICIENCY-001 v3 patch) + frontmatter validation 부채 정정 묶음 (~0.4 세션)
+- **왜 (1) httpx wrap**: cycle 4 풀세트 후 `scripts/ask_strategist.py`/`scripts/chat_strategist.py` 가 in-process `run_strategist` 임포트 잔존 = cycle 3 같은 메모리 압박 위험. `ask_analyst` 와 동일 패턴 미러 필요.
+- **왜 (2) frontmatter 부채**: cycle 5 발견 — `docs/specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md` v2 의 2 validation 에러 (`generates: None` + `contracts.0: str`). 동일 commit 으로 정정 = 회장 핑퐁 [22] "묶음 권유" 패턴.
+- **범위**: 두 스크립트 → `POST /api/strategists/{id}/chat` httpx wrap (cycle 4 partial 의 `ask_analyst` 패턴 미러) + `tests/test_ask_strategist_http.py` 신규. SPEC v2 frontmatter 정정 = `generates: []` 빈 list 명시 + `contracts` 키 자체 제거 (없음 의미면 키 빼는 게 깔끔, validate 통과).
 
-### 3. `operational_safeguards` 권위 SPEC 정정 (별도 작은 SPEC, ~0.2 세션)
-- **왜**: cycle 3 발견된 SPEC vs 실제 자료 불일치 — `ANALYST-PERSONAS-001` v2 매핑 표는 `operational_safeguards` 를 `trader` canon 으로 박았으나 실제 파일 frontmatter `analyst: principle_guardian` + 본문은 principle_guardian verdict 산출 알고리즘. cycle 3 에선 trader persona 권위 위임 명시로 임시 처리, SPEC 정정은 백로그.
-- **범위**: `ANALYST-PERSONAS-001` v2 매핑 표 수정 + 회귀 테스트 갱신 + canon dir 의 frontmatter 일관성 검사.
+### 3. `operational_safeguards` 권위 SPEC 정정 (~0.2 세션)
+- **왜**: cycle 3 발견 — `ANALYST-PERSONAS-001` v2 매핑 표가 `operational_safeguards` 를 `trader` canon 으로 박았으나 실제 파일 frontmatter `analyst: principle_guardian` + 본문은 principle_guardian verdict 산출 알고리즘. cycle 3 에선 trader persona 권위 위임 명시로 임시 처리, SPEC 정정은 백로그.
+- **범위**: `ANALYST-PERSONAS-001` v2 매핑 표 수정 + 회귀 테스트 갱신 + canon dir 의 frontmatter 일관성 검사. Top 2 와 묶을 수도 있음.
 
 (추가 백로그: **operational_safeguards 권위 SPEC 정정** (별도 작은 SPEC — SPEC v2 매핑 표의 trader canon → principle_guardian canon 으로 정정. **INFRA-RUNTIME-EFFICIENCY-001 진입 시 첫 commit 으로 묶음 권유** (회장 핑퐁 [22] 권고)) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score·alpha 정식 가중치 확정** (SLOT S7 운용 중 확정) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / news_curator SLOT S2 자료원 결정 (Perplexity MCP vs 직접 수집) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
@@ -52,7 +54,7 @@
 | **MS4** | 실 매매 시연 (권고 → 자금액 변환 → 주문) | Layer 4 계좌관리자 + `GUIDANCE-ACCURACY-TRACKER-001` | +2~3 세션 |
 | **MS5** | 자가 진화 사이클 (회고 → PROPOSAL → manifest 갱신) | Layer 5 회고분석가 + 5 KPI 누적 (3~6 개월 운영) | +1 세션 + 운영 시간 |
 
-**현재 위치**: 본 사이클 (2026-05-19 cycle 3) 후 = MS0 **직전** (페르소나 8/9 완성 + 자동 test 91/91 + 회귀 0, INFRA 미진입). 다음 사이클 Top 1 (`INFRA-RUNTIME-EFFICIENCY-001`) 통과 시 **MS0 도달**.
+**현재 위치**: cycle 5 (2026-05-20 SPEC only) 후 = **MS0·MS1·MS2 도달 (cycle 4 풀세트) + MS3 진입 직전** (`INFRA-CHART-DATA-001` SPEC frozen, 구현 0). 다음 사이클 Top 1 (`INFRA-CHART-DATA-001` 구현 + stock_analyst v3 정정) 통과 시 **MS3 부분 도달** (F5 분기 실적만 잔존, `INFRA-FUNDAMENTAL-DATA-001` 후 완전).
 
 ---
 
@@ -141,12 +143,13 @@
 - **Track B persona + manifest + track_selector + 테스트 25** (2026-05-19) — `agents/strategists/track_b/{persona.md, manifest.yaml}` 8 섹션 portable (1 파 사이클 카페 운영 비유 + reads_analysts 5 + canon_categories 3 principles/market_regime_rules·trading_doctrine + trading/operational_safeguards + input_routing shortcuts ["swing:", "short:", "trigger:", "both:"] + temperature 0.4 max_tokens 5000 + response_rules). `core/strategist/track_selector.py` (모든 전략가 manifest input_routing 동적 인식 + 단축어 dispatch + both: fast-path + fallback, auto.conditions v1 placeholder). `core/strategist/__init__.py` select_tracks export. `tests/test_track_b_strategist.py` 7 + `tests/test_track_selector.py` 18 신규 = pytest **240 passed** (215 → +25, 회귀 0). production 첫 호출 검증 2회 (CLI claude_code $0.19 OAuth 무료 67.5s + webapp gemini $0.0014 20.6s scores 0/5, 양쪽 환각 차단 + 한국어 친화 용어 + canon 명제 ID 풀어쓰기 작동) ✨
 - **자료 0 시드 5 분석가 페르소나 v2 — 5 subagent 병렬 dispatch** (2026-05-19) — `agents/analysts/market_state_analyzer/` (시장 체제 6단계 + DD kill switch, 풍향계 비유, 변곡점 3 케이스 cross-reference trigger) / `agents/analysts/stock_picker/` (S-Score + buy_score G1 양쪽 발행 강제, 두 모자 비유) / `agents/analysts/trading_journalist/` (매매 일지 + post-mortem + prism-insight 차용 PROPOSAL, Layer 5 boundary 분리) / `agents/analysts/flow_analyzer/` (F-Score 4축 가중 합 0.4·0.3·0.2·0.1, 4-tier 비유, "가격은 수급의 부모" 인용) / `agents/analysts/news_curator/` (단기 테마 / 장기 흐름 / 지정학 3 분류, 자료원 SLOT S2 미결정, canon_categories 빈 list). 모두 8 섹션 portable + 한국어 친화 용어 + cited 풀이 v3.1 + 박종훈 framework 직접 인용 금지 가드 일관 박힘. **`superpowers:dispatching-parallel-agents` 첫 적용** = 1 message 5 Agent tool calls, 소요 ~5 분, 총 ~1,800 줄. `tests/test_seed_analysts_v2.py` 38 cases 신규 = pytest **278 passed** (240 → +38, 회귀 0). production 첫 호출 검증 (market_state_analyzer, gemini-flash, 3 시나리오 합산 ~$0.0025): 평상시 자료 0 자각 / 변곡점 trigger 시도 (자료 0 자각 우선) / boundary 침범 시 wealth_strategist 권위 영역 위임 명시 ✨
 - **박종훈 framework scope 메모리 정밀화** (2026-05-19, 사용자 2차 발화) — `feedback_park_jonghoon_scope.md` 본문 갱신: "거시적 경제 해석 통찰 = 트레이딩보다 한 차원 상위 frame", "시장 변곡점 발생 시에만 들여다 보는 큰 길잡이", 변곡점 3 케이스 정의 (regime 전환 / DD 4건+ / 사이클 단계 변화) 추가. market_state_analyzer 특수 가드 항목 추가. MEMORY.md 인덱스 1 줄 갱신
+- **`INFRA-CHART-DATA-001` SPEC 신설** (2026-05-20 cycle 5 SPEC only) — `docs/specs/INFRA-CHART-DATA-001-chart-data.md` 340 줄. 5 라운드 면담 결단 누적: R1 공용 인프라 (`collectors/charts.py`, 5 분석가 잠재 소비자) + Phase 1 텍스트 / Phase 2 vision 분리 / R2 KIS daily 5년 1825봉·수정주가·8컬럼 / snapshot 7필드 / pandas-ta Default 6 (월봉 7·20MA + 주봉 10·20·60MA + 일봉 4·7·20·60·120MA + MACD 12-26-9 + 거래량 20일이평 spike + 52주 고저) + SLOT 2 (RSI·볼린저, WAVE-ALPHA-001 후) / `chart_data_md` kwarg `[4]` 블록 (market_snapshot_md 미러) / `chart_ohlcv` 테이블 + lru_cache + 60s TTL / R3 기존 `connectors/kis/client.py` 재사용 (`get_daily_chart` + `get_current_price` 추가) + APScheduler `0 18 * * 1-5` cron + `just refresh-charts` 백업 + 3-tier fallback (5 영업일 stale + 부분 발행 + last cache) / R4 6 묶음 ~33 케이스 + TESTING=1 mock 강제 / R5 15 단계 구현 순서 + SLOT 7 (`<!-- SPEC:INTERVIEW-SLOT -->` 마커, α anchor·RSI/볼린저·watchlist·yfinance·호가창·F5 분기실적·Phase 2 vision) + schema_version 4→5 + 4 SPEC 영향. frontmatter generates 8 + modifies 9 + depends_on 2 + contracts 1 dict (`chart-data-md-v1`) 단독 파싱 통과. **회장 결단 = SPEC frozen 만** (구현은 다음 사이클 1 세션). **부수 발견**: `INFRA-RUNTIME-EFFICIENCY-001` v2 frontmatter 2 validation 에러 (`generates=None`, `contracts.0=str`) — 다음 사이클 Top 2 (`ask_strategist` httpx wrap) 동일 commit 정정 의제
 - **Track A·B 본질 재정의** (2026-05-19, 외부 R&D 피드백 + 사용자 본질 의도 정합) — 기간 기준 → 전략 본질 기준. **Track A = "추세 추적 + 분할 운용"** (월봉 7월선 위계 유지·F1 이탈 시까지 보유·연 5-15회 회전·MDD -8%·결과적 보유 3 개월~수년·**타점 맞으면 큰 진입 / 애매하면 역피라미드 분할** 저점 50%·중간 30%·상단 20% 저점 비중 크게 평단 머리 무겁지 않게). **Track B = "프랙탈 1 파 사이클"** (저점~고점 1 파 회수가 최대 목표·실적·장기 무관·R/R 1.5+ 백업 가드·결과적 보유 일~수주·1 파 완성 시 trailing stop 잔여 확장·1 파 완성 후 추세 더 가는 종목 Track A 자연 인계). display_name 본질 표기 (Track A 추세 추적 전략가 / Track B 프랙탈 1 파 전략가). SPEC § 분석가 페르소나 작성 가드 (G1 stock_picker S-Score + buy_score 양쪽 발행 강제 / G2 trader 6 트리거 영문 ID 고정 + Track B 명단 변경 시 동시 수정) + § 의사결정 SLOT (S8 자본 단위 분모 통일 — Layer 4 계좌관리자 작성 시 동시 갱신 강제). Track A persona + manifest + Track B persona + manifest + STRATEGY-TRACK-001 SPEC + 테스트 키워드 일관 박힘 (persona ↔ SPEC ↔ test 균열 회피)
 
 ### 미완 또는 의도적 공백
 - **`team_outputs` DB 적재 인프라 부재** — Track A·B + 9 분석가 호출 결과를 DB 적재하는 호출처 0 (run_strategist/run_analyst 는 LLM 호출까지만, persist_output 호출은 wrap 측). GUIDANCE-ACCURACY-TRACKER-001 SPEC 후속
-- **자료 있는 3 분석가 페르소나 v2 미작성** — `principle_guardian` / `trader` / `stock_analyst` (Top 1). 본 세션 5 명 완성 후 다음 단계. canon 1:1 grep 패턴 신중 + SPEC G2 (trader 6 트리거 영문 ID 정식 정의) 강제. stock_analyst 작성 직전 = INFRA-CHART-DATA-001 blocker
-- **`stock_analyst` 작성 blocker = INFRA-CHART-DATA-001 SPEC 미진입** — 차트 데이터 인프라 부재 시 환각 잠재. Top 3 진입 (Top 1 stock_analyst 작성 직전 필수). KIS daily chart + pandas-ta + matplotlib vision
+- **`INFRA-CHART-DATA-001` 구현 0** (2026-05-20 SPEC frozen 후) — SPEC 본문 15 단계 박혀있으나 코드·테스트 진입 0. 다음 사이클 Top 1. `chart_ohlcv` 테이블 + KIS client 두 메서드 + `collectors/charts.py` + `compose.chart_data_md` + `run_analyst.reads_chart_data` + `stock_analyst` persona v3 정정 (환각 가드 2 해제 3 위치) + APScheduler cron + production 첫 검증.
+- **`INFRA-RUNTIME-EFFICIENCY-001` v2 frontmatter validation 부채** (2026-05-20 발견) — `generates: None` (status=implemented bump 시 비워둔 영향, pydantic list_type 에러) + `contracts.0: str` ("없음 (런타임 효율 — 분석가 응답 스키마 불변)", dict_type 에러). 다음 사이클 Top 2 동일 commit 정정 의제. 정정 방법 = `generates: []` 빈 list 명시 + `contracts` 키 자체 제거 (없음 의미면 키 빼는 게 깔끔).
 - **트레이딩 관점 분석가 framework 추후 정의** (백로그) — 박종훈 framework 와 분리된 트레이딩 일반 framework. 회고분석가 PROPOSAL 영역 또는 별도 SPEC. Top 1+2+3 안정 운용 후 진입 검토
 - **자본 단위 분모 SLOT (S8) 미통일** — Track A persona § 분할 매수 룰 "50% 또는 한도의 70%" 두 분모 모호 (의도 비중 / 단일 종목 한도 / 계좌 전체). Layer 4 계좌관리자 페르소나 작성 시 자본 단위 합의 후 persona + SPEC 동시 갱신 강제 (이중 박음으로 SLOT 인지)
 - **selector.py BOTH_SHORTCUT fast-path 처리 vs manifest opt-in 양식** — SPEC L218-225 의 외부 input_routing_both 권위와 manifest 양식 (track_a/b 모두 "both:" 박힘) 양립. fast-path 제거는 별도 SPEC 후속 (사용자 피드백 #2 "구현 별도 SPEC" 명시)
@@ -160,7 +163,7 @@
 - **`SLOT S9` 미결정** — 9 분석가 응답 양식 한국어 용어 § 적용 = manifest 별 박기 vs compose 공유 블록 추출. 자료 있는 4 명 작성 후 결정
 - **compose 분기 인프라 (격자 trigger 동적 주입)** — 페르소나 layer 만으로 LLM 분기 결정론 불가능 결론은 유지. 본질 해결 = `core/knowledge/compose.build_pipeline_prompt` keyword trigger 분기. v2 양식 (Outputs Task trigger 분기) 으로 일부 완화되었으나 LLM 추종력 한계 잔존. 9 분석가 페르소나 작성 시 재평가
 - **미국 매크로 collector 부재** — 자산전략가 frame 의 핵심 입력 (미 10년물·달러인덱스·VIX·미 부채 잔액) 이 `collectors/snapshot.py` 에 미적재. v3 페르소나가 "snapshot 없음, framework 밖" 으로 솔직히 답하긴 하나 grounding 인프라 자체가 빈 상태. 새 SPEC 후보 `INFRA-US-MACRO-SNAPSHOT-001`
-- **차트 데이터 인프라 부재 — 시계열 차트 추론 환각 잠재** — 현재 `collectors/snapshot.py` 는 **당일 한 시점 prices 만** 제공 (지수·섹터·주도주·수급·환율). OHLCV 시계열 / 이동평균 / RSI·MACD·이격도 / 거래량 추이 / 차트 패턴 모두 부재 → LLM 이 "20일선 정배열", "MACD 골든크로스", "이격도 +12%" 같은 차트 추론 항목 답하면 **전부 환각**. 박종훈 framework 명제 인용 (원리) 만 OK. 새 SPEC 후보 `INFRA-CHART-DATA-001` — KIS daily chart API (`inquire-daily-itemchartprice`, 무료, 토큰 작동 중) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). 트레이딩뷰 유료 구독 불필요 (KIS+pykrx+yfinance+FRED 무료 조합 충분). **stock_analyst·trader 페르소나 작성 직전 필수 진입 — 가치 검증 핵심 blocker**
+- **차트 데이터 인프라 구현 0 (SPEC frozen)** — `INFRA-CHART-DATA-001` SPEC 신설 완료 (2026-05-20 cycle 5, 340 줄). 코드·테스트 진입 0. stock_analyst 환각 가드 2 (INFRA 미구현 → `verdict=unknown` 강제) 아직 활성, α·F1·F4·목표가 3 단 발행 차단. 다음 사이클 Top 1 구현 풀세트 후 MS3 부분 도달 (F5 분기 실적만 잔존 → `INFRA-FUNDAMENTAL-DATA-001` 후속).
 - **36 카테고리 `_category.yaml` 의 `target_analysts` 채우기** — 현재 100% 비어있음. ANALYST-PERSONAS-001 SPEC 의 매핑 표가 ground truth. 자료 있는 4 dept 페르소나 완성 후 채움
 - **KNOWLEDGE-SYNC-001 Phase 2~5 구현** — Phase 1 ✅ / Phase 2 M1 ✅ (retrieve 카테고리 필터 + compose canon_categories) / Phase 2 M2 ✅ (DB knowledge_index_runs + sync.py delta 인덱싱) / Phase 2 M3 ✅ (watchdog 60s debounce + justfile 5 명령 정리 + server lifespan 자동 등록) — **Phase 2 풀세트 = 프로토타입 1차 동작점** / Phase 3 canon 승격 PROPOSAL + release note LLM 자동 생성 (M3 분석가 분화 SPEC 후) / Phase 4 트리거 + 스킬 (`/knowledge-sync`, `/knowledge-review`) / Phase 5 풀 사이클 검증
 - **다른 dept 재인덱싱** (principles / trading / stock-analysis 등) — Phase 2 sync 로 자동화 또는 수동 force re-index. stock-analysis 는 5형식 자료 풍부해 어댑터 검증 풍부 (백로그)
