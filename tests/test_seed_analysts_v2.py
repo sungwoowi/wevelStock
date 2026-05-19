@@ -336,3 +336,102 @@ def test_trading_journalist_layer_5_boundary() -> None:
 
     assert "회고분석가" in text or "Layer 5" in text
     assert "prism-insight" in text or "prism" in text  # 차용 원천 명시
+
+
+# ---------------------------------------------------------------------------
+# 8 분석가 boundary 충돌 검증 (정정 2 — 2026-05-19 data-3 사이클 신설)
+# 본 세션 5명 + data 3명 = 9 분석가, 그 중 wealth_strategist 포함 8 분석가 사이
+# Cross-Agent Boundaries 표 위임 매핑 정합성 자동 검증
+# ---------------------------------------------------------------------------
+
+
+ALL_8_ANALYSTS = [
+    "wealth_strategist",
+    "market_state_analyzer",
+    "stock_picker",
+    "trading_journalist",
+    "flow_analyzer",
+    "principle_guardian",
+    "trader",
+    "stock_analyst",
+]
+# news_curator 는 SLOT S2 (자료원 미결정, canon_categories 빈 list) → 본 검증 제외
+
+
+@pytest.mark.parametrize("analyst_id", ALL_8_ANALYSTS)
+def test_8_analyst_boundary_all_others_present(analyst_id: str) -> None:
+    """각 분석가의 Cross-Agent Boundaries 표가 본인 외 7 분석가 모두 위임 명시.
+
+    정정 2 — 8 분석가 사이 영역 권위 중복 0 건 자동 검증 (boundary 매트릭스 완전성).
+    분석가 추가 시 boundary 누락 자동 catch.
+    """
+    persona_path = ANALYSTS_DIR / analyst_id / "persona.md"
+    text = persona_path.read_text(encoding="utf-8")
+
+    boundary_start = text.find("## Cross-Agent Boundaries")
+    assert boundary_start != -1, f"{analyst_id}: ## Cross-Agent Boundaries 섹션 없음"
+    boundary_section = text[boundary_start:]
+
+    # 본 분석가 외 7 분석가 ID 가 boundary 섹션에 모두 등장 (위임 매핑)
+    missing = []
+    for other_id in ALL_8_ANALYSTS:
+        if other_id == analyst_id:
+            continue
+        if other_id not in boundary_section:
+            missing.append(other_id)
+
+    assert not missing, (
+        f"{analyst_id}: Cross-Agent Boundaries 에 위임 누락 {missing}. "
+        f"8 분석가 사이 권위 중복 회피를 위해 모든 인접 분석가 명시 필요."
+    )
+
+
+# 8 분석가 발행 권위 키워드 매트릭스 — 각 분석가가 본인만 발행하는 고유 키워드
+AUTHORITY_KEYWORDS = {
+    "wealth_strategist": ["wealth_strategist"],  # ID 자체가 권위 시그널
+    "market_state_analyzer": ["시장 체제", "Distribution Day", "분배일"],
+    "stock_picker": ["S-Score", "buy_score"],
+    "trading_journalist": ["매매 회고", "trading_journalist"],
+    "flow_analyzer": ["F-Score", "수급 점수"],
+    "principle_guardian": ["compliant", "violation", "7계명"],
+    "trader": ["T-Score", "타점 점수"],
+    "stock_analyst": ["Module A", "F1~F5", "holding_period"],
+}
+
+
+@pytest.mark.parametrize("analyst_id", ALL_8_ANALYSTS)
+def test_8_analyst_authority_keyword_other_negation(analyst_id: str) -> None:
+    """타 분석가 권위 키워드가 본 persona 에 나오면 negation 컨텍스트 필수.
+
+    정정 2 보조 — 각 분석가가 본인 권위 외 키워드 사용 시 위임·금지·발행 X 명시.
+    예: trader persona 에 'F-Score' 나오면 주변에 'flow_analyzer' / '발행 X' / '권위' 등 있어야.
+    """
+    persona_path = ANALYSTS_DIR / analyst_id / "persona.md"
+    text = persona_path.read_text(encoding="utf-8")
+
+    negation_keywords = [
+        "권위", "위임", "발행 X", "발행 금지", "금지", "본 분석가 영역 X",
+        "X (", "권한 없음", "본인은", "보내", "넘긴", "안 함", "않는다",
+        "frame 밖", "다른 분석가", "분석가 영역", "영역 X", "input", "read",
+        "Cross-Agent Boundaries", "Inputs", "Input 으로", "참조", "트리거 조건",
+        "트리거", "시나리오", "확률", "이행", "전환", "변화", "snapshot",
+        analyst_id,  # 본인 ID 인접에서는 OK (격자 발행 § 등)
+    ]
+
+    for other_id, keywords in AUTHORITY_KEYWORDS.items():
+        if other_id == analyst_id:
+            continue
+        for kw in keywords:
+            if kw not in text:
+                continue
+            # 모든 등장 위치에서 negation 컨텍스트 또는 인접 분석가 ID 검증
+            indices = [i for i in range(len(text)) if text[i : i + len(kw)] == kw]
+            for idx in indices:
+                surrounding = text[max(0, idx - 250) : idx + len(kw) + 250]
+                # 해당 키워드 인접에 (a) 그 키워드의 진짜 발행자 ID 또는 (b) negation 키워드
+                has_owner = other_id in surrounding
+                has_negation = any(n in surrounding for n in negation_keywords)
+                assert has_owner or has_negation, (
+                    f"{analyst_id}: 타 분석가({other_id}) 권위 키워드 '{kw}' 등장 시 "
+                    f"발행자 ID 또는 negation 컨텍스트 없음. 주변: ...{surrounding}..."
+                )

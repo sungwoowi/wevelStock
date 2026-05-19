@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **Layer 2 분화의 첫 큰 사이클 완료** — 자료 0 시드 5 분석가 페르소나 v2 (`market_state_analyzer` / `stock_picker` / `trading_journalist` / `flow_analyzer` / `news_curator`) = 5 subagent 병렬 dispatch 한 사이클 안에 완성 (~5 분, `superpowers:dispatching-parallel-agents` 첫 적용). 8 섹션 portable + 한국어 친화 용어 + cited 풀이 v3.1 + 박종훈 framework 직접 인용 금지 가드 일관 박힘. **박종훈 framework scope 메모리 정밀화** (사용자 2차 발화 — "거시적 경제 해석 통찰 = 트레이딩보다 한 차원 상위 frame, 시장 변곡점 시에만 들여다 보는 큰 길잡이", 변곡점 3 케이스 정의). **production 첫 호출 검증 (market_state_analyzer 3 시나리오) ✅** — 평상시 자료 0 자각 / 변곡점 trigger 시도 / boundary 침범 시 wealth_strategist 권위 영역 위임 명시 (분화 boundary 본질 정합 ✨). pytest **278 passed** (+38, 회귀 0).
+**현재 위치**: **Layer 2 분화 완료 (8/9 분석가, `news_curator` 만 SLOT S2 자료원 미결정)** — 본 사이클 (같은 날 3 째) 자료 있는 3 분석가 v2 (`principle_guardian` 자료 있음 · `trader` 사실상 자료 0 시드 + α 미발행 fallback (a)/(b) · `stock_analyst` 자료 0 시드 + INFRA-CHART-DATA-001 미비 환각 가드 2 중) = 3 subagent 병렬 dispatch ~10 분 / 6 파일 1,439 줄. **명제 ID 21 개 신설** (C·D·R·OS), **6 트리거 영문 ID 정식** (`volume_surge` 외 5), **8 분석가 boundary 매트릭스 자동 검증** 신설. **점수 발행 풀세트 완성** = S/T/α/buy_score/F-Score → Track A·B cited_scores 90% 풍부성 확보. **2 깨달음** — operational_safeguards 권위 모순 (SPEC trader vs 본문 principle_guardian) / trader canon 사실상 자료 0. **자원 부담 본질 발견** = BGE-m3 ~2.5GB CLI 매 호출 재로딩 → `INFRA-RUNTIME-EFFICIENCY-001` 백로그 신설 (Top 1 으로). pytest **331 passed** (278 → +53, 회귀 0) / validate 0 errors. production 첫 호출 = **보류** (자원 부담, INFRA 후 양 트랙 통합 검증 동시 진입).
 
 **마지막 작업일**: 2026-05-19
-**마지막 세션 로그**: [2026-05-19_seed-analysts-v2-parallel-dispatch-2.md](c_worked/2026-05-19_seed-analysts-v2-parallel-dispatch-2.md)
-**Git**: 이전 사이클 (같은 날) 까지 `d340554` push. 본 세션 wrap-up commit + push 진행.
+**마지막 세션 로그**: [2026-05-19_data-analysts-v2-parallel-dispatch-3.md](c_worked/2026-05-19_data-analysts-v2-parallel-dispatch-3.md)
+**Git**: 이전 사이클 (같은 날) 까지 `fcf7961` push. 본 세션 wrap-up commit + push 진행.
 
 ---
 
@@ -21,22 +21,42 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. 자료 있는 3 분석가 페르소나 v2 — **canon 1:1 grep 신중** (~1.5 세션, 병렬 가능)
-- **왜**: `principle_guardian` · `trader` · `stock_analyst`. canon 자료 있는 4 dept 잠정 풀이 정정 패턴 필요. 점수 발행 (S/T/α/buy_score) 시작하면 Track A·B 권고 cited_scores 풍부성 ↑ (현재 4명 발행 가능 → Top 1 후 8 명 발행 가능 = 90% 풍부성). trader = SPEC G2 (6 트리거 영문 ID `volume_surge`/`intraday_top`/`gap_up`/`closing_strength`/`fund_inflow`/`volume_increase_sideways` 정식 정의 + Track B 명단 변경 시 동시 수정) 강제. **`stock_analyst` 작성 직전 = `INFRA-CHART-DATA-001` blocker** (차트 데이터 부재 시 환각).
-- **범위**: 분석가별 `{persona.md, manifest.yaml}` 한 쌍 (8 섹션 portable + 한국어 친화 용어 § + 결정론 채점 발행 매핑). principle_guardian (canon = 7계명·심법·거시 트레이딩 기준 4 파일) / trader (T-Score + 6 트리거 영문 ID 정식 정의 + α 오버라이드 read) / stock_analyst (α 발행 + Module A 목표가 3단 + holding_period_estimate_days 발행). 본 세션 5 subagent 패턴 동일 적용 (canon grep 충돌 X — 각자 다른 dept).
-- **예상**: ~1.5 세션 (병렬 dispatch + canon grep 신중).
+### 1. INFRA-RUNTIME-EFFICIENCY-001 SPEC + 구현 — **운용 본질 제약 해소** (~1.5 세션) ★★★★★
+- **왜**: 본 사이클 production 호출 보류의 원인. BGE-m3 ~2.5GB CLI 매 호출 재로딩 = 사용자 PC 메모리 거의 가득 참 (`memory allocation of 17301520 bytes failed`). **양 트랙 통합 production 검증 (Top 2) 진입 전 우선 진입 필수** — Top 2 도 같은 자원 부담 누적.
+- **범위 (3 묶음)**:
+  1. **서버 모드 reuse** — `scripts/ask_analyst.py` CLI → FastAPI client wrap. BGE-m3 1 회 로딩 + 매 호출 재사용 → 자원 ~95% 절감.
+  2. **RAG 자료 0 시드 자동 OFF** — `core/knowledge/compose.py` 에 `if not spec.canon_categories or dept_canon_md_count == 0: skip RAG` 분기. 자료 0 시드 분석가 6/9 호출 시 BGE-m3 로딩 자체 skip → 메모리 ~2.5GB 절감.
+  3. **SQLite 임베딩 캐시** (`embedding_cache` 테이블) — query hash → cached vector reuse. 동일 query 재호출 시 BGE-m3 로딩 없이 즉시 응답.
+- **예상**: ~1.5 세션. 자세한 진단 = [project_runtime_efficiency_blocker.md](../../../AppData/Roaming/claude/projects/C--Users-HOME-claude-wevelStock/memory/project_runtime_efficiency_blocker.md)
 
-### 2. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션)
-- **왜**: Top 1 완성 후 = 8 분석가 발행 가능 (90% 풍부성). `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.
+### 2. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션) — INFRA 후
+- **왜**: 본 사이클 후 = 8 분석가 발행 가능 (90% 풍부성, news_curator 만 SLOT S2). `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.
+- **전제**: Top 1 (INFRA-RUNTIME-EFFICIENCY-001) 완료 후. 그 전엔 자원 부담 동일.
 - **범위**: webapp `both: 삼성전자` 호출 검증 + 응답 분석 + `feedback_webapp_production_ux.md` 의 자동 라우팅 사이클 (intent + 종목명 매핑 + Track Selector 백단 0 노출) 진입 결정.
-- **예상**: ~0.5 세션 (검증 + 결정 위주).
 
-### 3. INFRA-CHART-DATA-001 SPEC 진입 (~1 세션, Top 1 의 stock_analyst 작성 직전 진입 필요)
-- **왜**: KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `stock_analyst` 의 "20일선 정배열" "MACD 골든크로스" 같은 차트 추론 항목이 환각 안 되도록 시계열 인프라 사전 구축. Top 1 의 stock_analyst 작성 직전 진입 강제.
-- **범위**: SPEC 신설 + collectors/charts.py 구현 + matplotlib renderer + vision API 통합. `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
-- **예상**: ~1 세션.
+### 3. stock_analyst v3 마이크로 정정 (~0.3 세션) + INFRA-CHART-DATA-001 SPEC (~1 세션) 묶음
+- **왜**: 본 사이클 stock_analyst persona 에 환각 가드 2 (INFRA 미구현) 박혔음. INFRA-CHART-DATA-001 진입 시 가드 빼고 정상 발행 로직 추가. 정정 위치 3 곳 (Anti-patterns 가드 2 / Outputs 격자 [1] Quality Grid 차트 추론 항목 / manifest response_rules) persona 본문에 trace 명시됨.
+- **범위**: INFRA-CHART-DATA-001 = KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
+- **예상**: stock_analyst v3 정정 ~0.3 세션 + INFRA-CHART-DATA-001 ~1 세션 = 묶음 ~1.3 세션.
 
-(추가 백로그: **자료 0 시드 5 분석가 페르소나** (`market_state_analyzer` · `stock_picker` · `trading_journalist` · `flow_analyzer` · `news_curator` Phase A 작성, 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 LLM PROPOSAL 보강) / `INFRA-CHART-DATA-001` (KIS daily chart + pandas-ta + matplotlib vision, stock_analyst 가치 검증 blocker) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score 정식 가중치 확정** (분석가 manifest 작성 시) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
+(추가 백로그: **operational_safeguards 권위 SPEC 정정** (별도 작은 SPEC — SPEC v2 매핑 표의 trader canon → principle_guardian canon 으로 정정. **INFRA-RUNTIME-EFFICIENCY-001 진입 시 첫 commit 으로 묶음 권유** (회장 핑퐁 [22] 권고)) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score·alpha 정식 가중치 확정** (SLOT S7 운용 중 확정) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / news_curator SLOT S2 자료원 결정 (Perplexity MCP vs 직접 수집) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
+
+---
+
+## 🚀 시연 마일스톤 (시연 가능 단위)
+
+**본질** (회장 핑퐁 [22] 정정): "코드 작성 완료 ≠ 시연 가능" 분리. Top 3 = 작업 단위 (분량·우선순위), 마일스톤 = **시연 도달 단위 (사용자 확인 가능 시점)**. 본 사이클 production 호출 보류 = MS1 차단점 발견 = MS0 신설 필연.
+
+| # | 마일스톤 | 도달 조건 | 추가 비용 (누적) |
+|---|----------|----------|----------------|
+| **MS0** | production 호출 가능 (분석가·전략가 webapp 호출 작동) | `INFRA-RUNTIME-EFFICIENCY-001` (서버 모드 reuse + RAG 자료 0 시드 자동 OFF + SQLite 임베딩 캐시) | +1.5 세션 |
+| **MS1** | Track B 첫 권고 완성형 시연 (cited_scores 풍부성 90%) | MS0 후 `swing:` 호출 = 8 분석가 풀세트 read | +0.5 세션 |
+| **MS2** | Track A 첫 권고 완성형 시연 (stock_analyst verdict=`unknown` 자각 검증) | MS1 동시 (`long:` 호출 동시 가능) | +0 |
+| **MS3** | stock_analyst 완전 (INFRA-CHART-DATA-001 후 v3 정정) | `INFRA-CHART-DATA-001` SPEC + v3 마이크로 정정 (~0.3 세션) | +1 세션 |
+| **MS4** | 실 매매 시연 (권고 → 자금액 변환 → 주문) | Layer 4 계좌관리자 + `GUIDANCE-ACCURACY-TRACKER-001` | +2~3 세션 |
+| **MS5** | 자가 진화 사이클 (회고 → PROPOSAL → manifest 갱신) | Layer 5 회고분석가 + 5 KPI 누적 (3~6 개월 운영) | +1 세션 + 운영 시간 |
+
+**현재 위치**: 본 사이클 (2026-05-19 cycle 3) 후 = MS0 **직전** (페르소나 8/9 완성 + 자동 test 91/91 + 회귀 0, INFRA 미진입). 다음 사이클 Top 1 (`INFRA-RUNTIME-EFFICIENCY-001`) 통과 시 **MS0 도달**.
 
 ---
 
@@ -75,6 +95,9 @@
 - **`scripts/knowledge.py`** — `ingest`/`browse` 단순 CLI + Windows utf-8 reconfigure
 - **`docs/specs/INFRA-RAG-001-knowledge-rag.md`** — RAG SPEC + 한국어 임베딩 비교표 + 결정 근거
 - **`agents/analysts/wealth_strategist/{persona.md, manifest.yaml}`** (M3) — Layer 2 첫 분석가. R4 canon 톤 그대로 + `reads:[wealth_compounding]` + max_tokens 4000 + temp 0.4
+- **`agents/analysts/{market_state_analyzer, stock_picker, trading_journalist, flow_analyzer, news_curator}/{persona.md, manifest.yaml}`** (2026-05-19 cycle 2) — 자료 0 시드 5 분석가 v2. 8 섹션 portable + 한국어 친화 용어 + cited v3.1 + 박종훈 framework 직접 인용 금지 가드. 5 subagent 병렬 dispatch ~5 분.
+- **`agents/analysts/{principle_guardian, trader, stock_analyst}/{persona.md, manifest.yaml}`** (2026-05-19 cycle 3, 본 사이클) — 자료 있는 3 분석가 v2 (사실상 principle_guardian 만 자료 있음, trader 사실상 0 시드 + stock_analyst 자료 0 시드 + INFRA 미비 환각 가드 2 중). 명제 ID **C·D·R·OS 21 개 신설** (principle_guardian) + **6 트리거 영문 ID** (trader) + α 미발행 fallback (a)/(b) + 환각 가드 2 중 (stock_analyst). 3 subagent 병렬 dispatch ~10 분 / 6 파일 1,439 줄.
+- **`tests/test_seed_analysts_v2.py` (cycle 2) + `tests/test_data_analysts_v2.py` (cycle 3)** — 분석가 페르소나 양식 자동 검증 91 케이스. 8명 boundary 매트릭스 + 권위 키워드 충돌 negation + Track A·B read 정합 (trader 6 트리거 ↔ Track B / stock_analyst α+holding_period ↔ Track A / principle_guardian verdict ↔ Track A·B) 자동화.
 - **`core/inference/run_analyst.py`** (M3) — 분석가 단일 호출 핵심 함수. 멀티턴 messages 배열 수용 + `build_pipeline_prompt` + `call_llm` + metadata (system char/RAG chunks/cache tokens/cost/latency/is_mock/upstream_error). CLI/REPL/FastAPI/webapp 4 인터페이스 모두 wrap
 - **`scripts/{chat_analyst,ask_analyst}.py` + `just {chat,ask}` 레시피** (M3) — REPL 멀티턴 + 단일 턴 CLI. stdin/stdout utf-8 reconfigure + surrogate normalize + JSONL 자동 저장 (`data/analyst_queries/<id>/<dt>.jsonl`) + 누적 토큰 200K 가시화 + mock/upstream_error 라벨
 - **`server/api/analyst_chat.py`** (M3) — `POST /api/analysts/{id}/chat` 멀티턴 endpoint + `GET /api/analysts/{id}` 메타
