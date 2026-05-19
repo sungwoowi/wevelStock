@@ -106,6 +106,16 @@ knowledge-watch:
 knowledge-browse dept query:
     uv run python -m scripts.knowledge browse {{dept}} "{{query}}"
 
+# === 차트 데이터 (INFRA-CHART-DATA-001) ===
+
+# DB chart_ohlcv 의 모든 ticker 일일 refresh (수동 백업, cron `0 18 * * 1-5` 자동 실행)
+refresh-charts:
+    uv run python -m collectors.charts refresh
+
+# 단일 ticker 차트 fetch + 적재 (디버깅용). 예: just fetch-chart 005930
+fetch-chart ticker *flags="":
+    uv run python -m collectors.charts fetch {{ticker}} {{flags}}
+
 # === 추론부 (Layer 2 분석가 호출) ===
 
 # 분석가와 멀티턴 대화 (REPL). /exit /clear /save 명령. 종료 시 JSONL 자동 저장.

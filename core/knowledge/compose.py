@@ -179,6 +179,7 @@ async def build_pipeline_prompt(
     rag_dept: str | None = None,
     canon_categories: list[str] | None = None,
     market_snapshot_md: str | None = None,
+    chart_data_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
     """Assemble system prompt for a pipeline stage.
@@ -188,11 +189,13 @@ async def build_pipeline_prompt(
       [1] Pipeline persona (prompts/analyst.md)    — cached
       [2] Memory context (recent days + rollups)   — cached
       [3] Market snapshot (5분 갱신)                — not cached
-      [4] RAG chunks (query 종속)                   — not cached
-      [5] Response rules                           — not cached
+      [4] Chart data (INFRA-CHART-DATA-001)         — not cached (60s 갱신)
+      [5] RAG chunks (query 종속)                   — not cached
+      [6] Response rules                           — not cached
 
     RAG: `query_for_rag` 와 `rag_dept` 둘 다 주어지면 retrieve. 둘 다 없으면 skip.
     Market snapshot: `market_snapshot_md` 주어지면 RAG 직전 삽입 (캐시 분리선 뒤).
+    Chart data: `chart_data_md` 주어지면 snapshot 직후 RAG 직전 삽입 (stock_analyst 한정).
     """
     blocks: list[dict] = []
 
@@ -239,7 +242,15 @@ async def build_pipeline_prompt(
             "text": f"## Market Snapshot (current)\n{market_snapshot_md}",
         })
 
-    # [4] RAG chunks (not cached — query-dependent)
+    # [4] Chart data (not cached — 60s 갱신, INFRA-CHART-DATA-001)
+    if chart_data_md:
+        blocks.append({
+            "type": "text",
+            "text": chart_data_md if chart_data_md.lstrip().startswith("##")
+                else f"## Chart Data\n{chart_data_md}",
+        })
+
+    # [5] RAG chunks (not cached — query-dependent)
     if query_for_rag and rag_dept:
         # canon_categories 중 rag_dept 와 일치하는 항목의 카테고리만 추출
         rag_categories: list[str] | None = None

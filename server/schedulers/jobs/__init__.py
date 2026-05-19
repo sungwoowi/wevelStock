@@ -8,6 +8,7 @@ from core.config import get_config
 from core.logging import get_logger
 
 from server.schedulers.jobs.backup import run_backup
+from server.schedulers.jobs.charts import run_chart_refresh
 from server.schedulers.jobs.daily_rollup import run_daily_rollup
 from server.schedulers.jobs.memory_cleanup import run_memory_cleanup
 from server.schedulers.jobs.monthly_rollup import run_monthly_rollup
@@ -58,9 +59,17 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
             id="infra::memory_cleanup",
         )
         registered += 1
+    # INFRA-CHART-DATA-001 — 평일 18:00 KST chart_ohlcv refresh (config 불필요, 고정 cron)
+    scheduler.add_job(
+        run_chart_refresh,
+        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=tz),
+        id="infra::chart_ohlcv_refresh",
+        replace_existing=True,
+    )
+    registered += 1
     log.info("infra_jobs_registered", count=registered)
     return registered
 
 
 __all__ = ["register_infra_jobs", "run_backup", "run_daily_rollup", "run_weekly_rollup",
-           "run_monthly_rollup", "run_memory_cleanup"]
+           "run_monthly_rollup", "run_memory_cleanup", "run_chart_refresh"]

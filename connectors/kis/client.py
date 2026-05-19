@@ -473,6 +473,122 @@ class KISClient:
             "pension_net_amount_m": _i(row.get("fund_ntby_tr_pbmn")),
         }
 
+    # ------------------------------------------------------------------
+    # Chart data APIs (INFRA-CHART-DATA-001)
+    # ------------------------------------------------------------------
+
+    async def get_daily_chart(
+        self,
+        ticker: str,
+        *,
+        period_days: int = 1825,
+        adjust: bool = True,
+    ) -> list[dict[str, Any]]:
+        """일봉 OHLCV historical. KIS `inquire-daily-itemchartprice` (FHKST03010100).
+
+        KIS 응답은 1 회 호출 당 최대 ~100 봉. 5 년 (1825 봉) 은 페이징으로 누적.
+        역순 (최신 → 과거) 으로 받아 정순 (과거 → 최신) 으로 정렬해 반환.
+
+        Returns:
+            list of {date, open, high, low, close, volume, change_rate, value}
+            (정순, 최대 period_days 길이)
+        """
+        from datetime import date as _date
+        from datetime import timedelta
+
+        today = _date.today()
+        start_dt = today - timedelta(days=int(period_days * 1.6))  # 주말·휴장 보정
+        adj_flag = "1" if adjust else "0"
+
+        bars: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        cur_end = today
+
+        # 페이징: KIS 가 한 번에 100 봉씩 반환. 가장 과거 봉의 날짜로 cur_end 갱신.
+        # 안전 가드: 최대 25 회 (= 2500 봉). period_days 1825 의 1.4 배 여유.
+        for _ in range(25):
+            data = await self._get(
+                "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                tr_id="FHKST03010100",
+                params={
+                    "FID_COND_MRKT_DIV_CODE": "J",
+                    "FID_INPUT_ISCD": ticker,
+                    "FID_INPUT_DATE_1": start_dt.strftime("%Y%m%d"),
+                    "FID_INPUT_DATE_2": cur_end.strftime("%Y%m%d"),
+                    "FID_PERIOD_DIV_CODE": "D",  # D=일, W=주, M=월
+                    "FID_ORG_ADJ_PRC": adj_flag,
+                },
+            )
+            if data.get("rt_cd") != "0":
+                break
+            rows = data.get("output2") or []
+            new_bars: list[dict[str, Any]] = []
+            for r in rows:
+                d_raw = r.get("stck_bsop_date") or ""
+                if not d_raw or d_raw in seen:
+                    continue
+                # YYYYMMDD → YYYY-MM-DD
+                d_iso = f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}"
+                try:
+                    open_v = float(r.get("stck_oprc") or 0)
+                    high_v = float(r.get("stck_hgpr") or 0)
+                    low_v = float(r.get("stck_lwpr") or 0)
+                    close_v = float(r.get("stck_clpr") or 0)
+                    vol_v = int(float(r.get("acml_vol") or 0))
+                    val_v = int(float(r.get("acml_tr_pbmn") or 0))
+                    chg_rate = float(r.get("prdy_ctrt") or 0)
+                except (ValueError, TypeError):
+                    continue
+                if close_v <= 0:
+                    continue
+                seen.add(d_raw)
+                new_bars.append({
+                    "date": d_iso,
+                    "open": open_v,
+                    "high": high_v,
+                    "low": low_v,
+                    "close": close_v,
+                    "volume": vol_v,
+                    "value": val_v,
+                    "change_rate": chg_rate,
+                })
+            if not new_bars:
+                break
+            bars.extend(new_bars)
+            if len(bars) >= period_days:
+                break
+            oldest = min(new_bars, key=lambda b: b["date"])["date"]
+            # 다음 페이지: oldest 직전 날짜까지
+            from datetime import datetime as _dt
+            cur_end = _dt.strptime(oldest, "%Y-%m-%d").date() - timedelta(days=1)
+            if cur_end <= start_dt:
+                break
+
+        # 정순 (과거 → 최신) 정렬 + period_days 길이 cap
+        bars.sort(key=lambda b: b["date"])
+        if len(bars) > period_days:
+            bars = bars[-period_days:]
+        return bars
+
+    async def get_current_price(self, ticker: str) -> dict[str, Any]:
+        """현재 시점 snapshot 7 필드. INFRA-CHART-DATA-001 명세.
+
+        `stock_price` 의 응답을 chart_data_md snapshot 형식으로 reformat.
+        """
+        raw = await self.stock_price(ticker)
+        if "error" in raw:
+            return {"error": raw["error"], "ticker": ticker}
+        return {
+            "ticker": ticker,
+            "current_price": raw.get("price", 0),
+            "open_price": raw.get("open", 0),
+            "high_price": raw.get("high", 0),
+            "low_price": raw.get("low", 0),
+            "change_rate": raw.get("change_pct", 0.0),
+            "volume_today": raw.get("volume", 0),
+            "value_today": raw.get("trade_amount", 0),
+        }
+
     async def market_investor_summary(self) -> dict[str, Any]:
         """Market-level investor flow summary.
 

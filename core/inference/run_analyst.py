@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from collectors.charts import build_chart_data, render_chart_data_md
 from collectors.snapshot import build_market_snapshot, render_snapshot_md
 from core.knowledge.compose import build_pipeline_prompt
 from core.llm.client import call_llm, call_llm_stream
@@ -48,6 +49,7 @@ class AnalystSpec:
     max_tokens: int
     temperature: float
     response_rules: str | None
+    reads_chart_data: bool = False  # INFRA-CHART-DATA-001 — stock_analyst 만 True
 
 
 @dataclass
@@ -86,6 +88,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         max_tokens=int(llm_cfg.get("max_tokens", 4000)),
         temperature=float(llm_cfg.get("temperature", 0.4)),
         response_rules=raw.get("response_rules"),
+        reads_chart_data=bool(raw.get("reads_chart_data", False)),
     )
 
 
@@ -126,6 +129,55 @@ def _extract_cache_tokens(raw: dict) -> tuple[int, int]:
     )
 
 
+async def _maybe_build_chart_data_md(
+    spec: AnalystSpec, target_ticker: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """INFRA-CHART-DATA-001 — reads_chart_data + target_ticker 충족 시 chart_data_md 산출.
+
+    Returns:
+        (chart_data_md, chart_meta). chart_data_md=None 이면 metadata 만 빈 dict 풀세트.
+    """
+    base_meta: dict[str, Any] = {
+        "chart_data_age_seconds": None,
+        "chart_fetch_seconds": None,
+        "chart_cache_hit": None,
+        "chart_failures": [],
+        "chart_ohlcv_count": None,
+        "chart_source": None,
+        "chart_ticker": None,
+    }
+    if not spec.reads_chart_data:
+        return None, base_meta
+    if not target_ticker:
+        # SPEC: target ticker 부재 시 silent skip (verdict=unknown 은 persona 가 판단)
+        base_meta["chart_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    started = time.monotonic()
+    try:
+        chart, cache_hit = await build_chart_data(target_ticker)
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "chart_data_inject_failed", ticker=target_ticker, error=str(e)
+        )
+        base_meta["chart_ticker"] = target_ticker
+        base_meta["chart_failures"] = [f"build_chart_data:{type(e).__name__}"]
+        base_meta["chart_fetch_seconds"] = round(time.monotonic() - started, 2)
+        return None, base_meta
+
+    fetch_seconds = round(time.monotonic() - started, 2)
+    chart_md = render_chart_data_md(chart)
+    return chart_md, {
+        "chart_data_age_seconds": max(0, int(time.time() - chart.fetched_at)),
+        "chart_fetch_seconds": fetch_seconds,
+        "chart_cache_hit": cache_hit,
+        "chart_failures": list(chart.failures),
+        "chart_ohlcv_count": chart.ohlcv_count,
+        "chart_source": chart.source,
+        "chart_ticker": chart.ticker,
+    }
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -135,6 +187,7 @@ async def run_analyst(
     temperature: float | None = None,
     include_memory: bool = True,
     provider: str | None = None,
+    target_ticker: str | None = None,
 ) -> AnalystResponse:
     """단일 분석가 호출. 멀티턴 messages 배열 그대로 수용.
 
@@ -164,6 +217,8 @@ async def run_analyst(
     snapshot_age_seconds = max(0, int(time.time() - snapshot.fetched_at))
     market_snapshot_md = render_snapshot_md(snapshot)
 
+    chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
         persona_path=spec.persona_path,
@@ -174,6 +229,7 @@ async def run_analyst(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        chart_data_md=chart_data_md,
         response_rules=spec.response_rules,
     )
 
@@ -231,6 +287,7 @@ async def run_analyst(
         "snapshot_failures": snapshot.failures,
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
+        **chart_meta,
     }
 
     log.info(
@@ -257,6 +314,7 @@ async def run_analyst_stream(
     temperature: float | None = None,
     include_memory: bool = True,
     provider: str | None = None,
+    target_ticker: str | None = None,
 ):
     """run_analyst 의 streaming 변종. text_delta 이벤트 흘림 + 종료 시 metadata.
 
@@ -283,6 +341,8 @@ async def run_analyst_stream(
     snapshot_age_seconds = max(0, int(time.time() - snapshot.fetched_at))
     market_snapshot_md = render_snapshot_md(snapshot)
 
+    chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
         persona_path=spec.persona_path,
@@ -293,6 +353,7 @@ async def run_analyst_stream(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        chart_data_md=chart_data_md,
         response_rules=spec.response_rules,
     )
 
@@ -375,6 +436,7 @@ async def run_analyst_stream(
         "snapshot_failures": snapshot.failures,
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
+        **chart_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 

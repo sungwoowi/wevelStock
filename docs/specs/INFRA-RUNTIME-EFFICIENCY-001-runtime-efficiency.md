@@ -6,7 +6,7 @@ type: feature
 status: implemented
 version: 2
 owner: platform
-generates:
+generates: []
 modifies:
   - scripts/ask_analyst.py
   - scripts/chat_analyst.py
@@ -16,8 +16,6 @@ modifies:
 depends_on:
   - INFRA-RAG-001 (5-Layer RAG + BGE-m3 wiring)
   - ANALYST-PERSONAS-001 (분석가 manifest reads/canon_categories)
-contracts:
-  - 없음 (런타임 효율 — 분석가 응답 스키마 불변)
 ---
 
 > **v2 변경 (2026-05-19 cycle 4 풀세트 후)**: Phase 1 (b) RAG 자료 0 시드 자동 OFF + Phase 2 (a) 서버 모드 reuse 만으로 cycle 3 production 차단 (`memory allocation failed`) **본질 해소 확인**. Phase 4 검증에서 (c) SQLite embedding_cache 의 latency 효과 = LLM 11s dominant 대비 ~50ms = **0.4% 미만** 으로 측정됨. (c) = 본 SPEC 에서 **백로그 강등**. 별도 SPEC (예: `INFRA-EMBEDDING-CACHE-001`) 으로 다중 dept 동시 호출·고빈도 재호출 워크플로우가 실제로 latency bottleneck 으로 나타날 때 진입.

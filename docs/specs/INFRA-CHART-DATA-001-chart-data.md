@@ -1,14 +1,15 @@
 ---
 spec_id: INFRA-CHART-DATA-001
-title: 차트 데이터 인프라 — KIS daily OHLCV + on-demand snapshot + pandas-ta 지표
+title: 차트 데이터 인프라 — KIS daily OHLCV + on-demand snapshot + Default 6 지표
 team: shared
 type: feature
-status: draft
-version: 1
+status: implemented
+version: 2
 owner: platform
 generates:
   - collectors/charts.py
   - core/db/migrations/v5_chart_ohlcv.sql
+  - server/schedulers/jobs/charts.py
   - tests/test_charts.py
   - tests/test_charts_indicators.py
   - tests/test_chart_ohlcv_db.py
@@ -22,9 +23,8 @@ modifies:
   - core/inference/run_analyst.py
   - agents/analysts/stock_analyst/persona.md
   - agents/analysts/stock_analyst/manifest.yaml
-  - server/main.py
+  - server/schedulers/jobs/__init__.py
   - justfile
-  - pyproject.toml
 depends_on:
   - INFRA-RUNTIME-EFFICIENCY-001 v2 (server mode reuse 패턴 미러)
   - ANALYST-PERSONAS-001 v2 (stock_analyst persona v3 정정 트레이스 3 위치)
@@ -33,6 +33,8 @@ contracts:
     version: "1.0"
     description: "compose.build_pipeline_prompt 의 [4] 차트 데이터 블록 markdown 표 형식"
 ---
+
+> **v2 (2026-05-20 cycle 6 구현 완료)**: Phase 1 (텍스트 지표) 풀세트 구현 완료. KIS `inquire-daily-itemchartprice` 페이징 fetch + on-demand snapshot 7 필드 + Default 6 지표 (pandas 기본 rolling/ewm — pandas-ta 미사용, numpy 호환성 위험 회피) + `chart_data_md` `[4]` 블록 자동 주입 + stock_analyst v3 마이크로 정정 3 위치 (환각 가드 2 해제, chart_data_md 출처 명시 강제) + 평일 18:00 KST APScheduler cron + `just refresh-charts` 수동 백업. pytest 341 → 376 passed (회귀 0). production 호출 시 stock_analyst manifest 의 `reads_chart_data: true` + `target_ticker` 명시 시 chart 블록 자동 주입.
 
 # INFRA-CHART-DATA-001 — 차트 데이터 인프라
 
