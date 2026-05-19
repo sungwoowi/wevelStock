@@ -12,8 +12,8 @@
 **현재 위치**: **`INFRA-RUNTIME-EFFICIENCY-001` SPEC + Phase 1 (b) + Phase 2 (a) 완료, Phase 3 (c) 와 production 호출 검증 남음** (cycle 4 partial, 2026-05-19). SPEC draft 작성 후 (b) 자료 0 시드 RAG 자동 OFF (`retrieve.py:_get_collection` 가 `count()==0` 시 ef wiring 전 None 반환) + (a) 서버 모드 reuse (`scripts/ask_analyst.py`/`chat_analyst.py` 가 httpx 로 `POST /api/analysts/{id}/chat` wrap). pytest **341 passed** (331 → +10, 회귀 0). Phase 3 = SQLite `embedding_cache` 테이블 (~0.4 세션) + Phase 4 검증 = `just server` 후 `principle_guardian` 실 호출 메모리 충돌 0 확인 (~0.3 세션). cycle 3 (자료 있는 3 분석가 v2) 까지는 `d5ee9e0` 에 push 완료.
 
 **마지막 작업일**: 2026-05-19 (cycle 4 partial)
-**마지막 세션 로그**: [2026-05-19_data-analysts-v2-parallel-dispatch-3.md](c_worked/2026-05-19_data-analysts-v2-parallel-dispatch-3.md) (cycle 3 까지). cycle 4 wrap-up 은 (c) + 검증 완료 후 작성 예정.
-**Git**: cycle 3 = `d5ee9e0` push 완료. cycle 4 partial = SPEC + (b) + (a) 1 commit + push 진행.
+**마지막 세션 로그**: [2026-05-19_runtime-efficiency-spec-phase-b-a-4.md](c_worked/2026-05-19_runtime-efficiency-spec-phase-b-a-4.md) (cycle 4 partial). cycle 4 풀세트 wrap-up 은 Phase 3·4 완료 후 별도 작성 예정.
+**Git**: cycle 3 = `d5ee9e0` push. cycle 4 partial 본체 = `7a49e65` push. 본 wrap-up commit 진행.
 
 ---
 
