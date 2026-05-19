@@ -27,7 +27,11 @@ def _index_dir(dept: str) -> Path:
 
 @lru_cache(maxsize=8)
 def _get_collection(dept: str) -> Any | None:
-    """Cache one Chroma collection per dept. Returns None if unusable."""
+    """Cache one Chroma collection per dept. Returns None if unusable.
+
+    INFRA-RUNTIME-EFFICIENCY-001 (b): 자료 0 시드 dept 의 빈 collection 도
+    `count() == 0` 시 ef wiring 전에 None 반환 → BGE-m3 ~2.5GB 로딩 회피.
+    """
     idx = _index_dir(dept)
     if not idx.exists() or not any(idx.iterdir()):
         return None
@@ -37,8 +41,17 @@ def _get_collection(dept: str) -> Any | None:
         log.debug("chroma_not_installed")
         return None
     try:
-        ef = get_embedding_function()
         client = chromadb.PersistentClient(path=str(idx))
+        # ef wiring 전에 chunk 수 확인 — BGE-m3 로딩 회피
+        try:
+            existing = client.get_collection(name=dept)
+        except Exception:
+            log.info("chroma_skip_no_collection", dept=dept)
+            return None
+        if existing.count() == 0:
+            log.info("chroma_skip_empty", dept=dept)
+            return None
+        ef = get_embedding_function()
         return client.get_or_create_collection(name=dept, embedding_function=ef)
     except Exception as e:  # noqa: BLE001
         log.warning("chroma_open_failed", dept=dept, error=str(e))

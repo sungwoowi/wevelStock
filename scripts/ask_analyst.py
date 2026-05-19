@@ -4,18 +4,22 @@ Usage:
     uv run python -m scripts.ask_analyst <analyst_id> "<질문>" [--provider gemini|claude_code]
     just ask <analyst_id> "<질문>" [--provider claude_code]
 
-chat_analyst 의 단일 턴 wrap. JSONL 1 turn 저장 + stdout 응답 + metadata.
+INFRA-RUNTIME-EFFICIENCY-001 (a) 후: CLI 는 in-process `run_analyst` 가 아니라
+`WEVELSTOCK_SERVER_URL` (default `http://127.0.0.1:8000`) 의
+`POST /api/analysts/{id}/chat` 으로 HTTP 호출. 서버 프로세스 안에서 BGE-m3
+~2.5GB 모델이 1 회 로딩되고 매 호출 재사용된다. 서버 부재 시 명확한 에러.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from core.inference import AnalystNotFoundError, run_analyst  # type: ignore[attr-defined]
+import httpx
 
 PROVIDER_CHOICES = ["gemini", "claude_code", "anthropic", "mock"]
 
@@ -27,6 +31,18 @@ if hasattr(sys.stderr, "reconfigure"):
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 QUERIES_DIR = REPO_ROOT / "data" / "analyst_queries"
+REQUEST_TIMEOUT_SECONDS = 180.0  # BGE-m3 cold 로딩 + LLM 호출 합 여유
+
+
+def _server_base_url() -> str:
+    return os.environ.get("WEVELSTOCK_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def _format_metadata(meta: dict) -> str:
@@ -65,23 +81,55 @@ async def _ask(analyst_id: str, query: str, *, provider: str | None = None) -> i
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{started_at.strftime('%Y%m%d-%H%M%S')}.jsonl"
 
+    base_url = _server_base_url()
+    url = f"{base_url}/api/analysts/{analyst_id}/chat"
+    payload: dict = {
+        "messages": [{"role": "user", "content": query}],
+        "include_memory": True,
+    }
+    if provider:
+        payload["provider"] = provider
+
     try:
-        resp = await run_analyst(
-            analyst_id,
-            [{"role": "user", "content": query}],
-            provider=provider,
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.post(url, json=payload)
+    except httpx.ConnectError:
+        print(
+            f"[error] WevelStock 서버에 연결할 수 없습니다 ({base_url}).\n"
+            f"        다른 터미널에서 'just server' 실행 후 다시 시도하세요.",
+            file=sys.stderr,
         )
-    except AnalystNotFoundError as e:
-        print(f"[error] {e}", file=sys.stderr)
+        return 3
+    except httpx.ReadTimeout:
+        print(
+            f"[error] 응답 대기 시간 초과 ({REQUEST_TIMEOUT_SECONDS:.0f}s). "
+            f"서버가 BGE-m3 로딩 중일 수 있습니다.",
+            file=sys.stderr,
+        )
+        return 4
+
+    if resp.status_code == 404:
+        detail = resp.json().get("detail", resp.text)
+        print(f"[error] {detail}", file=sys.stderr)
         return 2
-    except Exception as e:  # noqa: BLE001
-        # 명시 provider 가 실패한 경우 — fallback 차단됐으므로 여기까지 떨어짐
-        print(f"[error] LLM 호출 실패 (provider={provider or 'auto'}): {e}", file=sys.stderr)
+    if resp.status_code != 200:
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:  # noqa: BLE001
+            detail = resp.text
+        print(
+            f"[error] LLM 호출 실패 (status {resp.status_code}, provider={provider or 'auto'}): {detail}",
+            file=sys.stderr,
+        )
         return 1
 
-    print(resp.text or "(empty response)")
+    body = resp.json()
+    text = body.get("text", "") or "(empty response)"
+    metadata = body.get("metadata", {})
+
+    print(text)
     print()
-    print(_format_metadata(resp.metadata))
+    print(_format_metadata(metadata))
 
     with path.open("w", encoding="utf-8") as f:
         f.write(
@@ -90,21 +138,21 @@ async def _ask(analyst_id: str, query: str, *, provider: str | None = None) -> i
                     "turn": 1,
                     "timestamp": datetime.now().isoformat(timespec="seconds"),
                     "user": query,
-                    "assistant": resp.text,
-                    "metadata": resp.metadata,
+                    "assistant": text,
+                    "metadata": metadata,
                 },
                 ensure_ascii=False,
             )
             + "\n"
         )
-    print(f"\nsaved: {path.relative_to(REPO_ROOT)}")
+    print(f"\nsaved: {_display_path(path)}")
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="ask_analyst",
-        description="분석가에 일회성 단발 질문",
+        description="분석가에 일회성 단발 질문 (server 경유)",
     )
     parser.add_argument("analyst_id", help="agents/analysts/<id>/ 디렉토리명")
     parser.add_argument("query", nargs="+", help="질문 본문")

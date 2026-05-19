@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **Layer 2 분화 완료 (8/9 분석가, `news_curator` 만 SLOT S2 자료원 미결정)** — 본 사이클 (같은 날 3 째) 자료 있는 3 분석가 v2 (`principle_guardian` 자료 있음 · `trader` 사실상 자료 0 시드 + α 미발행 fallback (a)/(b) · `stock_analyst` 자료 0 시드 + INFRA-CHART-DATA-001 미비 환각 가드 2 중) = 3 subagent 병렬 dispatch ~10 분 / 6 파일 1,439 줄. **명제 ID 21 개 신설** (C·D·R·OS), **6 트리거 영문 ID 정식** (`volume_surge` 외 5), **8 분석가 boundary 매트릭스 자동 검증** 신설. **점수 발행 풀세트 완성** = S/T/α/buy_score/F-Score → Track A·B cited_scores 90% 풍부성 확보. **2 깨달음** — operational_safeguards 권위 모순 (SPEC trader vs 본문 principle_guardian) / trader canon 사실상 자료 0. **자원 부담 본질 발견** = BGE-m3 ~2.5GB CLI 매 호출 재로딩 → `INFRA-RUNTIME-EFFICIENCY-001` 백로그 신설 (Top 1 으로). pytest **331 passed** (278 → +53, 회귀 0) / validate 0 errors. production 첫 호출 = **보류** (자원 부담, INFRA 후 양 트랙 통합 검증 동시 진입).
+**현재 위치**: **`INFRA-RUNTIME-EFFICIENCY-001` SPEC + Phase 1 (b) + Phase 2 (a) 완료, Phase 3 (c) 와 production 호출 검증 남음** (cycle 4 partial, 2026-05-19). SPEC draft 작성 후 (b) 자료 0 시드 RAG 자동 OFF (`retrieve.py:_get_collection` 가 `count()==0` 시 ef wiring 전 None 반환) + (a) 서버 모드 reuse (`scripts/ask_analyst.py`/`chat_analyst.py` 가 httpx 로 `POST /api/analysts/{id}/chat` wrap). pytest **341 passed** (331 → +10, 회귀 0). Phase 3 = SQLite `embedding_cache` 테이블 (~0.4 세션) + Phase 4 검증 = `just server` 후 `principle_guardian` 실 호출 메모리 충돌 0 확인 (~0.3 세션). cycle 3 (자료 있는 3 분석가 v2) 까지는 `d5ee9e0` 에 push 완료.
 
-**마지막 작업일**: 2026-05-19
-**마지막 세션 로그**: [2026-05-19_data-analysts-v2-parallel-dispatch-3.md](c_worked/2026-05-19_data-analysts-v2-parallel-dispatch-3.md)
-**Git**: 이전 사이클 (같은 날) 까지 `fcf7961` push. 본 세션 wrap-up commit + push 진행.
+**마지막 작업일**: 2026-05-19 (cycle 4 partial)
+**마지막 세션 로그**: [2026-05-19_data-analysts-v2-parallel-dispatch-3.md](c_worked/2026-05-19_data-analysts-v2-parallel-dispatch-3.md) (cycle 3 까지). cycle 4 wrap-up 은 (c) + 검증 완료 후 작성 예정.
+**Git**: cycle 3 = `d5ee9e0` push 완료. cycle 4 partial = SPEC + (b) + (a) 1 commit + push 진행.
 
 ---
 
@@ -21,13 +21,11 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. INFRA-RUNTIME-EFFICIENCY-001 SPEC + 구현 — **운용 본질 제약 해소** (~1.5 세션) ★★★★★
-- **왜**: 본 사이클 production 호출 보류의 원인. BGE-m3 ~2.5GB CLI 매 호출 재로딩 = 사용자 PC 메모리 거의 가득 참 (`memory allocation of 17301520 bytes failed`). **양 트랙 통합 production 검증 (Top 2) 진입 전 우선 진입 필수** — Top 2 도 같은 자원 부담 누적.
-- **범위 (3 묶음)**:
-  1. **서버 모드 reuse** — `scripts/ask_analyst.py` CLI → FastAPI client wrap. BGE-m3 1 회 로딩 + 매 호출 재사용 → 자원 ~95% 절감.
-  2. **RAG 자료 0 시드 자동 OFF** — `core/knowledge/compose.py` 에 `if not spec.canon_categories or dept_canon_md_count == 0: skip RAG` 분기. 자료 0 시드 분석가 6/9 호출 시 BGE-m3 로딩 자체 skip → 메모리 ~2.5GB 절감.
-  3. **SQLite 임베딩 캐시** (`embedding_cache` 테이블) — query hash → cached vector reuse. 동일 query 재호출 시 BGE-m3 로딩 없이 즉시 응답.
-- **예상**: ~1.5 세션. 자세한 진단 = [project_runtime_efficiency_blocker.md](../../../AppData/Roaming/claude/projects/C--Users-HOME-claude-wevelStock/memory/project_runtime_efficiency_blocker.md)
+### 1. INFRA-RUNTIME-EFFICIENCY-001 — Phase 3 (c) + Phase 4 검증 잔여 (~0.7 세션)
+- **본 cycle 4 partial 완료**: SPEC ([docs/specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md](specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md)) + Phase 1 (b) RAG 자료 0 시드 자동 OFF + Phase 2 (a) 서버 모드 reuse.
+- **잔여 Phase 3 (c)** — `core/knowledge/embed_cache.py` 신설 + `data/db.sqlite` 의 `embedding_cache(model, query_hash, vector_bytes, dim, created_at)` 테이블 + `retrieve()` 가 cache hit 시 `collection.query(query_embeddings=[v])` 직접 전달 (BGE-m3 forward skip). ~0.4 세션.
+- **잔여 Phase 4 검증** — `just server` 후 `just ask principle_guardian "정량 룰 위반 시나리오 1"` 실 호출 = 메모리 충돌 0 확인 + 2 회차 latency 가시 감소 + 자료 0 시드 6 분석가 호출 BGE-m3 미로딩 로그 확인. ~0.3 세션.
+- **다음 세션 진입 시점**: SPEC §단계별 진입 표 의 Phase 3·4 그대로 따라가면 됨.
 
 ### 2. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션) — INFRA 후
 - **왜**: 본 사이클 후 = 8 분석가 발행 가능 (90% 풍부성, news_curator 만 SLOT S2). `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.

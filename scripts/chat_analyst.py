@@ -12,17 +12,22 @@ Usage:
 provider 는 conversation 단위 락. 다른 backend 비교하려면 새 chat 세션 시작.
 JSONL 보관 위치: data/analyst_queries/<analyst_id>/<YYYYMMDD-HHMMSS>.jsonl
 한 파일 = 한 conversation, 한 줄 = 한 turn (user + assistant + metadata).
+
+INFRA-RUNTIME-EFFICIENCY-001 (a) 후: in-process `run_analyst` 가 아니라
+`WEVELSTOCK_SERVER_URL` (default `http://127.0.0.1:8000`) 의
+`POST /api/analysts/{id}/chat` 으로 HTTP 호출. 서버 안 BGE-m3 1 회 로딩 재사용.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from core.inference import AnalystNotFoundError, run_analyst  # type: ignore[attr-defined]
+import httpx
 
 PROVIDER_CHOICES = ["gemini", "claude_code", "anthropic", "mock"]
 
@@ -44,6 +49,18 @@ def _strip_surrogates(text: str) -> str:
 REPO_ROOT = Path(__file__).resolve().parents[1]
 QUERIES_DIR = REPO_ROOT / "data" / "analyst_queries"
 CONTEXT_LIMIT_TOKENS = 200_000  # Sonnet 4.6 기본. Opus 1M 모델 사용 시 사용자가 의식하면 됨.
+REQUEST_TIMEOUT_SECONDS = 180.0
+
+
+def _server_base_url() -> str:
+    return os.environ.get("WEVELSTOCK_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def _conv_path(analyst_id: str, started_at: datetime) -> Path:
@@ -101,12 +118,34 @@ def _read_user_input() -> str | None:
     return _strip_surrogates(line)
 
 
+async def _post_chat(
+    client: httpx.AsyncClient,
+    analyst_id: str,
+    messages: list[dict],
+    *,
+    provider: str | None,
+) -> tuple[int, dict]:
+    """server 호출. 반환 = (status_code, body_dict)."""
+    base_url = _server_base_url()
+    url = f"{base_url}/api/analysts/{analyst_id}/chat"
+    payload: dict = {"messages": messages, "include_memory": True}
+    if provider:
+        payload["provider"] = provider
+    resp = await client.post(url, json=payload)
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001
+        body = {"raw": resp.text}
+    return resp.status_code, body
+
+
 async def _chat_loop(analyst_id: str, *, provider: str | None = None) -> int:
     started_at = datetime.now()
     path = _conv_path(analyst_id, started_at)
+    base_url = _server_base_url()
 
-    print(f"=== chat with {analyst_id} (provider={provider or 'auto'}) ===")
-    print(f"saving to: {path.relative_to(REPO_ROOT)}")
+    print(f"=== chat with {analyst_id} (provider={provider or 'auto'}, server={base_url}) ===")
+    print(f"saving to: {_display_path(path)}")
     print("commands: /exit, /clear, /save\n")
 
     messages: list[dict] = []
@@ -114,68 +153,90 @@ async def _chat_loop(analyst_id: str, *, provider: str | None = None) -> int:
     cumulative_in = 0
     cumulative_out = 0
 
-    while True:
-        line = _read_user_input()
-        if line is None:
-            print("\n(EOF — 종료)")
-            break
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        while True:
+            line = _read_user_input()
+            if line is None:
+                print("\n(EOF — 종료)")
+                break
 
-        stripped = line.strip()
-        if not stripped:
-            continue
+            stripped = line.strip()
+            if not stripped:
+                continue
 
-        if stripped == "/exit":
-            print("(/exit — 종료)")
-            break
-        if stripped == "/clear":
-            messages = []
-            print(f"(messages 리셋. 누적 토큰은 유지: {cumulative_in:,}/{cumulative_out:,})")
-            continue
-        if stripped == "/save":
-            print(f"(현재까지 {turn} turn 저장됨: {path.relative_to(REPO_ROOT)})")
-            continue
+            if stripped == "/exit":
+                print("(/exit — 종료)")
+                break
+            if stripped == "/clear":
+                messages = []
+                print(f"(messages 리셋. 누적 토큰은 유지: {cumulative_in:,}/{cumulative_out:,})")
+                continue
+            if stripped == "/save":
+                print(f"(현재까지 {turn} turn 저장됨: {_display_path(path)})")
+                continue
 
-        messages.append({"role": "user", "content": stripped})
-        try:
-            resp = await run_analyst(analyst_id, messages, provider=provider)
-        except AnalystNotFoundError as e:
-            print(f"[error] {e}")
-            messages.pop()  # 실패한 user 메시지 롤백
-            return 2
-        except Exception as e:  # noqa: BLE001
-            print(f"[error] LLM 호출 실패 (provider={provider or 'auto'}): {e}")
-            messages.pop()
-            continue
+            messages.append({"role": "user", "content": stripped})
 
-        assistant_text = resp.text or "(empty response)"
-        messages.append({"role": "assistant", "content": assistant_text})
-        turn += 1
-        cumulative_in += int(resp.metadata.get("tokens_in", 0))
-        cumulative_out += int(resp.metadata.get("tokens_out", 0))
+            try:
+                status, body = await _post_chat(
+                    client, analyst_id, messages, provider=provider
+                )
+            except httpx.ConnectError:
+                print(
+                    f"[error] WevelStock 서버에 연결할 수 없습니다 ({base_url}).\n"
+                    f"        다른 터미널에서 'just server' 실행 후 다시 시도하세요."
+                )
+                messages.pop()
+                return 3
+            except httpx.ReadTimeout:
+                print(
+                    f"[error] 응답 대기 시간 초과 ({REQUEST_TIMEOUT_SECONDS:.0f}s). "
+                    f"서버가 BGE-m3 로딩 중일 수 있습니다."
+                )
+                messages.pop()
+                continue
 
-        print()
-        print(assistant_text)
-        print()
-        print(_format_metadata(resp.metadata, cumulative_in, cumulative_out))
-        print()
+            if status == 404:
+                detail = body.get("detail", str(body))
+                print(f"[error] {detail}")
+                messages.pop()
+                return 2
+            if status != 200:
+                detail = body.get("detail", str(body))
+                print(f"[error] LLM 호출 실패 (status {status}, provider={provider or 'auto'}): {detail}")
+                messages.pop()
+                continue
 
-        _save_turn(
-            path,
-            {
-                "turn": turn,
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "user": stripped,
-                "assistant": assistant_text,
-                "metadata": resp.metadata,
-            },
-        )
+            assistant_text = body.get("text", "") or "(empty response)"
+            metadata = body.get("metadata", {})
+            messages.append({"role": "assistant", "content": assistant_text})
+            turn += 1
+            cumulative_in += int(metadata.get("tokens_in", 0))
+            cumulative_out += int(metadata.get("tokens_out", 0))
+
+            print()
+            print(assistant_text)
+            print()
+            print(_format_metadata(metadata, cumulative_in, cumulative_out))
+            print()
+
+            _save_turn(
+                path,
+                {
+                    "turn": turn,
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "user": stripped,
+                    "assistant": assistant_text,
+                    "metadata": metadata,
+                },
+            )
 
     if turn == 0 and path.exists() and path.stat().st_size == 0:
         path.unlink()
         print("(빈 대화 — 파일 삭제)")
     elif turn > 0:
         print(
-            f"\nsaved: {path.relative_to(REPO_ROOT)} ({turn} turn{'s' if turn != 1 else ''}, "
+            f"\nsaved: {_display_path(path)} ({turn} turn{'s' if turn != 1 else ''}, "
             f"cumulative {cumulative_in + cumulative_out:,} tokens)"
         )
     return 0
@@ -184,7 +245,7 @@ async def _chat_loop(analyst_id: str, *, provider: str | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="chat_analyst",
-        description="분석가와 멀티턴 REPL 대화. provider 는 conversation 단위 락.",
+        description="분석가와 멀티턴 REPL 대화 (server 경유). provider 는 conversation 단위 락.",
     )
     parser.add_argument("analyst_id", help="agents/analysts/<id>/ 디렉토리명")
     parser.add_argument(
