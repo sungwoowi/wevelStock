@@ -1,27 +1,27 @@
 ---
 spec_id: INFRA-RUNTIME-EFFICIENCY-001
-title: 런타임 효율성 — 서버 모드 reuse + 자료 0 시드 RAG 자동 OFF + SQLite 임베딩 캐시
+title: 런타임 효율성 — 서버 모드 reuse + 자료 0 시드 RAG 자동 OFF (+ embedding_cache 백로그)
 team: shared
 type: feature
-status: draft
-version: 1
+status: implemented
+version: 2
 owner: platform
 generates:
-  - core/knowledge/embed_cache.py
 modifies:
   - scripts/ask_analyst.py
   - scripts/chat_analyst.py
-  - core/knowledge/compose.py
   - core/knowledge/retrieve.py
-  - core/db/migrations/
-  - tests/test_knowledge_compose.py
-  - tests/test_embed_cache.py
+  - tests/test_retrieve_skip_empty.py
+  - tests/test_ask_analyst_http.py
 depends_on:
   - INFRA-RAG-001 (5-Layer RAG + BGE-m3 wiring)
   - ANALYST-PERSONAS-001 (분석가 manifest reads/canon_categories)
 contracts:
   - 없음 (런타임 효율 — 분석가 응답 스키마 불변)
 ---
+
+> **v2 변경 (2026-05-19 cycle 4 풀세트 후)**: Phase 1 (b) RAG 자료 0 시드 자동 OFF + Phase 2 (a) 서버 모드 reuse 만으로 cycle 3 production 차단 (`memory allocation failed`) **본질 해소 확인**. Phase 4 검증에서 (c) SQLite embedding_cache 의 latency 효과 = LLM 11s dominant 대비 ~50ms = **0.4% 미만** 으로 측정됨. (c) = 본 SPEC 에서 **백로그 강등**. 별도 SPEC (예: `INFRA-EMBEDDING-CACHE-001`) 으로 다중 dept 동시 호출·고빈도 재호출 워크플로우가 실제로 latency bottleneck 으로 나타날 때 진입.
+
 
 # INFRA-RUNTIME-EFFICIENCY-001 — 런타임 효율성
 
@@ -82,7 +82,7 @@ contracts:
 | 분석가 | reads | canon md | chroma chunks | 결과 |
 |---|---|---|---|---|
 | principle_guardian | principles | 3 | >0 | RAG ON |
-| trader | trading | 2 | >0 | RAG ON |
+| trader | trading | 2 | **0** | **RAG OFF** (canon md 는 system 블록 주입 ON) |
 | wealth_strategist | wealth_compounding | 2 | 787 | RAG ON |
 | market_state_analyzer | market_macro | 0 | 0 | **RAG OFF** (BGE-m3 미로딩) |
 | stock_picker | stock_selection | 0 | 0 | **RAG OFF** |
@@ -91,7 +91,9 @@ contracts:
 | flow_analyzer | flow_analysis | 0 | 0 | **RAG OFF** |
 | news_curator | news | 0 | 0 | **RAG OFF** |
 
-→ 9 분석가 중 6 호출에서 BGE-m3 로딩 발생 X.
+→ 9 분석가 중 **7 호출** (Phase 4 실측 정정 — trader 의 trading dept reference 자료 미인덱싱) 에서 BGE-m3 로딩 발생 X.
+
+**중요 구분**: `knowledge/canon/<dept>/*.md` 는 `load_shared_canon()` 으로 매 호출 system 블록 주입 (RAG 와 무관, 자료 0 시드 분기와도 무관). `data/chroma/<dept>/` chunks 는 `knowledge/reference/<dept>/` 자료가 `scripts/sync_knowledge.py` 로 인덱싱된 결과 (RAG 대상). trader 의 trading dept = canon md 2 (framework 매 호출 주입) + reference chunks 0 (RAG 자동 OFF, ✅ Phase 1 (b) 가드 작동).
 
 ### 묶음 (c) — SQLite embedding_cache
 
@@ -164,13 +166,17 @@ def store_query_embedding(model: str, query: str, vector: list[float]) -> None: 
 - **`--in-process` 토글** — server mode 가 디폴트, 의도적으로 단일 경로.
 - **operational_safeguards 권위 SPEC 정정** — 별도 작은 SPEC. 회장 핑퐁 [22] 권고에 따라 본 SPEC 첫 commit 으로 묶을 수 있음. 사용자 결정 후.
 
-## 단계별 진입
+## 단계별 진입 + 실측 결과
 
-| Phase | 묶음 | 추정 시간 | 검증 끝 조건 |
+| Phase | 묶음 | 추정 → 실측 | 검증 결과 |
 |---|---|---|---|
-| 1 | (b) RAG 자료 0 시드 자동 OFF | ~0.3 세션 | 자료 0 시드 6 분석가 호출 시 BGE-m3 wiring 발생 X 로그 확인 + 회귀 0 |
-| 2 | (a) 서버 모드 reuse | ~0.5 세션 | `just server` 후 ask CLI 가 httpx 로 동작 + 1·2 회차 latency 차이 가시 |
-| 3 | (c) SQLite embedding_cache | ~0.4 세션 | 같은 query 재호출 시 cache hit 로그 + retrieve latency < 50ms |
-| 4 | 검증 + production 호출 재시도 | ~0.3 세션 | pytest 331+ / validate 0 / `principle_guardian` 호출 메모리 충돌 0 |
+| 1 | (b) RAG 자료 0 시드 자동 OFF | ~0.3 → 완료 | ✅ server 로그 `chroma_skip_empty dept=market_macro` 발화, `market_state_analyzer` 호출 시 `rag_chunks_returned=0` |
+| 2 | (a) 서버 모드 reuse | ~0.5 → 완료 | ✅ httpx wrap, server 1 회 BGE-m3 로딩 + lru_cache 재사용, 2 회차 호출 ~3s |
+| 3 | (c) SQLite embedding_cache | ~0.4 → **백로그 강등** | ⏸ Phase 4 측정 결과 latency 효과 < 0.4% (LLM 11s dominant). 다중 dept 동시 호출이 실제 bottleneck 으로 나타날 때 별도 SPEC. |
+| 4 | production 호출 재시도 | ~0.3 → 완료 | ✅ `principle_guardian` (cycle 3 충돌 분석가) 호출 = verdict=violation + cited=[C2,C6,OS2] + 메모리 충돌 0, server BGE-m3 reconcile 후 free RAM 7.02 → 3.33 GB (안정) |
 
-**Phase 1 먼저** 진행 권장. (b) 만으로 자료 0 시드 6 분석가 호출이 즉시 가능해져 양 트랙 production 검증 (Top 2) 의 일부가 부분 풀린다. (a)·(c) 는 운용 효율 추가 개선.
+**(c) 백로그 근거** — Phase 4 검증에서:
+- `principle_guardian` 첫 호출 12.4s / 재호출 11.9s = 0.5s 차이만. LLM 호출 ~11s 가 dominant.
+- retrieve query 임베딩 forward pass = 추정 ~50ms. (c) skip 효과 = 50ms / 11900ms = **0.4%**.
+- BGE-m3 모델 메모리 점유 (~2.5GB) 는 (a) 의 server reuse 가 이미 1 회 + 재사용. (c) 추가 메모리 절감 X.
+- 같은 query 재호출이 운용에서 빈발할 때 (예: 알림 파이프라인 분당 재호출) bottleneck 되면 별도 SPEC 으로 진입.

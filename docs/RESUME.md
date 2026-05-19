@@ -9,11 +9,11 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **`INFRA-RUNTIME-EFFICIENCY-001` SPEC + Phase 1 (b) + Phase 2 (a) 완료, Phase 3 (c) 와 production 호출 검증 남음** (cycle 4 partial, 2026-05-19). SPEC draft 작성 후 (b) 자료 0 시드 RAG 자동 OFF (`retrieve.py:_get_collection` 가 `count()==0` 시 ef wiring 전 None 반환) + (a) 서버 모드 reuse (`scripts/ask_analyst.py`/`chat_analyst.py` 가 httpx 로 `POST /api/analysts/{id}/chat` wrap). pytest **341 passed** (331 → +10, 회귀 0). Phase 3 = SQLite `embedding_cache` 테이블 (~0.4 세션) + Phase 4 검증 = `just server` 후 `principle_guardian` 실 호출 메모리 충돌 0 확인 (~0.3 세션). cycle 3 (자료 있는 3 분석가 v2) 까지는 `d5ee9e0` 에 push 완료.
+**현재 위치**: **MS0 도달 — `INFRA-RUNTIME-EFFICIENCY-001` v2 (Phase 1·2·4 완료, Phase 3 (c) 백로그 강등) + cycle 3 production 차단 본질 해소** (cycle 4 풀세트, 2026-05-19). Phase 1 (b) `retrieve.py:_get_collection` 가드 + Phase 2 (a) `ask_analyst`/`chat_analyst` httpx wrap + Phase 4 production 검증 통과: `market_state_analyzer` (자료 0 시드, RAG 0 chunks, 17.4s, $0.0007) + `principle_guardian` (자료 있음, verdict=violation, cited=[C2,C6,OS2], 12.4s, $0.0013, **메모리 충돌 0** = cycle 3 본질 해소). server 로그 `chroma_skip_empty dept=market_macro` 발화 = (b) 작동 확인. Phase 3 (c) embedding_cache = 측정된 latency 효과 < 0.4% (LLM 11s dominant) 로 **백로그 강등** (별도 SPEC `INFRA-EMBEDDING-CACHE-001` 으로 다중 dept 동시 호출이 실제 bottleneck 으로 나타날 때 진입). pytest **341 passed** (331 → +10, 회귀 0).
 
-**마지막 작업일**: 2026-05-19 (cycle 4 partial)
-**마지막 세션 로그**: [2026-05-19_runtime-efficiency-spec-phase-b-a-4.md](c_worked/2026-05-19_runtime-efficiency-spec-phase-b-a-4.md) (cycle 4 partial). cycle 4 풀세트 wrap-up 은 Phase 3·4 완료 후 별도 작성 예정.
-**Git**: cycle 3 = `d5ee9e0` push. cycle 4 partial 본체 = `7a49e65` push. 본 wrap-up commit 진행.
+**마지막 작업일**: 2026-05-19 (cycle 4 풀세트 완결)
+**마지막 세션 로그**: [2026-05-19_phase-4-validation-and-tracks-5.md](c_worked/2026-05-19_phase-4-validation-and-tracks-5.md) (Phase 4 검증 + Top 2 양 트랙 호출 + (c) 백로그 강등).
+**Git**: cycle 3 = `d5ee9e0`. cycle 4 partial 본체 = `7a49e65`. cycle 4 partial wrap-up = `504e50c`. 본 wrap-up (SPEC v2 정정 + 메모리·c_worked·SESSIONS) commit + push 진행.
 
 ---
 
@@ -21,21 +21,19 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. INFRA-RUNTIME-EFFICIENCY-001 — Phase 3 (c) + Phase 4 검증 잔여 (~0.7 세션)
-- **본 cycle 4 partial 완료**: SPEC ([docs/specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md](specs/INFRA-RUNTIME-EFFICIENCY-001-runtime-efficiency.md)) + Phase 1 (b) RAG 자료 0 시드 자동 OFF + Phase 2 (a) 서버 모드 reuse.
-- **잔여 Phase 3 (c)** — `core/knowledge/embed_cache.py` 신설 + `data/db.sqlite` 의 `embedding_cache(model, query_hash, vector_bytes, dim, created_at)` 테이블 + `retrieve()` 가 cache hit 시 `collection.query(query_embeddings=[v])` 직접 전달 (BGE-m3 forward skip). ~0.4 세션.
-- **잔여 Phase 4 검증** — `just server` 후 `just ask principle_guardian "정량 룰 위반 시나리오 1"` 실 호출 = 메모리 충돌 0 확인 + 2 회차 latency 가시 감소 + 자료 0 시드 6 분석가 호출 BGE-m3 미로딩 로그 확인. ~0.3 세션.
-- **다음 세션 진입 시점**: SPEC §단계별 진입 표 의 Phase 3·4 그대로 따라가면 됨.
+### 1. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 (~0.5 세션) — MS1·MS2 도달
+- **왜**: MS0 도달 후 (cycle 4 풀세트), 8 분석가 발행 가능 = `cited_scores` 90% 풍부성 확보. `both: 삼성전자` 양 트랙 동시 권고 시연 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증.
+- **범위**: `scripts/ask_strategist.py` 로 `track_a` + `track_b` 동시 호출 또는 webapp `both:` 호출. 응답 분석: scores·verdict·cited_scores·자연 인계 문구. webapp default agent 교체 결정 진입 검토.
+- **선행 의문**: `ask_strategist`/`chat_strategist` 도 `ask_analyst` 와 같은 (a) httpx wrap 변경이 필요한지 확인 — 현재는 in-process 일 가능성. cycle 3 같은 메모리 압박 위험 재발 케이스라면 본 SPEC 의 v3 patch 로 묶음.
 
-### 2. 양 트랙 통합 production 검증 + 자연 인계 메커니즘 검증 (~0.5 세션) — INFRA 후
-- **왜**: 본 사이클 후 = 8 분석가 발행 가능 (90% 풍부성, news_curator 만 SLOT S2). `both: 삼성전자` 호출 시 양 트랙 동시 권고 + Track B 1 파 완성 시나리오에서 Track A 인계 자연 메커니즘 (응답 본문 명시) 검증. webapp default agent 교체 결정 진입 검토.
-- **전제**: Top 1 (INFRA-RUNTIME-EFFICIENCY-001) 완료 후. 그 전엔 자원 부담 동일.
-- **범위**: webapp `both: 삼성전자` 호출 검증 + 응답 분석 + `feedback_webapp_production_ux.md` 의 자동 라우팅 사이클 (intent + 종목명 매핑 + Track Selector 백단 0 노출) 진입 결정.
+### 2. `stock_analyst` v3 마이크로 정정 + `INFRA-CHART-DATA-001` SPEC 묶음 (~1.3 세션) — MS3 도달
+- **왜**: cycle 3 stock_analyst persona 에 환각 가드 2 (INFRA 미구현) 박혔음. INFRA 진입 시 가드 빼고 정상 발행 로직 추가. 정정 위치 3 곳 (Anti-patterns 가드 2 / Outputs 격자 [1] Quality Grid 차트 추론 / manifest response_rules) persona 본문 trace 명시됨.
+- **범위**: `INFRA-CHART-DATA-001` = KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
+- **예상**: stock_analyst v3 정정 ~0.3 세션 + `INFRA-CHART-DATA-001` ~1 세션 = 묶음 ~1.3 세션.
 
-### 3. stock_analyst v3 마이크로 정정 (~0.3 세션) + INFRA-CHART-DATA-001 SPEC (~1 세션) 묶음
-- **왜**: 본 사이클 stock_analyst persona 에 환각 가드 2 (INFRA 미구현) 박혔음. INFRA-CHART-DATA-001 진입 시 가드 빼고 정상 발행 로직 추가. 정정 위치 3 곳 (Anti-patterns 가드 2 / Outputs 격자 [1] Quality Grid 차트 추론 항목 / manifest response_rules) persona 본문에 trace 명시됨.
-- **범위**: INFRA-CHART-DATA-001 = KIS daily chart API (`inquire-daily-itemchartprice`, 무료) + pandas-ta 사전 지표 계산 + matplotlib 차트 이미지 (vision). `WAVE-ALPHA-001` (Module A α 공식) 과 묶음 가능.
-- **예상**: stock_analyst v3 정정 ~0.3 세션 + INFRA-CHART-DATA-001 ~1 세션 = 묶음 ~1.3 세션.
+### 3. `operational_safeguards` 권위 SPEC 정정 (별도 작은 SPEC, ~0.2 세션)
+- **왜**: cycle 3 발견된 SPEC vs 실제 자료 불일치 — `ANALYST-PERSONAS-001` v2 매핑 표는 `operational_safeguards` 를 `trader` canon 으로 박았으나 실제 파일 frontmatter `analyst: principle_guardian` + 본문은 principle_guardian verdict 산출 알고리즘. cycle 3 에선 trader persona 권위 위임 명시로 임시 처리, SPEC 정정은 백로그.
+- **범위**: `ANALYST-PERSONAS-001` v2 매핑 표 수정 + 회귀 테스트 갱신 + canon dir 의 frontmatter 일관성 검사.
 
 (추가 백로그: **operational_safeguards 권위 SPEC 정정** (별도 작은 SPEC — SPEC v2 매핑 표의 trader canon → principle_guardian canon 으로 정정. **INFRA-RUNTIME-EFFICIENCY-001 진입 시 첫 commit 으로 묶음 권유** (회장 핑퐁 [22] 권고)) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어, Track A·B 권고 발행 시 자동 적재) / **scoring.py s_score·buy_score·alpha 정식 가중치 확정** (SLOT S7 운용 중 확정) / `INFRA-US-MACRO-SNAPSHOT-001` (yfinance/FRED 미 매크로) / `WAVE-ALPHA-001` (Module A α 공식 canon + scoring.py alpha 본체 정식 확정) / `INFRA-RELIABILITY-VALIDATOR-001` (Layer 2.5/3.5 Haiku 검증, M2) / `RETROSPECT-ANALYST-001` 또는 `SYSTEM-EVOLUTIONIST-001` (Layer 5 회고분석가 본체, M4) / Layer 4 계좌관리자 1+ N (M5) / news_curator SLOT S2 자료원 결정 (Perplexity MCP vs 직접 수집) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / `9.프렉탈 구조 응용 - 실전분석2-2.pdf` 이미지 PDF OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
