@@ -33,11 +33,12 @@ canon_categories:
   - stock-analysis/sector_analysis
 
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
-# 본 분석가는 5 축 (α + F1~F5) + 3 단 목표가 + holding_period 풀세트 분석으로 max_tokens 4500.
+# 본 분석가는 5 축 (α + F1~F5) + 3 단 목표가 + holding_period 풀세트 + 격자 + 자연어 + StandardOutput JSON 으로
+# max_tokens 6000 (cycle 10.5 정정: 4500 → 6000, fundamental_data_md [5] 추가 후 응답 JSON 끝 잘림 해소).
 # temperature 0.4 — 결정론 (scoring.alpha) + 자료 0 시드 + INFRA 미비 환각 우려 → 낮게 (같은 입력 → 같은 판정).
 llm:
   model: null            # 예: "claude-sonnet-4-5", "claude-opus-4-7"
-  max_tokens: 4500
+  max_tokens: 6000
   temperature: 0.4
 
 # 응답 규칙 — build_pipeline_prompt 의 response_rules 인자로 주입.

@@ -9,13 +9,26 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **INFRA-FUNDAMENTAL-DATA-001 구현 풀세트 완료** (cycle 10, 2026-05-21). cycle 9 SPEC frozen 직후 한 호흡 풀세트 (사용자 자율 신호 "uv 명령어는 묻지 말고 스스로 해"). 5 commit 분할 (묶음 A 데이터 인프라 / B 주입 / C v4 persona / D cron / wrap-up). pytest **395 → 422 passed** (+27 신규, 회귀 0). yfinance Default 8 필드 + DB v6 + `fundamental_data_md [5]` 자동 주입 + stock_analyst v4 (F2·F5 unknown 가드 해제) + 일요일 18:00 KST cron. **KOSDAQ_TICKERS set 자율 발견** (yfinance `.KS`/`.KQ` suffix 분기). YoY 5분기 저장 결정 (사용자, SPEC § 2 schema vs § 3 형식 불일치 해소).
+**현재 위치**: **MS3 완전 도달 ✨ 검증 성공** (cycle 10.5, 2026-05-21). cycle 10 구현 풀세트 + production smoke webapp 호출 시연 정합:
+- `prompt 33,983 chars` (cycle 6 ~31K + fundamental_data_md [5] ~3K) ✓
+- F2 = 양호 (ROE 18.9% / Op.Margin 42.8% / Debt/Eq 5.8%) ← `fundamental_data_md [5]` TTM 5 ratio read ✓
+- F5 = 가속 (매출 QoQ +42.7% / YoY +69.2%) ← `fundamental_data_md [5]` 분기 QoQ·YoY read ✓
+- F1 = valid (chart_data_md [4]) ✓
+- 격자 [1] Quality Grid v4 양식 정확 / cited 풀이 v3.1 (chart+fundamental 양쪽 출처) ✓
+- verdict = inconclusive + confidence 65 = v4 매핑 정합 (α + F3 결측 → 50-70)
 
-**MS3 잔여**: production smoke (Step 15) — 실 yfinance 호출 + webapp `ask_analyst stock_analyst "삼성전자 분석" --target 005930 --provider claude_code` 검증으로 [5] 블록 LLM read + F2·F5 정상 발행 + verdict ≠ inconclusive 확인 = **MS3 완전 도달 ✨**. **Top 1**: production smoke 검증 (~0.3 세션, 사용자 webapp 호출).
+**MS3 완전 도달 = 의도된 동작 100% 정합**. verdict = confirmed_high_quality 받으려면 α 산출 (`WAVE-ALPHA-001`) + F3 발행 (flow_analyzer 동시) 필요 = 본 cycle 범위 밖.
 
-**마지막 작업일**: 2026-05-21 (cycle 10 구현 풀세트)
-**마지막 세션 로그**: [2026-05-21_infra-fundamental-data-impl.md](c_worked/2026-05-21_infra-fundamental-data-impl.md) (cycle 10 풀세트).
-**Git**: cycle 9 SPEC = `2ac8700`. cycle 10 = `1532760` 묶음 A → `2181ee7` 묶음 B → `ca93dc6` 묶음 C → `0f2d415` 묶음 D → 본 wrap-up commit + push 진행.
+**cycle 10.5 자율 정정 1건**: stock_analyst manifest max_tokens 4500 → 6000 (응답 JSON 끝 잘림 해소).
+
+**발견 부채 3건 (백로그)**:
+1. **yfinance EPS TTM·PE = N/A** (한국 종목 info 불완전) — DART Phase 2 `INFRA-FUNDAMENTAL-CROSS-VALIDATE-001` 또는 다른 endpoint 보완
+2. **응답 max_tokens 4500 잘림** — cycle 10.5 에서 6000 으로 정정 ✓
+3. **α = null SLOT S1** — `WAVE-ALPHA-001` 후속 (기존 백로그)
+
+**마지막 작업일**: 2026-05-21 (cycle 10.5 MS3 검증 + 자율 정정)
+**마지막 세션 로그**: [2026-05-21_ms3-production-smoke-success.md](c_worked/2026-05-21_ms3-production-smoke-success.md) (MS3 시연 검증).
+**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = 본 commit + push 진행.
 
 ---
 
@@ -23,20 +36,20 @@
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. Production smoke 검증 + MS3 완전 도달 시연 (~0.3 세션) ✨
-- **왜**: cycle 10 (2026-05-21) 에서 INFRA-FUNDAMENTAL-DATA-001 구현 풀세트 완료. 실 yfinance 호출 + webapp 검증으로 [5] 블록 LLM read + F2·F5 정상 발행 + verdict ≠ inconclusive 확인 = **MS3 완전 도달 ✨** (cycle 6 chart 미러 패턴).
-- **범위**: 사용자 webapp `ask_analyst stock_analyst "삼성전자 분석" --target 005930 --provider claude_code` 호출. 응답 검사 = `system_prompt_chars` 증가 (cycle 6 ~31K + fundamental_data_md ~3K = ~34K) / metadata `fundamental_source = yfinance` (첫 호출) → `db` (재호출) / `fundamental_quarter_count = 5` + `fundamental_ratios_count = 5` / verdict ≠ inconclusive (chart + fundamental 둘 다 주입 시 confirmed_*) / cited 풀이 v3.1 양식 (chart_data_md [4] + fundamental_data_md [5] 양쪽 출처) / F2·F5 정상 발행 (양호·경고·약화 / 가속·둔화·정체).
-- **예상 산출**: MS3 완전 도달 시연 commit + 다음 사이클 Layer 4 / production UX 진입 베이스라인.
-
-### 2. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 첫 본격 사이클
-- **왜**: cycle 6.5 의 종목명 매핑 35종 + ChatPane 분할은 production UX 의 첫 시동에 불과. 본질 = 하나의 LLM 채팅창, 백단 0 노출 (Layer 토글·agent_id·target·track 0). 자연어 → 자동 라우팅 → 종합 답변. **MS3 완전 도달 후 자연 진입 시점**.
-- **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 기반 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown). webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
+### 1. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 첫 본격 사이클 ✨
+- **왜**: **MS3 완전 도달 ✨ 검증 성공 (cycle 10.5, 2026-05-21)** → production UX 자연 진입 시점. cycle 6.5 의 종목명 매핑 35종 + ChatPane 분할은 첫 시동에 불과. 본질 = 하나의 LLM 채팅창, 백단 0 노출 (Layer 토글·agent_id·target·track 0). 자연어 → 자동 라우팅 → 종합 답변.
+- **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
 - **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 양쪽 권고 종합).
 
-### 3. 자료 0 시드 5 분석가 페르소나 풀세트 production 검증 (~1.5 세션)
+### 2. 자료 0 시드 5 분석가 페르소나 풀세트 production 검증 (~1.5 세션)
 - **왜**: market_state_analyzer / stock_picker / trading_journalist / flow_analyzer / news_curator 5명은 cycle 2 에서 페르소나 양식만 작성됨. production 호출 풀세트 검증 0 = boundary 침범 / 환각 가드 / cited 풀이 양식 실 작동 미검증. MS3 완전 도달 후 본격 진입 권유.
 - **범위**: 5명 각 production 호출 1~2 회 (~$0.01 합산) + boundary 침범 시나리오 검증 + news_curator SLOT S2 자료원 결정 (Perplexity MCP vs 직접 수집). 발견 부채는 마이크로 정정 사이클로.
 - **예상 산출**: 9 분석가 풀세트 production 검증 완료 + Track Selector 양 트랙 통합 시연 가능.
+
+### 3. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
+- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재는 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성.
+- **범위**: `/spec-interview` 5 라운드 면담 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 자료 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
+- **예상 산출**: α 값 정상 발행 → verdict=confirmed_* 도달 → 다음 MS4 (실 매매 시연) 진입 베이스라인.
 
 (추가 백로그: **자료 0 시드 5 분석가 페르소나 v2 완성 후 풀세트 production 검증** (현재 자료 있는 3명 + 자료 0 시드 5명 작성됨, news_curator SLOT S2 자료원 결정 필요) / **Layer 4 계좌관리자 1+ N** (M5, 계좌 4개 자산배분) / **Layer 5 회고분석가** (M4, `RETROSPECT-ANALYST-001` 본체, PROPOSAL 발행) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어) / **INFRA-US-MACRO-SNAPSHOT-001** (yfinance/FRED 미 매크로) / **WAVE-ALPHA-001** (α 공식 canon + scoring.py alpha 본체 정식 확정) / **INFRA-RELIABILITY-VALIDATOR-001** (Layer 2.5/3.5 Haiku 검증, M2) / **scoring.py s_score·buy_score·alpha 정식 가중치** (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
@@ -55,7 +68,7 @@
 | **MS4** | 실 매매 시연 (권고 → 자금액 변환 → 주문) | Layer 4 계좌관리자 + `GUIDANCE-ACCURACY-TRACKER-001` | +2~3 세션 |
 | **MS5** | 자가 진화 사이클 (회고 → PROPOSAL → manifest 갱신) | Layer 5 회고분석가 + 5 KPI 누적 (3~6 개월 운영) | +1 세션 + 운영 시간 |
 
-**현재 위치**: cycle 10 (2026-05-21 한 호흡 풀세트) 후 = **MS0·MS1·MS2 도달 + MS3 거의 완전 도달** (INFRA-FUNDAMENTAL-DATA-001 구현 풀세트 + stock_analyst v4 정정 완료, production smoke 만 잔여). production smoke 통과 시 **MS3 완전 도달 ✨** = α·F1~F5 풀세트 + chart_data_md [4] + fundamental_data_md [5] 둘 다 활성 + stock_analyst 종목 본질 판정 풀세트 가능.
+**현재 위치**: cycle 10.5 (2026-05-21) 후 = **MS0·MS1·MS2·MS3 완전 도달 ✨** (INFRA-FUNDAMENTAL-DATA-001 구현 풀세트 + stock_analyst v4 정정 + production smoke 검증 성공). F1~F5 풀세트 정상 발행 + chart_data_md [4] + fundamental_data_md [5] 둘 다 활성. α (anchor 공식 SLOT S1) + F3 (flow_analyzer 동시 호출) 추가 → MS4 진입 베이스라인.
 
 ---
 
