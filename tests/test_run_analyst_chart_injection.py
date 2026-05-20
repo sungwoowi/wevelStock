@@ -162,6 +162,75 @@ async def test_stock_analyst_without_target_ticker_skips(
 # ---------------------------------------------------------------------------
 
 
+async def test_resolve_ticker_unit() -> None:
+    """resolve_ticker — 6자리 숫자 / 한글 종목명 / 정규화 / 미매핑 4 케이스."""
+    from core.inference.run_analyst import resolve_ticker
+
+    # 6자리 ticker 그대로 + display_name = KR_TICKER_TO_NAME lookup
+    assert resolve_ticker("005930") == ("005930", "삼성전자")
+    assert resolve_ticker("000660") == ("000660", "SK하이닉스")
+    # 한글 종목명 → ticker
+    assert resolve_ticker("삼성전자") == ("005930", "삼성전자")
+    assert resolve_ticker("에코프로비엠") == ("247540", "에코프로비엠")
+    # 공백/대소문자 정규화
+    assert resolve_ticker("sk하이닉스") == ("000660", "SK하이닉스")
+    assert resolve_ticker(" 삼성 전자 ") == ("005930", "삼성전자")
+    # 미매핑 = (None, raw)
+    assert resolve_ticker("알수없는주식") == (None, "알수없는주식")
+    # 빈 입력
+    assert resolve_ticker(None) == (None, None)
+    assert resolve_ticker("") == (None, None)
+    assert resolve_ticker("   ") == (None, None)
+
+
+async def test_stock_analyst_with_korean_name_resolves_ticker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """한글 종목명 입력 → resolve_ticker 자동 매핑 → build_chart_data 가 6자리 ticker 받음."""
+    chart = _fake_chart("005930")
+    received_ticker = {"v": None}
+
+    async def _fake_build(ticker: str, **_kw: Any):
+        received_ticker["v"] = ticker
+        return chart, False
+
+    monkeypatch.setattr(ra_mod, "build_chart_data", _fake_build)
+
+    resp = await ra_mod.run_analyst(
+        "stock_analyst",
+        [{"role": "user", "content": "삼성전자 분석"}],
+        target_ticker="삼성전자",  # 한글 입력
+    )
+    assert received_ticker["v"] == "005930"  # 자동 매핑
+    md = resp.metadata
+    assert md["chart_ticker"] == "005930"
+    assert md["chart_failures"] == []
+
+
+async def test_stock_analyst_with_unmapped_name_yields_resolve_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """미매핑 종목명 → chart_failures=ticker_resolve_failed."""
+    called = {"n": 0}
+
+    async def _fake_build(ticker: str, **_kw: Any):
+        called["n"] += 1
+        return _fake_chart(ticker), False
+
+    monkeypatch.setattr(ra_mod, "build_chart_data", _fake_build)
+
+    resp = await ra_mod.run_analyst(
+        "stock_analyst",
+        [{"role": "user", "content": "분석"}],
+        target_ticker="알수없는주식이름",
+    )
+    assert called["n"] == 0  # build_chart_data 호출 X
+    md = resp.metadata
+    assert len(md["chart_failures"]) == 1
+    assert md["chart_failures"][0].startswith("ticker_resolve_failed:")
+    assert "알수없는주식이름" in md["chart_failures"][0]
+
+
 async def test_other_analyst_does_not_inject_chart_even_with_ticker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

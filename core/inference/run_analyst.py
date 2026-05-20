@@ -129,10 +129,109 @@ def _extract_cache_tokens(raw: dict) -> tuple[int, int]:
     )
 
 
+# ----------------------------------------------------------------------
+# 종목명 ↔ ticker 매핑 (KR 시총 상위 30) — production UX 의 첫 시동.
+# 별도 SPEC `INFRA-TICKER-RESOLVER-001` 후속에서 KRX 종목 마스터 다운로드 +
+# 약칭/alias + 종목명 fuzzy 검색으로 확장. 현재는 하드코드 dict 로 일상 종목 커버.
+# ----------------------------------------------------------------------
+
+KR_NAME_TO_TICKER: dict[str, str] = {
+    # KOSPI 시총 상위 20
+    "삼성전자": "005930",
+    "삼성전자우": "005935",
+    "SK하이닉스": "000660",
+    "삼성바이오로직스": "207940",
+    "LG에너지솔루션": "373220",
+    "현대차": "005380",
+    "기아": "000270",
+    "NAVER": "035420",
+    "네이버": "035420",
+    "셀트리온": "068270",
+    "POSCO홀딩스": "005490",
+    "포스코홀딩스": "005490",
+    "한화에어로스페이스": "012450",
+    "삼성물산": "028260",
+    "KB금융": "105560",
+    "HD현대중공업": "329180",
+    "한화오션": "042660",
+    "카카오": "035720",
+    "신한지주": "055550",
+    "LG": "003550",
+    "한국전력": "015760",
+    "삼성생명": "032830",
+    "하나금융지주": "086790",
+    "삼성SDI": "006400",
+    "LG화학": "051910",
+    "현대모비스": "012330",
+    # KOSDAQ 시총 상위 10
+    "에코프로비엠": "247540",
+    "에코프로": "086520",
+    "알테오젠": "196170",
+    "셀트리온헬스케어": "091990",
+    "HLB": "028300",
+    "리노공업": "058470",
+    "한미반도체": "042700",
+    "레인보우로보틱스": "277810",
+    "JYP Ent.": "035900",
+    "JYP엔터": "035900",
+}
+
+# 역방향 = ticker → 표시명 (chart_data_md 헤더용)
+KR_TICKER_TO_NAME: dict[str, str] = {}
+for _n, _t in KR_NAME_TO_TICKER.items():
+    # 중복 ticker 의 경우 첫 등장만 (우선순위). 정식 한글명 선호.
+    if _t not in KR_TICKER_TO_NAME:
+        KR_TICKER_TO_NAME[_t] = _n
+
+
+def _normalize_name(s: str) -> str:
+    """공백 제거 + 소문자. '삼성 전자' / 'sk 하이닉스' 같은 입력도 매칭."""
+    return s.replace(" ", "").lower()
+
+
+# 정규화 키 → ticker (런타임 첫 호출 시 lazy build 도 가능하지만 모듈 로드 시 한 번이면 충분)
+_NORMALIZED_NAME_TO_TICKER: dict[str, str] = {
+    _normalize_name(n): t for n, t in KR_NAME_TO_TICKER.items()
+}
+
+
+def resolve_ticker(raw: str | None) -> tuple[str | None, str | None]:
+    """입력값 → (ticker_6digit, display_name).
+
+    - 6자리 숫자 = ticker 그대로 통과 (display_name = KR_TICKER_TO_NAME lookup 또는 None)
+    - 한글/영문 종목명 = KR_NAME_TO_TICKER 매핑 (공백/대소문자 정규화)
+    - 매핑 실패 = (None, raw) — chart_failures 에 명시
+
+    Args:
+        raw: 사용자 입력 (None / 빈 string / 공백만 = (None, None))
+
+    Returns:
+        (ticker, display_name). ticker None = 매핑 실패.
+    """
+    if not raw:
+        return None, None
+    s = raw.strip()
+    if not s:
+        return None, None
+    # 6자리 숫자 = ticker 직접
+    if s.isdigit() and len(s) == 6:
+        return s, KR_TICKER_TO_NAME.get(s)
+    # 한글/영문 종목명 → ticker (정확 매칭)
+    if s in KR_NAME_TO_TICKER:
+        return KR_NAME_TO_TICKER[s], s
+    # 정규화 (공백 제거 + 소문자) 매칭
+    tk = _NORMALIZED_NAME_TO_TICKER.get(_normalize_name(s))
+    if tk is not None:
+        return tk, KR_TICKER_TO_NAME.get(tk, s)
+    return None, s
+
+
 async def _maybe_build_chart_data_md(
     spec: AnalystSpec, target_ticker: str | None
 ) -> tuple[str | None, dict[str, Any]]:
     """INFRA-CHART-DATA-001 — reads_chart_data + target_ticker 충족 시 chart_data_md 산출.
+
+    target_ticker = 6자리 ticker 또는 한글 종목명 모두 허용 (resolve_ticker 자동 매핑).
 
     Returns:
         (chart_data_md, chart_meta). chart_data_md=None 이면 metadata 만 빈 dict 풀세트.
@@ -148,25 +247,34 @@ async def _maybe_build_chart_data_md(
     }
     if not spec.reads_chart_data:
         return None, base_meta
-    if not target_ticker:
-        # SPEC: target ticker 부재 시 silent skip (verdict=unknown 은 persona 가 판단)
+    if not target_ticker or not target_ticker.strip():
+        # SPEC: target ticker 부재 시 silent skip (verdict=inconclusive 은 persona 가 판단)
         base_meta["chart_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    # 종목명 → ticker 매핑 (한글/영문 입력 시 자동 변환)
+    resolved_ticker, display_name = resolve_ticker(target_ticker)
+    if resolved_ticker is None:
+        base_meta["chart_ticker"] = target_ticker
+        base_meta["chart_failures"] = [
+            f"ticker_resolve_failed:{target_ticker}"
+        ]
         return None, base_meta
 
     started = time.monotonic()
     try:
-        chart, cache_hit = await build_chart_data(target_ticker)
+        chart, cache_hit = await build_chart_data(resolved_ticker)
     except Exception as e:  # noqa: BLE001
         log.warning(
-            "chart_data_inject_failed", ticker=target_ticker, error=str(e)
+            "chart_data_inject_failed", ticker=resolved_ticker, error=str(e)
         )
-        base_meta["chart_ticker"] = target_ticker
+        base_meta["chart_ticker"] = resolved_ticker
         base_meta["chart_failures"] = [f"build_chart_data:{type(e).__name__}"]
         base_meta["chart_fetch_seconds"] = round(time.monotonic() - started, 2)
         return None, base_meta
 
     fetch_seconds = round(time.monotonic() - started, 2)
-    chart_md = render_chart_data_md(chart)
+    chart_md = render_chart_data_md(chart, name=display_name)
     return chart_md, {
         "chart_data_age_seconds": max(0, int(time.time() - chart.fetched_at)),
         "chart_fetch_seconds": fetch_seconds,

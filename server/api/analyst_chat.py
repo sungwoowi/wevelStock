@@ -42,6 +42,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     include_memory: bool = True
     provider: ProviderName | None = None  # 명시 시 그 backend 강제 (auto fallback X)
+    target_ticker: str | None = None  # INFRA-CHART-DATA-001 — stock_analyst chart_data_md [4] 주입
 
 
 class ChatResponse(BaseModel):
@@ -67,6 +68,7 @@ async def post_analyst_chat(analyst_id: str, payload: ChatRequest) -> ChatRespon
             model=payload.model,
             include_memory=payload.include_memory,
             provider=payload.provider,
+            target_ticker=payload.target_ticker,
         )
     except AnalystNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -107,6 +109,7 @@ async def post_analyst_chat_stream(
                 model=payload.model,
                 include_memory=payload.include_memory,
                 provider=payload.provider,
+                target_ticker=payload.target_ticker,
             ):
                 line = "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 yield line.encode("utf-8")

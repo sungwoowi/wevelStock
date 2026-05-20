@@ -37,7 +37,28 @@ _MAX_RATE_LIMIT_RETRY = 1  # 호출당 최대 retry 횟수
 
 
 class KISClient:
-    """Async KIS API client with automatic token management."""
+    """Async KIS API client with automatic token management.
+
+    토큰은 **process-wide class-level cache** 로 공유 — 같은 KIS_APP_KEY 의
+    모든 KISClient 인스턴스가 단일 토큰 reuse. KIS OAuth 의 "1분당 1회" 발급
+    한도를 우회 (snapshot + chart 동시 호출 등 burst 시 토큰 재발급 충돌 방지).
+    """
+
+    # ------------------------------------------------------------------
+    # Process-wide token cache (모든 인스턴스가 공유)
+    # ------------------------------------------------------------------
+    _shared_token: str | None = None
+    _shared_token_expires: datetime | None = None
+    _shared_token_key: str | None = None  # 토큰 발급한 app_key 추적 (멀티 계정 안전)
+    _shared_token_lock: asyncio.Lock | None = None
+
+    @classmethod
+    def _get_token_lock(cls) -> asyncio.Lock:
+        # asyncio.Lock 은 event loop 바인딩이 있어 module import 시 만들면 위험.
+        # 첫 사용 시 lazy init. 단일 server process 단일 loop 가정.
+        if cls._shared_token_lock is None:
+            cls._shared_token_lock = asyncio.Lock()
+        return cls._shared_token_lock
 
     def __init__(self) -> None:
         self._app_key = os.getenv("KIS_APP_KEY", "")
@@ -45,8 +66,6 @@ class KISClient:
         self._account_no = os.getenv("KIS_ACCOUNT_NO", "")
         self._is_paper = os.getenv("KIS_IS_PAPER", "true").lower() == "true"
         self._base = PAPER_BASE if self._is_paper else REAL_BASE
-        self._token: str | None = None
-        self._token_expires: datetime | None = None
         self._client: httpx.AsyncClient | None = None
         self._last_call: float = 0
 
@@ -64,39 +83,68 @@ class KISClient:
             self._client = None
 
     async def _ensure_token(self) -> str:
-        """Get or refresh OAuth token."""
+        """Get or refresh OAuth token. **Process-wide cache** — 모든 인스턴스 공유.
+
+        - 같은 app_key 의 토큰이 살아있으면 즉시 반환
+        - 만료 또는 부재 시 lock 안에서 1번만 발급 (concurrent 호출 burst 안전)
+        """
+        cls = type(self)
         now = datetime.now(timezone.utc)
-        if self._token and self._token_expires and now < self._token_expires:
-            return self._token
+        if (
+            cls._shared_token
+            and cls._shared_token_expires
+            and cls._shared_token_key == self._app_key
+            and now < cls._shared_token_expires
+        ):
+            return cls._shared_token
 
-        url = f"{self._base}/oauth2/tokenP"
-        body = {
-            "grant_type": "client_credentials",
-            "appkey": self._app_key,
-            "appsecret": self._app_secret,
-        }
-        assert self._client is not None
-        resp = await self._client.post(url, json=body)
-        data = resp.json()
+        async with cls._get_token_lock():
+            # double-check (다른 task 가 lock 안에서 발급했을 수 있음)
+            now = datetime.now(timezone.utc)
+            if (
+                cls._shared_token
+                and cls._shared_token_expires
+                and cls._shared_token_key == self._app_key
+                and now < cls._shared_token_expires
+            ):
+                return cls._shared_token
 
-        if "access_token" not in data:
-            raise RuntimeError(
-                f"KIS token failed: {data.get('error_description', data)}"
-            )
+            url = f"{self._base}/oauth2/tokenP"
+            body = {
+                "grant_type": "client_credentials",
+                "appkey": self._app_key,
+                "appsecret": self._app_secret,
+            }
+            assert self._client is not None
+            resp = await self._client.post(url, json=body)
+            data = resp.json()
 
-        self._token = data["access_token"]
-        # Parse expiry: "2026-04-18 08:49:59"
-        exp_str = data.get("access_token_token_expired", "")
-        if exp_str:
-            self._token_expires = datetime.strptime(
-                exp_str, "%Y-%m-%d %H:%M:%S"
-            ).replace(tzinfo=timezone.utc)
+            if "access_token" not in data:
+                raise RuntimeError(
+                    f"KIS token failed: {data.get('error_description', data)}"
+                )
 
-        log.info("kis_token_acquired", expires=exp_str)
-        # KIS rate limits count token requests — must wait before first data call
-        await asyncio.sleep(2.0)
-        self._last_call = asyncio.get_event_loop().time()
-        return self._token
+            cls._shared_token = data["access_token"]
+            cls._shared_token_key = self._app_key
+            # Parse expiry: "2026-04-18 08:49:59"
+            exp_str = data.get("access_token_token_expired", "")
+            if exp_str:
+                cls._shared_token_expires = datetime.strptime(
+                    exp_str, "%Y-%m-%d %H:%M:%S"
+                ).replace(tzinfo=timezone.utc)
+
+            log.info("kis_token_acquired_shared", expires=exp_str)
+            # KIS rate limits count token requests — must wait before first data call
+            await asyncio.sleep(2.0)
+            self._last_call = asyncio.get_event_loop().time()
+            return cls._shared_token
+
+    @classmethod
+    def reset_token_cache(cls) -> None:
+        """테스트 전용 — process-wide 토큰 캐시 초기화."""
+        cls._shared_token = None
+        cls._shared_token_expires = None
+        cls._shared_token_key = None
 
     async def _rate_limit(self) -> None:
         """Enforce minimum interval between API calls."""
