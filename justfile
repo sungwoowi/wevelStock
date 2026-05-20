@@ -116,6 +116,18 @@ refresh-charts:
 fetch-chart ticker *flags="":
     uv run python -m collectors.charts fetch {{ticker}} {{flags}}
 
+# === 펀더멘털 데이터 (INFRA-FUNDAMENTAL-DATA-001) ===
+
+# KR_NAME_TO_TICKER 35종 + DB distinct ticker union 의 fundamental refresh
+# (수동 백업, cron `0 18 * * 0` 일요일 18:00 KST 자동 실행)
+refresh-fundamentals:
+    uv run python -m collectors.fundamentals refresh
+
+# 단일 ticker fundamental fetch + 적재 (디버깅용). market 기본 KS. 예: just fetch-fundamental 005930
+# KOSDAQ: just fetch-fundamental 247540 --market KQ
+fetch-fundamental ticker *flags="":
+    uv run python -m collectors.fundamentals fetch {{ticker}} {{flags}}
+
 # === 추론부 (Layer 2 분석가 호출) ===
 
 # 분석가와 멀티턴 대화 (REPL). /exit /clear /save 명령. 종료 시 JSONL 자동 저장.

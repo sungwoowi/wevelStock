@@ -10,6 +10,7 @@ from core.logging import get_logger
 from server.schedulers.jobs.backup import run_backup
 from server.schedulers.jobs.charts import run_chart_refresh
 from server.schedulers.jobs.daily_rollup import run_daily_rollup
+from server.schedulers.jobs.fundamentals import run_fundamentals_refresh
 from server.schedulers.jobs.memory_cleanup import run_memory_cleanup
 from server.schedulers.jobs.monthly_rollup import run_monthly_rollup
 from server.schedulers.jobs.weekly_rollup import run_weekly_rollup
@@ -67,9 +68,18 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         replace_existing=True,
     )
     registered += 1
+    # INFRA-FUNDAMENTAL-DATA-001 — 일요일 18:00 KST fundamentals refresh (config 불필요, 고정 cron)
+    scheduler.add_job(
+        run_fundamentals_refresh,
+        CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=tz),
+        id="infra::fundamentals_refresh",
+        replace_existing=True,
+    )
+    registered += 1
     log.info("infra_jobs_registered", count=registered)
     return registered
 
 
 __all__ = ["register_infra_jobs", "run_backup", "run_daily_rollup", "run_weekly_rollup",
-           "run_monthly_rollup", "run_memory_cleanup", "run_chart_refresh"]
+           "run_monthly_rollup", "run_memory_cleanup", "run_chart_refresh",
+           "run_fundamentals_refresh"]
