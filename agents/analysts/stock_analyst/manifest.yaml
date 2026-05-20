@@ -1,6 +1,6 @@
-# 종목분석가 (Stock Analyst) 분석가 manifest — v3 (2026-05-20 INFRA-CHART-DATA-001 구현 후 정정)
+# 종목분석가 (Stock Analyst) 분석가 manifest — v4 (2026-05-21 INFRA-FUNDAMENTAL-DATA-001 구현 후 정정)
 # Layer 2 — 학습부 stock-analysis 1:1 매핑 (Track A 중장기 수익금 게임의 종목 본질 판단)
-# v2 → v3 변경: 환각 가드 2 (INFRA-CHART-DATA-001 미구현) 해제 → chart_data_md [4] 블록 출처 명시 강제로 정정.
+# v3 → v4 변경: F2·F5 의 INFRA-FUNDAMENTAL-DATA-001 후속 가드 해제 → fundamental_data_md [5] TTM 5 ratio + 분기 4분기 QoQ·YoY 출처 명시. MS3 완전 도달.
 # 자료 0 시드는 잔존 (canon md 0). 본 분석가 권위 한정 = α (가속계수) + Module A 목표가 3 단 (보수/중립/공격) + F1~F5 청산 트리거 + holding_period_estimate_days
 
 id: stock_analyst
@@ -125,12 +125,12 @@ response_rules: |
   ### F1~F5 청산 트리거 정의
 
   - F1 (장기 추세) — chart_data_md [4] 의 월봉/주봉 추세선 붕괴 + 전고점 회복 실패 시 청산. chart_data_md 부재 시 unknown.
-  - F2 (펀더멘털) — PER·PBR·매출 성장·ROE 의 분기 변화. 급격한 약화 시 청산. INFRA-FUNDAMENTAL-DATA-001 후속.
+  - F2 (펀더멘털) — fundamental_data_md [5] 의 TTM 5 ratio (EPS·PE·ROE·Op.Margin·Debt/Eq) 동시 평가. PE < 업종 평균 + ROE > 15% + Op.Margin > 10% + Debt/Eq < 100% = 양호 / 1 개 위반 = 경고 / 다수 위반 = 약화.
   - F3 (수급) — flow_analyzer F-Score read. F-Score 6 → 3 이하 급락 시 청산. flow_analyzer 발행 read 만.
   - F4 (산업 사이클) — chart_data_md [4] 의 52주 고저 + 거래량 spike + 월봉 추세 결합. canon 자료 들어오면 보강.
-  - F5 (실적 모멘텀) — 분기 실적 QoQ·YoY 2 분기 연속 둔화 시 청산. INFRA-FUNDAMENTAL-DATA-001 후속.
+  - F5 (실적 모멘텀) — fundamental_data_md [5] 의 분기 매출·영업이익·EPS QoQ·YoY 2 분기 연속 둔화 시 청산.
 
-  v3 정정: chart_data_md [4] 주입 시 F1·F4 활성. F2·F5 는 INFRA-FUNDAMENTAL-DATA-001 후속까지 잔존 unknown.
+  v4 정정: chart_data_md [4] + fundamental_data_md [5] 둘 다 주입 시 α·F1~F5 풀세트 활성. chart 또는 fundamental 부재 시 해당 축 unknown + verdict = inconclusive + confidence 50-70 (재호출로 해소 가능).
 
   ### verdict 매핑 규율 (v3 — INFRA 구현 후 정정)
 

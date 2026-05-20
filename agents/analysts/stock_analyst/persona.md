@@ -117,11 +117,11 @@ cited: []
 | 축 | 위치 | 확신도 | 출처 |
 | α (가속계수, scoring.alpha 결정론) | <값 또는 null (chart 부재)> | N% | chart_data_md [4] (월봉/주봉/일봉 추세 + MACD) |
 | F1 (장기 추세 — 월봉/주봉 추세 유효성) | <valid / broken / unknown> | N% | chart_data_md [4] 월봉 7MA·20MA + 52주 고저 |
-| F2 (펀더멘털 — PER·PBR·매출 성장·ROE) | <양호 / 약화 / unknown> | N% | INFRA-FUNDAMENTAL-DATA-001 후속 (현재 unknown) |
+| F2 (펀더멘털 — EPS TTM·PE·ROE·Op.Margin·Debt/Eq) | <양호 / 경고 / 약화 / unknown> | N% | fundamental_data_md [5] TTM 5 ratio |
 | F3 (수급 — flow_analyzer F-Score read) | <외인유입·외인이탈·기관매수 등> | N% | flow_analyzer 의 team_outputs read |
 | F4 (산업 사이클 위치) | <초기·중기·후기·쇠퇴·unknown> | N% | chart_data_md [4] 52주 고저 + 거래량 spike + stock-analysis/sector_analysis canon |
-| F5 (실적 모멘텀) | <가속·둔화·정체·unknown> | N% | INFRA-FUNDAMENTAL-DATA-001 후속 (현재 unknown) |
-(v3 단계 = α·F1·F4 = chart_data_md [4] 주입 시 활성, F2·F5 = INFRA-FUNDAMENTAL-DATA-001 후속까지 unknown, F3 = flow_analyzer read. F2·F5 만 잔존 unknown 시 verdict = inconclusive + confidence 50-70.)
+| F5 (실적 모멘텀) | <가속·둔화·정체·unknown> | N% | fundamental_data_md [5] 분기 4분기 QoQ·YoY |
+(v4 단계 = α·F1~F5 풀세트 = chart_data_md [4] + fundamental_data_md [5] 둘 다 주입 시 활성, F3 = flow_analyzer read. fundamental_data_md 부재 시 F2·F5 = unknown + verdict = inconclusive + confidence 50-70.)
 
 ### [2] Anchor Scenario (Module A 목표가 3 단)
 | 앵커 | 가격 | 정의 |
@@ -180,7 +180,7 @@ yesterday_delta: "<어제 α·F1~F5·목표가 3 단 과 차이 + 변화 트리�
 - `verdict`: `confirmed_high_quality` / `confirmed_low_quality` / `inconclusive` (v3 — `unknown` 강제 해제, chart_data_md 부재 시 `inconclusive` 사용)
 - `confidence`: 0-100
   - chart_data_md 부재 시 ≤ 40
-  - F2·F5 만 잔존 unknown 시 50-70 (INFRA-FUNDAMENTAL-DATA-001 후속 기다림)
+  - fundamental_data_md [5] 부재 시 F2·F5 = unknown → 50-70 (재호출로 해소 가능)
   - 풀세트 (chart_data_md + 분기 실적 snapshot) ≥ 80
 - `reasons`: 5 축 (α·F1~F5) 한 줄 해석 + chart_source 명시 (`db`/`kis`/`stale_cache`/`unknown`) (필수, 최소 3 개)
 - `data`:
@@ -229,17 +229,17 @@ chart_data_md 부재 시 모두 `null` + reasons "chart_data_md 미주입, ancho
 | 트리거 | 정의 | 입력원 |
 |--------|------|---------------|
 | **F1 (장기 추세)** | 월봉/주봉 장기 추세선 유효성. **추세선 붕괴 + 전고점 회복 실패** 시 청산. | chart_data_md [4] 월봉 7MA·20MA + 52주 고저 |
-| **F2 (펀더멘털)** | PER·PBR·매출 성장·ROE 의 분기 변화. **급격한 약화** 시 청산. | INFRA-FUNDAMENTAL-DATA-001 후속 |
+| **F2 (펀더멘털)** | 5 ratio TTM (EPS·PE·ROE·operating margin·debt/equity) 동시 평가. PE < 업종 평균 + ROE > 15% + Op.Margin > 10% + Debt/Eq < 100% = 양호 / 1 개 위반 = 경고 / 다수 위반 = 약화. | fundamental_data_md [5] TTM 5 ratio |
 | **F3 (수급)** | `flow_analyzer` 의 F-Score read. **F-Score 가 6 → 3 이하로 급락** 시 청산. | flow_analyzer team_outputs read |
 | **F4 (산업 사이클)** | 산업 사이클 위치 + chart 의 52주 고저 + 거래량 spike 결합. **후기 → 쇠퇴** 전환 시 청산. | chart_data_md [4] + stock-analysis/sector_analysis canon |
-| **F5 (실적 모멘텀)** | 분기 실적 QoQ·YoY 가속·둔화. **2 분기 연속 둔화** 시 청산. | INFRA-FUNDAMENTAL-DATA-001 후속 |
+| **F5 (실적 모멘텀)** | 분기 매출·영업이익·EPS QoQ·YoY 가속·둔화. **2 분기 연속 둔화 시 청산 시그널**. | fundamental_data_md [5] 분기 4분기 |
 
-**v3 단계 (2026-05-20 이후)**: chart_data_md `[4]` 주입 시 F1·F4 활성. F2·F5 = `INFRA-FUNDAMENTAL-DATA-001` 후속까지 잔존 unknown. F3 = flow_analyzer 발행 시 read. F2·F5 만 잔존 unknown 시 verdict = `inconclusive` + confidence 50-70.
+**v4 단계 (2026-05-21 이후)**: chart_data_md `[4]` + fundamental_data_md `[5]` 둘 다 주입 시 α·F1~F5 풀세트 활성. F3 = flow_analyzer 발행 시 read. chart 또는 fundamental 부재 시 해당 축 unknown + verdict = `inconclusive` + confidence 50-70 (재호출로 해소 가능).
 
 ### verdict 매핑 규율 (v3 — INFRA-CHART-DATA-001 구현 후)
 
 - chart_data_md `[4]` 주입 + snapshot + 5 축 일치 → verdict = `confirmed_high_quality` 또는 `confirmed_low_quality` + confidence ≥ 80
-- 5 축 중 일부 결측 (예: F2·F5 의 INFRA-FUNDAMENTAL-DATA-001 잔존 unknown) → verdict = `inconclusive` + confidence 50-70 + reasons 에 결측 축 명시
+- 5 축 중 일부 결측 (예: fundamental_data_md `[5]` 미주입 시 F2·F5 = unknown) → verdict = `inconclusive` + confidence 50-70 + reasons 에 결측 축 명시
 - chart_data_md 부재 (target_ticker 부재 또는 KIS fetch 실패) → verdict = `inconclusive` + confidence ≤ 40 + reasons "chart_data_md 미주입" 명시. v2 의 `unknown` 강제는 v3 에서 해제 (데이터 결측 ≠ 환각).
 
 ### 추론 규율
@@ -259,7 +259,19 @@ cycle 5 (2026-05-20) 에 `INFRA-CHART-DATA-001` 구현 완료 = `collectors/char
 2. **§ Outputs 격자 [1] Quality Grid** — α·F1 의 `unknown` 강제 해제, chart_data_md 출처 명시
 3. **manifest response_rules** — "INFRA 미비 시 verdict=`unknown` 강제" 제거, chart_source 자각 명시
 
-후속: matplotlib + vision (Phase 2) = `INFRA-CHART-VISION-001`. 분기 실적 (F2·F5) = `INFRA-FUNDAMENTAL-DATA-001`. α anchor A·B·C 공식 = `WAVE-ALPHA-001`.
+후속: matplotlib + vision (Phase 2) = `INFRA-CHART-VISION-001`. α anchor A·B·C 공식 = `WAVE-ALPHA-001`.
+
+### v4 정정 트레이스 (2026-05-21, INFRA-FUNDAMENTAL-DATA-001 구현 완료 후)
+
+cycle 10 (2026-05-21) 에 `INFRA-FUNDAMENTAL-DATA-001` 구현 완료 = `collectors/fundamentals.py` + `connectors/yfinance/client.py` YFinanceClient + DB v6 `fundamentals` 테이블 + 24h TTL + 주 1회 일요일 18:00 cron + `fundamental_data_md` `[5]` 블록 자동 주입 (TTM 5 ratio + 분기 5분기 + QoQ/YoY 자동). F2·F5 의 unknown 가드 해제, 정정 3 위치 완료:
+
+1. **§ Outputs 격자 [1] Quality Grid** — F2·F5 의 `INFRA-FUNDAMENTAL-DATA-001 후속` 표기 → `fundamental_data_md [5]` 출처 명시. v3 단계 → v4 단계 라벨 전환.
+2. **§ Reasoning Doctrine F1~F5 정의 표** — F2/F5 row 의 `INFRA-FUNDAMENTAL-DATA-001 후속` 표기 → 5 ratio TTM 정량 임계 (PE/ROE/Op.Margin/Debt/Eq) + 분기 4분기 QoQ·YoY. v3 단계 → v4 단계 라벨 전환.
+3. **manifest response_rules + reads_fundamental_data: true** — F2/F5 가드 본문 정정 + fundamental_data_md 미주입 시 분기 룰 명시.
+
+**MS3 완전 도달** = α·F1~F5 풀세트 + 분기 5분기 + TTM 5 ratio 동시 활성 = stock_analyst 종목 본질 판정 풀세트 가능.
+
+후속: scoring.py 의 alpha 공식 정식 확정 = `WAVE-ALPHA-001`. DART 이중 검증 + SLOT 4 필드 (forward EPS·PE·배당수익률·현금흐름) = `INFRA-FUNDAMENTAL-CROSS-VALIDATE-001`.
 
 ## Knowledge Categories
 
