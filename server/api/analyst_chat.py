@@ -78,8 +78,11 @@ async def post_analyst_chat(analyst_id: str, payload: ChatRequest) -> ChatRespon
             analyst=analyst_id,
             provider=payload.provider,
             error=str(e),
+            error_type=type(e).__name__,
+            error_repr=repr(e),
         )
-        raise HTTPException(status_code=500, detail=f"inference failed: {e}") from e
+        error_detail = str(e) or f"{type(e).__name__} (empty message)"
+        raise HTTPException(status_code=500, detail=f"inference failed: {error_detail}") from e
 
     return ChatResponse(text=resp.text, metadata=resp.metadata)
 
@@ -120,8 +123,10 @@ async def post_analyst_chat_stream(
             yield ('data: {"type":"done"}\n\n').encode("utf-8")
         except Exception as e:  # noqa: BLE001
             log.error("analyst_chat_stream_failed",
-                      analyst=analyst_id, error=str(e))
-            err = {"type": "error", "message": f"inference failed: {e}",
+                      analyst=analyst_id, error=str(e),
+                      error_type=type(e).__name__, error_repr=repr(e))
+            error_detail = str(e) or f"{type(e).__name__} (empty message)"
+            err = {"type": "error", "message": f"inference failed: {error_detail}",
                    "provider": "n/a", "fatal": True, "status": 500}
             yield ("data: " + json.dumps(err, ensure_ascii=False) + "\n\n").encode("utf-8")
             yield ('data: {"type":"done"}\n\n').encode("utf-8")

@@ -126,7 +126,25 @@ async def call_claude_code(
     extra_args: list[str] | None = None,
     json_schema: dict | None = None,
 ) -> dict:
-    """Invoke Claude Code CLI and return the standard LLM response dict."""
+    """Invoke Claude Code CLI and return the standard LLM response dict.
+
+    Windows uvicorn (SelectorEventLoop) 에선 `asyncio.create_subprocess_exec` 가
+    NotImplementedError (메시지 빈 string) → endpoint silent 500 의 cycle 6.5 원인.
+    `call_claude_code_stream` 과 동일하게 사전 체크 + sync subprocess 직행 fallback
+    (cycle 8 정정). `json_schema` 사용 시는 sync 함수 미지원이라 그대로 진행 (희귀 케이스).
+    """
+    if json_schema is None and not _can_spawn_subprocess():
+        return await _call_claude_code_sync_via_thread(
+            system=system,
+            messages=messages,
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            binary=binary,
+            timeout_sec=timeout_sec,
+            extra_args=extra_args,
+        )
+
     launcher = _resolve_launcher(binary)
 
     system_text = _blocks_to_text(system)
@@ -201,8 +219,9 @@ async def call_claude_code(
     stderr = stderr_b.decode("utf-8", errors="replace")
 
     if proc.returncode != 0:
+        error_msg = stderr[:400] or stdout[:400] or "(no stderr/stdout captured)"
         raise RuntimeError(
-            f"claude_code exited {proc.returncode}: {stderr[:400] or stdout[:400]}"
+            f"claude_code exited {proc.returncode}: {error_msg}"
         )
 
     try:
@@ -379,9 +398,9 @@ async def _call_claude_code_sync_via_thread(
     stderr = r.stderr.decode("utf-8", errors="replace")
 
     if r.returncode != 0:
+        error_msg = stderr[:400] or stdout[:400] or "(no stderr/stdout captured)"
         raise RuntimeError(
-            f"claude_code (sync) exited {r.returncode}: "
-            f"{stderr[:400] or stdout[:400]}"
+            f"claude_code (sync) exited {r.returncode}: {error_msg}"
         )
 
     try:
@@ -591,7 +610,12 @@ async def _claude_code_stream_native(
             # 종료 메시지
             if etype == "result":
                 if event.get("is_error"):
-                    saw_error = str(event.get("result") or "claude_code error")
+                    result_val = event.get("result")
+                    saw_error = (
+                        str(result_val).strip()
+                        if result_val
+                        else "(no result field in is_error event)"
+                    )
                     break
                 final_usage = event.get("usage") or {}
                 final_cost = float(event.get("total_cost_usd") or 0.0)
@@ -627,8 +651,9 @@ async def _claude_code_stream_native(
         raise RuntimeError(f"claude_code stream returned error: {saw_error}")
     if proc.returncode is not None and proc.returncode != 0:
         stderr = (await proc.stderr.read()).decode("utf-8", errors="replace") if proc.stderr else ""
+        error_msg = stderr[:400] or "(no stderr captured)"
         raise RuntimeError(
-            f"claude_code_stream exited {proc.returncode}: {stderr[:400]}"
+            f"claude_code_stream exited {proc.returncode}: {error_msg}"
         )
 
     tokens_in = int(final_usage.get("input_tokens") or 0) + int(

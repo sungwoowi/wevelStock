@@ -358,25 +358,52 @@ async def _dispatch_provider(
     if provider == "claude_code":
         from core.llm.claude_code_backend import call_claude_code
 
-        try:
-            return await call_claude_code(
-                system=system,
-                messages=messages,
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                binary=cfg.claude_code.binary,
-                timeout_sec=cfg.claude_code.timeout_sec,
-                extra_args=list(cfg.claude_code.extra_args),
-                json_schema=json_schema,
-            )
-        except Exception as e:  # noqa: BLE001
-            log.error("llm_call_failed", provider="claude_code", error=str(e))
-            if allow_fallback and cfg.mock_if_no_key:
-                resp = _mock_response(system, messages, model)
-                resp["raw"]["error"] = str(e)
-                return resp
-            raise
+        # subprocess 일시적 burst (returncode!=0 + 빈 stderr/stdout) 흡수용 1회 재시도.
+        # RuntimeError("...exited ...") 만 재시도 — TimeoutError·ClaudeCodeNotInstalled·
+        # ClaudeCodeAuthError·JSONDecode 등 영구 실패는 즉시 break.
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                return await call_claude_code(
+                    system=system,
+                    messages=messages,
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    binary=cfg.claude_code.binary,
+                    timeout_sec=cfg.claude_code.timeout_sec,
+                    extra_args=list(cfg.claude_code.extra_args),
+                    json_schema=json_schema,
+                )
+            except Exception as e:  # noqa: BLE001
+                last_exc = e
+                is_transient = (
+                    isinstance(e, RuntimeError)
+                    and "exited" in (str(e) or "")
+                )
+                if is_transient and attempt == 0:
+                    log.warning(
+                        "llm_claude_code_transient_retry",
+                        attempt=attempt + 1,
+                        error=str(e) or repr(e),
+                    )
+                    await asyncio.sleep(0.2)
+                    continue
+                break
+
+        e = last_exc
+        log.error(
+            "llm_call_failed",
+            provider="claude_code",
+            error=str(e),
+            error_type=type(e).__name__,
+            error_repr=repr(e),
+        )
+        if allow_fallback and cfg.mock_if_no_key:
+            resp = _mock_response(system, messages, model)
+            resp["raw"]["error"] = str(e) or repr(e)
+            return resp
+        raise e  # type: ignore[misc]
 
     if provider == "gemini":
         # Gemini uses its own model names — override if caller passed Anthropic model

@@ -86,8 +86,11 @@ async def post_strategist_chat(
             target=payload.target,
             provider=payload.provider,
             error=str(e),
+            error_type=type(e).__name__,
+            error_repr=repr(e),
         )
-        raise HTTPException(status_code=500, detail=f"inference failed: {e}") from e
+        error_detail = str(e) or f"{type(e).__name__} (empty message)"
+        raise HTTPException(status_code=500, detail=f"inference failed: {error_detail}") from e
 
     return ChatResponse(text=resp.text, metadata=resp.metadata)
 
@@ -134,10 +137,13 @@ async def post_strategist_chat_stream(
                 strategist=strategist_id,
                 target=payload.target,
                 error=str(e),
+                error_type=type(e).__name__,
+                error_repr=repr(e),
             )
+            error_detail = str(e) or f"{type(e).__name__} (empty message)"
             err = {
                 "type": "error",
-                "message": f"inference failed: {e}",
+                "message": f"inference failed: {error_detail}",
                 "provider": "n/a",
                 "fatal": True,
                 "status": 500,
