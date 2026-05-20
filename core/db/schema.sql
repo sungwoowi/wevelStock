@@ -306,6 +306,25 @@ CREATE INDEX IF NOT EXISTS idx_chart_ohlcv_fetched
     ON chart_ohlcv (fetched_at DESC);
 
 -- ============================================================
+-- v6: 펀더멘털 데이터 (fundamentals) — INFRA-FUNDAMENTAL-DATA-001
+-- ============================================================
+-- yfinance Default 8 필드 (TTM 5 ratio + 분기 5분기) 캐시. ticker PK + 24h TTL.
+CREATE TABLE IF NOT EXISTS fundamentals (
+    ticker            TEXT NOT NULL PRIMARY KEY,
+    market            TEXT NOT NULL,                -- "KS" | "KQ" | "US"
+    fetched_at        TEXT NOT NULL,                -- ISO8601 (UTC)
+    eps_ttm           REAL,
+    pe_ratio          REAL,
+    roe               REAL,                         -- 0~1
+    operating_margin  REAL,                         -- 0~1
+    debt_to_equity    REAL,                         -- %
+    quarterly_data    TEXT NOT NULL,                -- JSON: revenue/operating_income/eps × 5분기 + labels
+    source            TEXT NOT NULL DEFAULT 'yfinance'
+);
+CREATE INDEX IF NOT EXISTS idx_fundamentals_fetched_at
+    ON fundamentals (fetched_at DESC);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -318,3 +337,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (2);
 INSERT OR IGNORE INTO schema_version (version) VALUES (3);
 INSERT OR IGNORE INTO schema_version (version) VALUES (4);
 INSERT OR IGNORE INTO schema_version (version) VALUES (5);
+INSERT OR IGNORE INTO schema_version (version) VALUES (6);

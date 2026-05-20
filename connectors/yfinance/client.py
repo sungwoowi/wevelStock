@@ -1,15 +1,20 @@
-"""Yahoo Finance async wrapper for overseas indices and gold.
+"""Yahoo Finance async wrapper.
 
-Used to fetch data KIS API doesn't provide:
+기존 (해외 지수 + 금):
 - ^IXIC: Nasdaq Composite
 - ^SOX: Philadelphia Semiconductor Index (SOX)
 - GC=F: Gold Futures
 - ^DJI: Dow Jones
 - DX-Y.NYB: Dollar Index (DXY)
+
+INFRA-FUNDAMENTAL-DATA-001 (분기 실적 + TTM 5 ratio):
+- YFinanceClient — fetch_info / fetch_quarterly / fetch_full
+- 한국 KOSPI=`.KS` / KOSDAQ=`.KQ` / 미주 suffix X 자동 변환
 """
 from __future__ import annotations
 
 import asyncio
+import math
 from typing import Any
 
 from core.logging import get_logger
@@ -86,3 +91,176 @@ async def get_indices(
     success = len([v for v in out.values() if "error" not in v])
     log.info("yfinance_fetched", count=success, total=len(out))
     return out
+
+
+# =============================================================================
+# INFRA-FUNDAMENTAL-DATA-001 — fundamental client (TTM 5 ratio + 분기 5분기)
+# =============================================================================
+
+
+def _to_yf_ticker(ticker: str, market: str) -> str:
+    """6자리 한국 ticker + market → yfinance ticker.
+
+    한국 KOSPI: "005930" + "KS" → "005930.KS"
+    한국 KOSDAQ: "247540" + "KQ" → "247540.KQ"
+    미주: "AAPL" + "US" → "AAPL"
+    """
+    if market == "KS":
+        return f"{ticker}.KS"
+    if market == "KQ":
+        return f"{ticker}.KQ"
+    return ticker
+
+
+def _quarter_label(ts: Any) -> str:
+    """datetime/Timestamp → 'YYYYQN'."""
+    try:
+        return f"{ts.year}Q{(ts.month - 1) // 3 + 1}"
+    except (AttributeError, TypeError):
+        return str(ts)
+
+
+def _clean_float(v: Any) -> float | None:
+    """NaN / None / 비숫자 → None. 정상값은 float."""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(f) or math.isinf(f):
+        return None
+    return f
+
+
+class FundamentalNotAvailable(RuntimeError):
+    """yfinance 가 빈 데이터 반환 (delisted / 잘못된 ticker)."""
+
+
+class YFinanceClient:
+    """INFRA-FUNDAMENTAL-DATA-001 — fundamental 데이터 async wrapper.
+
+    sync API (`Ticker.info` / `Ticker.quarterly_financials` /
+    `Ticker.quarterly_earnings`) 를 asyncio.to_thread 로 wrap.
+    """
+
+    async def fetch_info(self, yf_ticker: str) -> dict[str, Any]:
+        """5 ratio TTM 추출. 빈 dict 반환 시 {'empty': True}."""
+        return await asyncio.to_thread(self._fetch_info_sync, yf_ticker)
+
+    async def fetch_quarterly(self, yf_ticker: str) -> dict[str, Any]:
+        """분기 5분기 매출·영업이익·EPS + quarter_labels."""
+        return await asyncio.to_thread(self._fetch_quarterly_sync, yf_ticker)
+
+    async def fetch_full(self, ticker: str, market: str = "KS") -> dict[str, Any]:
+        """info + quarterly 결합. 표준 dict 반환.
+
+        Raises:
+            FundamentalNotAvailable: yfinance info 가 empty (delisted / invalid).
+        """
+        yf_t = _to_yf_ticker(ticker, market)
+        info = await self.fetch_info(yf_t)
+        if not info or info.get("empty"):
+            err = info.get("error") if info else "no info"
+            raise FundamentalNotAvailable(
+                f"yfinance returned empty info for {yf_t}: {err}"
+            )
+        quarterly = await self.fetch_quarterly(yf_t)
+        return {
+            "ticker": ticker,
+            "market": market,
+            "yf_ticker": yf_t,
+            **info,
+            **quarterly,
+        }
+
+    @staticmethod
+    def _fetch_info_sync(yf_ticker: str) -> dict[str, Any]:
+        import yfinance as yf
+
+        try:
+            ticker = yf.Ticker(yf_ticker)
+            info = ticker.info or {}
+            if not info or len(info) <= 1:
+                return {"empty": True}
+            return {
+                "eps_ttm": _clean_float(info.get("trailingEps")),
+                "pe_ratio": _clean_float(info.get("trailingPE")),
+                "roe": _clean_float(info.get("returnOnEquity")),
+                "operating_margin": _clean_float(info.get("operatingMargins")),
+                "debt_to_equity": _clean_float(info.get("debtToEquity")),
+            }
+        except Exception as e:  # noqa: BLE001
+            log.warning("yfinance_info_fetch_failed", ticker=yf_ticker, error=str(e))
+            return {"empty": True, "error": str(e)}
+
+    @staticmethod
+    def _fetch_quarterly_sync(yf_ticker: str) -> dict[str, Any]:
+        import yfinance as yf
+
+        empty_result = {
+            "quarterly_revenue": [],
+            "quarterly_operating_income": [],
+            "quarterly_eps": [],
+            "quarter_labels": [],
+        }
+        try:
+            ticker = yf.Ticker(yf_ticker)
+            # quarterly_financials ↔ quarterly_income_stmt API drift 대응
+            qf = None
+            for attr in ("quarterly_financials", "quarterly_income_stmt"):
+                try:
+                    val = getattr(ticker, attr, None)
+                    if val is not None and not val.empty:
+                        qf = val
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+
+            try:
+                qe = getattr(ticker, "quarterly_earnings", None)
+            except Exception:  # noqa: BLE001
+                qe = None
+
+            revenue: list[float | None] = []
+            operating_income: list[float | None] = []
+            eps: list[float | None] = []
+            labels: list[str] = []
+
+            if qf is not None and not qf.empty:
+                cols = list(qf.columns)[:5]  # 최근 5분기 (descending)
+                for col in cols:
+                    labels.append(_quarter_label(col))
+                for row_key in ("Total Revenue", "TotalRevenue"):
+                    if row_key in qf.index:
+                        for col in cols:
+                            revenue.append(_clean_float(qf.at[row_key, col]))
+                        break
+                for row_key in ("Operating Income", "OperatingIncome"):
+                    if row_key in qf.index:
+                        for col in cols:
+                            operating_income.append(_clean_float(qf.at[row_key, col]))
+                        break
+
+            if qe is not None and not qe.empty:
+                eps_col = next(
+                    (c for c in ("EPS", "Earnings") if c in qe.columns), None
+                )
+                if eps_col is not None:
+                    for v in list(qe[eps_col])[:5]:
+                        eps.append(_clean_float(v))
+                    if not labels:
+                        for idx in list(qe.index)[:5]:
+                            labels.append(str(idx))
+
+            return {
+                "quarterly_revenue": revenue,
+                "quarterly_operating_income": operating_income,
+                "quarterly_eps": eps,
+                "quarter_labels": labels,
+            }
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "yfinance_quarterly_fetch_failed", ticker=yf_ticker, error=str(e)
+            )
+            return empty_result
