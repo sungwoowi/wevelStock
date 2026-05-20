@@ -24,6 +24,7 @@ from typing import Any
 import yaml
 
 from collectors.charts import build_chart_data, render_chart_data_md
+from collectors.fundamentals import get_fundamentals, render_fundamental_data_md
 from collectors.snapshot import build_market_snapshot, render_snapshot_md
 from core.knowledge.compose import build_pipeline_prompt
 from core.llm.client import call_llm, call_llm_stream
@@ -50,6 +51,7 @@ class AnalystSpec:
     temperature: float
     response_rules: str | None
     reads_chart_data: bool = False  # INFRA-CHART-DATA-001 — stock_analyst 만 True
+    reads_fundamental_data: bool = False  # INFRA-FUNDAMENTAL-DATA-001 — stock_analyst 만 True
 
 
 @dataclass
@@ -89,6 +91,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         temperature=float(llm_cfg.get("temperature", 0.4)),
         response_rules=raw.get("response_rules"),
         reads_chart_data=bool(raw.get("reads_chart_data", False)),
+        reads_fundamental_data=bool(raw.get("reads_fundamental_data", False)),
     )
 
 
@@ -182,6 +185,32 @@ for _n, _t in KR_NAME_TO_TICKER.items():
     # 중복 ticker 의 경우 첫 등장만 (우선순위). 정식 한글명 선호.
     if _t not in KR_TICKER_TO_NAME:
         KR_TICKER_TO_NAME[_t] = _n
+
+
+# KOSDAQ ticker set (시총 상위 — yfinance 의 .KQ suffix 매핑용).
+# 그 외 = KOSPI (.KS) 기본 가정. fundamental fetch 시 market 결정 base.
+KOSDAQ_TICKERS: set[str] = {
+    "247540",  # 에코프로비엠
+    "086520",  # 에코프로
+    "196170",  # 알테오젠
+    "091990",  # 셀트리온헬스케어
+    "028300",  # HLB
+    "058470",  # 리노공업
+    "042700",  # 한미반도체
+    "277810",  # 레인보우로보틱스
+    "035900",  # JYP Ent.
+}
+
+
+def market_for_ticker(ticker: str) -> str:
+    """6자리 한국 ticker → market suffix ("KS" 또는 "KQ").
+
+    KOSDAQ_TICKERS 에 포함되면 KQ, 그 외는 KS (KOSPI 기본 가정).
+    미주 종목은 별도 호출 경로 (현재 미지원).
+    """
+    if ticker in KOSDAQ_TICKERS:
+        return "KQ"
+    return "KS"
 
 
 def _normalize_name(s: str) -> str:
@@ -286,6 +315,77 @@ async def _maybe_build_chart_data_md(
     }
 
 
+async def _maybe_build_fundamental_data_md(
+    spec: AnalystSpec, target_ticker: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """INFRA-FUNDAMENTAL-DATA-001 — reads_fundamental_data + target_ticker 충족 시 fundamental_data_md 산출.
+
+    target_ticker = 6자리 ticker 또는 한글 종목명 모두 허용 (resolve_ticker 자동 매핑).
+    KOSDAQ_TICKERS 포함 시 market="KQ", 그 외 "KS".
+
+    Returns:
+        (fundamental_data_md, fundamental_meta). md=None 이면 metadata 만 base dict.
+    """
+    base_meta: dict[str, Any] = {
+        "fundamental_source": None,
+        "fundamental_fetched_at": None,
+        "fundamental_age_seconds": None,
+        "fundamental_failures": [],
+        "fundamental_quarter_count": None,
+        "fundamental_ratios_count": None,
+        "fundamental_ticker_used": None,
+    }
+    if not spec.reads_fundamental_data:
+        return None, base_meta
+    if not target_ticker or not target_ticker.strip():
+        base_meta["fundamental_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    resolved_ticker, display_name = resolve_ticker(target_ticker)
+    if resolved_ticker is None:
+        base_meta["fundamental_ticker_used"] = target_ticker
+        base_meta["fundamental_failures"] = [
+            f"ticker_resolve_failed:{target_ticker}"
+        ]
+        return None, base_meta
+
+    market = market_for_ticker(resolved_ticker)
+    try:
+        f = await get_fundamentals(resolved_ticker, market=market)
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "fundamental_data_inject_failed",
+            ticker=resolved_ticker,
+            error=str(e),
+        )
+        base_meta["fundamental_ticker_used"] = resolved_ticker
+        base_meta["fundamental_failures"] = [
+            f"get_fundamentals:{type(e).__name__}"
+        ]
+        return None, base_meta
+
+    if f is None:
+        base_meta["fundamental_ticker_used"] = resolved_ticker
+        base_meta["fundamental_failures"] = ["no_fundamental_data"]
+        return None, base_meta
+
+    ratios_count = sum(
+        1 for v in (
+            f.eps_ttm, f.pe_ratio, f.roe, f.operating_margin, f.debt_to_equity
+        ) if v is not None
+    )
+    fund_md = render_fundamental_data_md(f, name=display_name)
+    return fund_md, {
+        "fundamental_source": f.source,
+        "fundamental_fetched_at": f.fetched_at_iso,
+        "fundamental_age_seconds": max(0, int(time.time() - f.fetched_at)),
+        "fundamental_failures": list(f.failures),
+        "fundamental_quarter_count": len(f.quarter_labels),
+        "fundamental_ratios_count": ratios_count,
+        "fundamental_ticker_used": f.ticker,
+    }
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -326,6 +426,9 @@ async def run_analyst(
     market_snapshot_md = render_snapshot_md(snapshot)
 
     chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+    fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
+        spec, target_ticker
+    )
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -338,6 +441,7 @@ async def run_analyst(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         chart_data_md=chart_data_md,
+        fundamental_data_md=fundamental_data_md,
         response_rules=spec.response_rules,
     )
 
@@ -396,6 +500,7 @@ async def run_analyst(
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
         **chart_meta,
+        **fundamental_meta,
     }
 
     log.info(
@@ -450,6 +555,9 @@ async def run_analyst_stream(
     market_snapshot_md = render_snapshot_md(snapshot)
 
     chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+    fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
+        spec, target_ticker
+    )
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -462,6 +570,7 @@ async def run_analyst_stream(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         chart_data_md=chart_data_md,
+        fundamental_data_md=fundamental_data_md,
         response_rules=spec.response_rules,
     )
 
@@ -545,6 +654,7 @@ async def run_analyst_stream(
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
         **chart_meta,
+        **fundamental_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 

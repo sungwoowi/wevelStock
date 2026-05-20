@@ -16,6 +16,11 @@ reads:
 # 본 분석가만 True (다른 분석가는 default False).
 reads_chart_data: true
 
+# INFRA-FUNDAMENTAL-DATA-001 구현 후 활성화 — `_maybe_build_fundamental_data_md` 가 yfinance
+# Default 8 필드 (TTM 5 ratio + 분기 5분기) 의 [5] 블록 주입. F5·F2 정상 발행 기반.
+# 본 분석가만 True (다른 분석가는 default False).
+reads_fundamental_data: true
+
 # 이 분석가가 받을 카테고리 화이트리스트.
 # `<dept>/<category>` 형식. 비우면 reads dept 전체.
 # ANALYST-PERSONAS-001 v2 § canon_categories 잠정 매핑 표 정식 채택 — 종목분석부 5 카테고리 전체.
