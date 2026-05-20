@@ -22,9 +22,11 @@ canon_categories:
 
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 # 결정론 강화 위해 temperature 낮춤 (0.4) — 점수 산출 + verdict 매핑 안정성 우선.
+# max_tokens 4000 → 6000 (2026-05-21 cycle 11 정정) — 격자 + 후보 listing + 자연어 본문 합계
+# 증가 시 응답 끝 잘림 해소. cycle 10.5 stock_analyst 와 동일 패턴.
 llm:
   model: null            # 예: "claude-sonnet-4-5", "claude-opus-4-7"
-  max_tokens: 4000
+  max_tokens: 6000
   temperature: 0.4
 
 # 응답 규칙 — build_pipeline_prompt 의 response_rules 인자로 주입.

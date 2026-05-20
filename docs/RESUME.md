@@ -9,49 +9,49 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **MS3 완전 도달 ✨ 검증 성공** (cycle 10.5, 2026-05-21). cycle 10 구현 풀세트 + production smoke webapp 호출 시연 정합:
-- `prompt 33,983 chars` (cycle 6 ~31K + fundamental_data_md [5] ~3K) ✓
-- F2 = 양호 (ROE 18.9% / Op.Margin 42.8% / Debt/Eq 5.8%) ← `fundamental_data_md [5]` TTM 5 ratio read ✓
-- F5 = 가속 (매출 QoQ +42.7% / YoY +69.2%) ← `fundamental_data_md [5]` 분기 QoQ·YoY read ✓
-- F1 = valid (chart_data_md [4]) ✓
-- 격자 [1] Quality Grid v4 양식 정확 / cited 풀이 v3.1 (chart+fundamental 양쪽 출처) ✓
-- verdict = inconclusive + confidence 65 = v4 매핑 정합 (α + F3 결측 → 50-70)
+**현재 위치**: **9 분석가 풀세트 production 검증 완료 ✨ + Track Selector 양 트랙 시연 정합** (cycle 11, 2026-05-21). MS3 (cycle 10.5) + 자료 0 시드 5 분석가 + Track A·B 풀세트 = production 단위 검증 베이스라인 확보:
 
-**MS3 완전 도달 = 의도된 동작 100% 정합**. verdict = confirmed_high_quality 받으려면 α 산출 (`WAVE-ALPHA-001`) + F3 발행 (flow_analyzer 동시) 필요 = 본 cycle 범위 밖.
+- **5 분석가 호출** (~$0.005 / ~57s): market_state_analyzer (unknown) / stock_picker (점수 null) / trading_journalist (거부) / flow_analyzer (insufficient_data) / news_curator (자가 진단 거부)
+- **5축 검증 100% 정합 (5/5)**: boundary + 환각 가드 + verdict-confidence 매핑 + StandardOutput JSON 계약 + cited v3.1 (단 거부 응답 2건은 풀이 누락)
+- **boundary 침범 시나리오 2 케이스 정합**: market_state ← 종목 매수가 / flow_analyzer ← 시장 체제 → 위임 권고 + 자가 추정 거부
+- **Track Selector 양 트랙 시연**: Track A (long: 005930) verdict=wait (scores 0/6 missing) / Track B (swing: 005930) verdict=wait (scores 0/5 missing) → 분석가 점수 부재 → 매매 직전 3초 체크리스트 + 운용 안전핀 인용 → wait 권고 정합
 
-**cycle 10.5 자율 정정 1건**: stock_analyst manifest max_tokens 4500 → 6000 (응답 JSON 끝 잘림 해소).
+**cycle 11 자율 정정 1건**: stock_picker manifest max_tokens 4000 → 6000 (cycle 10.5 stock_analyst 패턴 1:1 미러).
 
-**발견 부채 3건 (백로그)**:
-1. **yfinance EPS TTM·PE = N/A** (한국 종목 info 불완전) — DART Phase 2 `INFRA-FUNDAMENTAL-CROSS-VALIDATE-001` 또는 다른 endpoint 보완
-2. **응답 max_tokens 4500 잘림** — cycle 10.5 에서 6000 으로 정정 ✓
-3. **α = null SLOT S1** — `WAVE-ALPHA-001` 후속 (기존 백로그)
+**발견 부채 4건 (RESUME Top 3 우선순위 변경 권유)**:
+1. **snapshot 데이터 미주입 = 본격 판정 차단 (최우선 부채, Top 1 진입 차단점)** — 5 분석가 모두 snapshot 부족으로 본격 판정 불가. **`INFRA-SNAPSHOT-EXTEND-001`** 가칭 신설 권유.
+2. **stock_picker max_tokens 잘림** — cycle 11 6000 정정 완료 ✓
+3. **거부 응답 cited v3.1 룰 명확화** — 9 분석가 표준 룰 정의 (가벼운 SPEC `PERSONA-REFUSAL-CITED-RULE-001` 가칭).
+4. **news_curator prompt 32,871 chars** — 다른 분석가 2배, 페르소나 슬림화 후보 (NEWS-SOURCE-001 SPEC 진행 시 동시).
 
-**마지막 작업일**: 2026-05-21 (cycle 10.5 MS3 검증 + 자율 정정)
-**마지막 세션 로그**: [2026-05-21_ms3-production-smoke-success.md](c_worked/2026-05-21_ms3-production-smoke-success.md) (MS3 시연 검증).
-**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = 본 commit + push 진행.
+**SLOT S2 결정**: news_curator 자료원 = Perplexity MCP 기본 + 유튜브 요약 채널 + 시간축 라벨링 + 학습부 DB + UX/UI = 대규모 후속 SPEC (`NEWS-SOURCE-001` 가칭). 메모리 `project_news_source_decision.md` 신규.
+
+**마지막 작업일**: 2026-05-21 (cycle 11 자료 0 시드 5 분석가 + Track Selector 풀세트 production 검증)
+**마지막 세션 로그**: [2026-05-21_seed-analysts-production-verification.md](c_worked/2026-05-21_seed-analysts-production-verification.md).
+**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = `ce084b7`. cycle 11 = 본 commit + push 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3)
+## 🎯 다음에 할 일 (Top 3) — cycle 11 발견으로 우선순위 변경 권유
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 첫 본격 사이클 ✨
-- **왜**: **MS3 완전 도달 ✨ 검증 성공 (cycle 10.5, 2026-05-21)** → production UX 자연 진입 시점. cycle 6.5 의 종목명 매핑 35종 + ChatPane 분할은 첫 시동에 불과. 본질 = 하나의 LLM 채팅창, 백단 0 노출 (Layer 토글·agent_id·target·track 0). 자연어 → 자동 라우팅 → 종합 답변.
-- **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
-- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 양쪽 권고 종합).
+### 1. `INFRA-SNAPSHOT-EXTEND-001` SPEC 신설 + 구현 (~1.5 세션) — cycle 11 발견 차단점 해소 ✨
+- **왜**: **cycle 11 production 검증 결과 발견된 본격 판정 차단점**. 5 분석가 모두 snapshot 데이터 부재로 unknown/insufficient_data/점수 null 발행 = 9 분석가 풀세트가 production 진정 판정 도달 X. Track Selector 가 항상 wait. **Top 1 (production UX, 옛 Top 1) 의 차단점**: UX 라우팅 받은 분석가가 모두 데이터 부족으로 무의미한 답변 발행 시 사용자가 받는 답변이 무의미.
+- **범위**: `/spec-interview` 5 라운드 면담 → collectors/snapshot.py 보강 (지수 위계·등락 추세·breadth·거래량 / 섹터 RS·수급망·정배열·CAN SLIM 7축 / 5 주체 수급) + 4~5 collector 신규/보강 + 멱등성·시점 일관성 패턴 + 테스트.
+- **예상 산출**: 5 분석가 본격 판정 가능 → Track Selector verdict=ok 발행 가능 → 옛 Top 1 (UX) 진입 답변 의미 회복.
 
-### 2. 자료 0 시드 5 분석가 페르소나 풀세트 production 검증 (~1.5 세션)
-- **왜**: market_state_analyzer / stock_picker / trading_journalist / flow_analyzer / news_curator 5명은 cycle 2 에서 페르소나 양식만 작성됨. production 호출 풀세트 검증 0 = boundary 침범 / 환각 가드 / cited 풀이 양식 실 작동 미검증. MS3 완전 도달 후 본격 진입 권유.
-- **범위**: 5명 각 production 호출 1~2 회 (~$0.01 합산) + boundary 침범 시나리오 검증 + news_curator SLOT S2 자료원 결정 (Perplexity MCP vs 직접 수집). 발견 부채는 마이크로 정정 사이클로.
-- **예상 산출**: 9 분석가 풀세트 production 검증 완료 + Track Selector 양 트랙 통합 시연 가능.
-
-### 3. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
-- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재는 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성.
+### 2. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
+- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. stock_analyst 만 영향, 다른 분석가와 독립.
 - **범위**: `/spec-interview` 5 라운드 면담 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 자료 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
 - **예상 산출**: α 값 정상 발행 → verdict=confirmed_* 도달 → 다음 MS4 (실 매매 시연) 진입 베이스라인.
 
-(추가 백로그: **자료 0 시드 5 분석가 페르소나 v2 완성 후 풀세트 production 검증** (현재 자료 있는 3명 + 자료 0 시드 5명 작성됨, news_curator SLOT S2 자료원 결정 필요) / **Layer 4 계좌관리자 1+ N** (M5, 계좌 4개 자산배분) / **Layer 5 회고분석가** (M4, `RETROSPECT-ANALYST-001` 본체, PROPOSAL 발행) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어) / **INFRA-US-MACRO-SNAPSHOT-001** (yfinance/FRED 미 매크로) / **WAVE-ALPHA-001** (α 공식 canon + scoring.py alpha 본체 정식 확정) / **INFRA-RELIABILITY-VALIDATOR-001** (Layer 2.5/3.5 Haiku 검증, M2) / **scoring.py s_score·buy_score·alpha 정식 가중치** (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
+### 3. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 본격 사이클 (옛 Top 1, snapshot extend 후 자연 진입)
+- **왜**: cycle 11 발견으로 **Top 3 강등 권유** — snapshot extend (Top 1) 해소 후 진입이 자연. snapshot 데이터 부재 상태에서 UX 만들면 답변이 항상 wait/unknown 으로 무의미.
+- **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
+- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 양쪽 권고 종합 + snapshot 풀세트 위에서 의미 있는 답변).
+
+(추가 백로그: **`NEWS-SOURCE-001` SPEC 신설** (가칭, news_curator SLOT S2 해소 — Perplexity MCP + 유튜브 요약 + 시간축 라벨링 + 학습부 DB + UX/UI, 대규모 후속) / **`PERSONA-REFUSAL-CITED-RULE-001` SPEC 신설** (가칭, 거부 응답 cited v3.1 룰 9 분석가 표준 룰, 가벼운 SPEC) / **news_curator persona 슬림화** (prompt 32K → 17K 목표, NEWS-SOURCE-001 진행 시 동시) / **Layer 4 계좌관리자 1+ N** (M5, 계좌 4개 자산배분) / **Layer 5 회고분석가** (M4, `RETROSPECT-ANALYST-001` 본체, PROPOSAL 발행) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어) / **INFRA-US-MACRO-SNAPSHOT-001** (yfinance/FRED 미 매크로) / **INFRA-RELIABILITY-VALIDATOR-001** (Layer 2.5/3.5 Haiku 검증, M2) / **scoring.py s_score·buy_score·alpha 정식 가중치** (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
 ---
 
