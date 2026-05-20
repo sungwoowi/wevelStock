@@ -15,20 +15,27 @@ provider 와 target 은 conversation 단위 락 — `/target` 명령으로만 �
 
 JSONL 보관 위치: data/strategist_queries/<strategist_id>/<YYYYMMDD-HHMMSS>.jsonl
 한 파일 = 한 conversation, 한 줄 = 한 turn (user + assistant + metadata + target).
+
+INFRA-RUNTIME-EFFICIENCY-001 v3 patch (cycle 7): in-process `run_strategist` 가 아니라
+`WEVELSTOCK_SERVER_URL` (default `http://127.0.0.1:8000`) 의
+`POST /api/strategists/{id}/chat` 으로 HTTP 호출. 서버 안 BGE-m3 1 회 로딩 재사용.
+chat_analyst 패턴 (cycle 4) 1:1 미러 + `/target` 명령 보존.
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from core.strategist import StrategistNotFoundError, run_strategist
+import httpx
 
 PROVIDER_CHOICES = ["gemini", "claude_code", "anthropic", "mock"]
 
+# Windows 콘솔 cp949 함정 회피. stdin 도 utf-8 강제 (사용자가 콘솔에서 한국어 직접 입력 시 필수).
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 if hasattr(sys.stderr, "reconfigure"):
@@ -38,12 +45,25 @@ if hasattr(sys.stdin, "reconfigure"):
 
 
 def _strip_surrogates(text: str) -> str:
+    """Surrogate 가 남으면 utf-8 인코딩 실패. 안전하게 제거."""
     return text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 QUERIES_DIR = REPO_ROOT / "data" / "strategist_queries"
-CONTEXT_LIMIT_TOKENS = 200_000
+CONTEXT_LIMIT_TOKENS = 200_000  # Sonnet 4.6 기본. Opus 1M 모델 사용 시 사용자가 의식.
+REQUEST_TIMEOUT_SECONDS = 180.0
+
+
+def _server_base_url() -> str:
+    return os.environ.get("WEVELSTOCK_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def _conv_path(strategist_id: str, started_at: datetime) -> Path:
@@ -105,11 +125,38 @@ def _format_metadata(meta: dict, cumulative_in: int, cumulative_out: int) -> str
 
 
 def _read_user_input() -> str | None:
+    """공백 줄·EOF 구분. 사용자가 빈 줄만 누르면 다시 prompt."""
     try:
         line = input("> ")
     except EOFError:
         return None
     return _strip_surrogates(line)
+
+
+async def _post_chat(
+    client: httpx.AsyncClient,
+    strategist_id: str,
+    messages: list[dict],
+    *,
+    target: str,
+    provider: str | None,
+) -> tuple[int, dict]:
+    """server 호출. 반환 = (status_code, body_dict)."""
+    base_url = _server_base_url()
+    url = f"{base_url}/api/strategists/{strategist_id}/chat"
+    payload: dict = {
+        "messages": messages,
+        "target": target,
+        "include_memory": True,
+    }
+    if provider:
+        payload["provider"] = provider
+    resp = await client.post(url, json=payload)
+    try:
+        body = resp.json()
+    except Exception:  # noqa: BLE001
+        body = {"raw": resp.text}
+    return resp.status_code, body
 
 
 async def _chat_loop(
@@ -120,11 +167,12 @@ async def _chat_loop(
 ) -> int:
     started_at = datetime.now()
     path = _conv_path(strategist_id, started_at)
+    base_url = _server_base_url()
 
     print(
-        f"=== chat with {strategist_id} (target={target}, provider={provider or 'auto'}) ==="
+        f"=== chat with {strategist_id} (target={target}, provider={provider or 'auto'}, server={base_url}) ==="
     )
-    print(f"saving to: {path.relative_to(REPO_ROOT)}")
+    print(f"saving to: {_display_path(path)}")
     print("commands: /exit, /clear, /save, /target <ticker>\n")
 
     messages: list[dict] = []
@@ -132,81 +180,103 @@ async def _chat_loop(
     cumulative_in = 0
     cumulative_out = 0
 
-    while True:
-        line = _read_user_input()
-        if line is None:
-            print("\n(EOF — 종료)")
-            break
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        while True:
+            line = _read_user_input()
+            if line is None:
+                print("\n(EOF — 종료)")
+                break
 
-        stripped = line.strip()
-        if not stripped:
-            continue
+            stripped = line.strip()
+            if not stripped:
+                continue
 
-        if stripped == "/exit":
-            print("(/exit — 종료)")
-            break
-        if stripped == "/clear":
-            messages = []
-            print(
-                f"(messages 리셋. 누적 토큰은 유지: {cumulative_in:,}/{cumulative_out:,})"
+            if stripped == "/exit":
+                print("(/exit — 종료)")
+                break
+            if stripped == "/clear":
+                messages = []
+                print(
+                    f"(messages 리셋. 누적 토큰은 유지: {cumulative_in:,}/{cumulative_out:,})"
+                )
+                continue
+            if stripped == "/save":
+                print(f"(현재까지 {turn} turn 저장됨: {_display_path(path)})")
+                continue
+            if stripped.startswith("/target "):
+                new_target = stripped.split(" ", 1)[1].strip()
+                if new_target:
+                    target = new_target
+                    print(f"(target 변경 → {target}. 다음 turn 부터 분석가 점수 재조회)")
+                else:
+                    print(f"(target 인자 부재. 현재 target={target} 유지)")
+                continue
+
+            messages.append({"role": "user", "content": stripped})
+
+            try:
+                status, body = await _post_chat(
+                    client, strategist_id, messages, target=target, provider=provider
+                )
+            except httpx.ConnectError:
+                print(
+                    f"[error] WevelStock 서버에 연결할 수 없습니다 ({base_url}).\n"
+                    f"        다른 터미널에서 'just server' 실행 후 다시 시도하세요."
+                )
+                messages.pop()
+                return 3
+            except httpx.ReadTimeout:
+                print(
+                    f"[error] 응답 대기 시간 초과 ({REQUEST_TIMEOUT_SECONDS:.0f}s). "
+                    f"서버가 BGE-m3 로딩 중일 수 있습니다."
+                )
+                messages.pop()
+                continue
+
+            if status == 404:
+                detail = body.get("detail", str(body))
+                print(f"[error] {detail}")
+                messages.pop()
+                return 2
+            if status != 200:
+                detail = body.get("detail", str(body))
+                print(
+                    f"[error] LLM 호출 실패 (status {status}, provider={provider or 'auto'}): {detail}"
+                )
+                messages.pop()
+                continue
+
+            assistant_text = body.get("text", "") or "(empty response)"
+            metadata = body.get("metadata", {})
+            messages.append({"role": "assistant", "content": assistant_text})
+            turn += 1
+            cumulative_in += int(metadata.get("tokens_in", 0))
+            cumulative_out += int(metadata.get("tokens_out", 0))
+
+            print()
+            print(assistant_text)
+            print()
+            print(_format_metadata(metadata, cumulative_in, cumulative_out))
+            print()
+
+            _save_turn(
+                path,
+                {
+                    "turn": turn,
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "user": stripped,
+                    "target": target,
+                    "assistant": assistant_text,
+                    "metadata": metadata,
+                },
             )
-            continue
-        if stripped == "/save":
-            print(f"(현재까지 {turn} turn 저장됨: {path.relative_to(REPO_ROOT)})")
-            continue
-        if stripped.startswith("/target "):
-            new_target = stripped.split(" ", 1)[1].strip()
-            if new_target:
-                target = new_target
-                print(f"(target 변경 → {target}. 다음 turn 부터 분석가 점수 재조회)")
-            else:
-                print(f"(target 인자 부재. 현재 target={target} 유지)")
-            continue
-
-        messages.append({"role": "user", "content": stripped})
-        try:
-            resp = await run_strategist(
-                strategist_id, messages, target=target, provider=provider
-            )
-        except StrategistNotFoundError as e:
-            print(f"[error] {e}")
-            messages.pop()
-            return 2
-        except Exception as e:  # noqa: BLE001
-            print(f"[error] LLM 호출 실패 (provider={provider or 'auto'}): {e}")
-            messages.pop()
-            continue
-
-        assistant_text = resp.text or "(empty response)"
-        messages.append({"role": "assistant", "content": assistant_text})
-        turn += 1
-        cumulative_in += int(resp.metadata.get("tokens_in", 0))
-        cumulative_out += int(resp.metadata.get("tokens_out", 0))
-
-        print()
-        print(assistant_text)
-        print()
-        print(_format_metadata(resp.metadata, cumulative_in, cumulative_out))
-        print()
-
-        _save_turn(
-            path,
-            {
-                "turn": turn,
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "user": stripped,
-                "target": target,
-                "assistant": assistant_text,
-                "metadata": resp.metadata,
-            },
-        )
 
     if turn == 0 and path.exists() and path.stat().st_size == 0:
         path.unlink()
         print("(빈 대화 — 파일 삭제)")
     elif turn > 0:
         print(
-            f"\nsaved: {path.relative_to(REPO_ROOT)} ({turn} turn{'s' if turn != 1 else ''}, "
+            f"\nsaved: {_display_path(path)} ({turn} turn{'s' if turn != 1 else ''}, "
             f"cumulative {cumulative_in + cumulative_out:,} tokens)"
         )
     return 0
@@ -215,7 +285,7 @@ async def _chat_loop(
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="chat_strategist",
-        description="전략가와 멀티턴 REPL 대화. provider·target 은 conversation 단위 락 (/target 명령으로 중 변경 가능).",
+        description="전략가와 멀티턴 REPL 대화 (server 경유). provider·target 은 conversation 단위 락 (/target 명령으로 중 변경 가능).",
     )
     parser.add_argument(
         "strategist_id", help="agents/strategists/<id>/ 디렉토리명 (예: track_a)"

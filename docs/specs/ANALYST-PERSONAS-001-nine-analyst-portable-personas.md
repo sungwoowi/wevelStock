@@ -343,8 +343,8 @@ LLM 응답에 코드 라벨 (`S-Score`, `T-Score`, `α`, `buy_score`, `F-Score`)
 
 | analyst_id | canon_categories (`<dept>/<category>`) |
 |------------|----------------------------------------|
-| `principle_guardian` | `principles/philosophy_seven_commandments`, `principles/trading_doctrine`, `principles/market_regime_rules` |
-| `trader` | `trading/entry_exit`, `trading/position_sizing`, `trading/trading_styles`, `trading/market_regime_response`, `trading/failure_lessons`, `trading/operational_safeguards` |
+| `principle_guardian` | `principles/philosophy_seven_commandments`, `principles/trading_doctrine`, `principles/market_regime_rules`, `trading/operational_safeguards` |
+| `trader` | `trading/entry_exit`, `trading/position_sizing`, `trading/trading_styles`, `trading/market_regime_response`, `trading/failure_lessons` |
 | `market_state_analyzer` | `market_macro/macro_indicators`, `market_macro/regime_signals`, `market_macro/cross_market`, `market_macro/event_response` |
 | `stock_picker` | `stock_selection/sector_rotation`, `stock_selection/momentum_leaders`, `stock_selection/theme_play`, `stock_selection/swing_candidates` |
 | `stock_analyst` | `stock-analysis/fundamental_analysis`, `stock-analysis/technical_basics`, `stock-analysis/fractal_wave`, `stock-analysis/log_chart`, `stock-analysis/sector_analysis` |

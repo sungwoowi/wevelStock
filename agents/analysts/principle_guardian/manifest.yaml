@@ -12,14 +12,17 @@ reads:
 
 # 이 분석가가 받을 카테고리 화이트리스트.
 # `<dept>/<category>` 형식. 비우면 reads dept 전체.
-# ANALYST-PERSONAS-001 의 매핑 표 정식 채택 — 원칙부 3 카테고리.
-# OS (operational_safeguards) 는 trading dept 위치이므로 canon_categories 에 추가 X.
-# 본 persona 본문에서 OS1~OS6 명제 ID 만 정식 도입 (trader 가 자기 dept 자료로 read 한 결과를
-# Layer 3 전략가가 양쪽 verdict 종합 시 cross-agent share 받는 패턴).
+# ANALYST-PERSONAS-001 v2 매핑 표 (cycle 7 정정) — 원칙부 3 카테고리 + trading/operational_safeguards.
+# operational_safeguards canon 파일 위치는 knowledge/canon/trading/operational_safeguards/ 그대로 유지
+# (frontmatter analyst: principle_guardian 와 정합). 본 분석가가 reads 권위. cycle 3 임시 위임
+# 패턴 (본문에서만 OS1~OS6 도입, manifest 에는 미포함) 은 cycle 7 에서 정식 포함으로 정정.
+# 단, reads 는 principles dept 만 — operational_safeguards 는 canon 직접 주입 (load_shared_canon
+# 의 카테고리 화이트리스트 매칭) + dept RAG retrieve 대상은 principles dept 만.
 canon_categories:
   - principles/philosophy_seven_commandments
   - principles/trading_doctrine
   - principles/market_regime_rules
+  - trading/operational_safeguards
 
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 # verdict 산출 = 정량 룰 매칭 결정론 알고리즘이 본질이므로 temperature 낮게 (0.3)

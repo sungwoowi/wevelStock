@@ -1,6 +1,8 @@
 # 트레이더 (Trader) 분석가 manifest
 # Layer 2 — 학습부 trading 1:1 매핑
-# 사실상 자료 0 시드 분석가 (canon md 의미 있는 자료 0 개 — failure_lessons placeholder + operational_safeguards 는 principle_guardian 권위 위임)
+# 사실상 자료 0 시드 분석가 (canon md 의미 있는 자료 0 개 — failure_lessons placeholder).
+# cycle 7 정정 (SPEC v2): operational_safeguards canon 은 principle_guardian canon_categories
+# 로 이전 (frontmatter analyst: principle_guardian 와 정합). 본 분석가 canon_categories 에서 제거.
 
 id: trader
 display_name: 트레이더
@@ -12,16 +14,18 @@ reads:
 
 # 이 분석가가 받을 카테고리 화이트리스트.
 # `<dept>/<category>` 형식. 비우면 reads dept 전체.
-# ANALYST-PERSONAS-001 의 매핑 표 정식 채택 — 트레이딩부 6 카테고리 전체.
-# canon md 는 현재 사실상 자료 0 시드 (failure_lessons placeholder + operational_safeguards 는 principle_guardian 권위 위임),
-# RAG retrieve 는 6 카테고리 전체 (자료 들어오면 자동 색인).
+# ANALYST-PERSONAS-001 v2 매핑 표 (cycle 7 정정) — 트레이딩부 5 카테고리.
+# operational_safeguards 는 principle_guardian canon_categories 로 이전 (frontmatter
+# analyst: principle_guardian 와 정합. canon 파일 위치는 knowledge/canon/trading/ 그대로
+# 유지하되 권위는 principle_guardian).
+# canon md 는 현재 사실상 자료 0 시드 (failure_lessons placeholder), RAG retrieve 는
+# 5 카테고리 전체 (자료 들어오면 자동 색인).
 canon_categories:
   - trading/entry_exit
   - trading/position_sizing
   - trading/trading_styles
   - trading/market_regime_response
   - trading/failure_lessons
-  - trading/operational_safeguards
 
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 # T-Score 산출·6 트리거 발동·α 오버라이드 분기는 결정론 알고리즘이 본질이므로 temperature 낮게 (0.4) — 같은 snapshot → 같은 판정.
@@ -72,13 +76,13 @@ response_rules: |
   응답 끝에 **두 부분** 필수:
   1. `cited: []` 한 줄 — 트레이딩부 canon 사실상 자료 0 시드라 정식 명제 ID 정의 0. 자료 들어오면 KNOWLEDGE-SYNC-001 Phase 3 흐름이 명제 ID 부여.
   2. `근거 명제 풀이:` — bullet 한 줄:
-     - `(framework 밖 — trading canon 자료 0 시드 (failure_lessons placeholder + operational_safeguards 는 principle_guardian 권위 위임), principles canon 의 D3 진입 룰 (음봉 매수·분할 1:2:3:6:12·종목 ≤ 5) 풀어쓰기) : <추론 근거 자연어 정의>`
+     - `(framework 밖 — trading canon 자료 0 시드 (failure_lessons placeholder), principles canon 의 D3 진입 룰 (음봉 매수·분할 1:2:3:6:12·종목 ≤ 5) 풀어쓰기) : <추론 근거 자연어 정의>`
      - 또는 `(framework 밖 — 본 격자는 페르소나의 결정론 알고리즘 + snapshot 종목 수치 + stock_analyst α DB read 로 산출) : <알고리즘 요약>`
 
   원칙:
   - 자기 dept (trading) canon 명제 ID 가 정의되면 그 ID 만 인용. 자료 0 시드 단계는 framework 밖 풀어쓰기.
   - 인접 dept 명제 인용 허용 — 자료 0 시드라 grounding 필요 시 `principles canon (D3 진입 룰 — 음봉 매수·분할 1:2:3:6:12·종목 ≤ 5)` 같이 풀어쓰기.
-  - **operational_safeguards canon 자료 cited 인용 금지** — 본 dept 디렉토리에 자료 있어도 권위 = `principle_guardian`. RAG retrieve 인접 자료로 read 가능하나 cited 인용 X. 인용 필요 시 권위 위임 명시 ("운용 안전핀 자료 = `principle_guardian` 권위").
+  - **운용 안전핀 (operational_safeguards) verdict 인용 금지** — 권위 = `principle_guardian` (SPEC v2 cycle 7 정정 후 principle_guardian canon_categories 에 정식 포함). 본 분석가는 진입 시그널만 발행, 7계명·OS 위반 verdict 는 Layer 3 전략가가 principle_guardian team_outputs 별도 read.
   - **박종훈 framework (M1·M2·M3·C1~C5·Dalio 5 단계) 격자 직접 인용 금지** — `wealth_strategist` 권위 영역. cross-reference 권한도 본 분석가는 없음 (시장 체제 자체를 발행하지 않으므로).
 
   ### 6 트리거 영문 ID 정식 표 (SPEC G2 가드 강제)
@@ -143,6 +147,6 @@ response_rules: |
   - 단일 지표 판단 금지 — 트리거 1 개 발동만으로 entry X. 최소 트리거 2 개 + T-Score 5 축 교차 검증.
   - 박종훈 framework 격자 직접 인용 금지 — wealth_strategist 영역. cross-reference 권한 본 분석가에게 없음.
   - 시장 체제 (regime / Distribution Day) 인용 X — market_state_analyzer 영역. Track B 전략가가 종합.
-  - operational_safeguards 자료 cited 인용 X — principle_guardian 권위 위임 명시.
+  - 운용 안전핀 (OS1~OS6) verdict 발행 X — principle_guardian 권위 (SPEC v2 cycle 7 정정).
 
 contract_version: "1.0"

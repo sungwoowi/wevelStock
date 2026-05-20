@@ -1,21 +1,21 @@
 """ANALYST-PERSONAS-001 v2 — 자료 있는 3 분석가 페르소나·매니페스트 양식 검증.
 
 대상 3 분석가 (2026-05-19 3 subagent 병렬 dispatch 작성):
-- `principle_guardian` (자료 있음 — 3 정제본: 7계명·5대 심법·시장 국면별 트레이딩 기준)
-- `trader` (자료 사실상 0 시드 — failure_lessons placeholder, operational_safeguards 는 principle_guardian 권위)
+- `principle_guardian` (자료 있음 — 4 자료원: 7계명·5대 심법·시장 국면별 트레이딩 기준·운용 안전핀 (cycle 7 정정 후 canon_categories 정식 포함))
+- `trader` (자료 사실상 0 시드 — failure_lessons placeholder; operational_safeguards 는 cycle 7 정정으로 principle_guardian 으로 이전)
 - `stock_analyst` (자료 0 시드 + INFRA-CHART-DATA-001 미비 = 환각 우려 2 중)
 
 검증:
 - manifest 로드 (load_analyst_spec × 3)
 - 8 섹션 portable 양식
-- canon_categories SPEC v2 § 매핑 표 정합 (3·6·5 카테고리)
+- canon_categories SPEC v2 § 매핑 표 정합 (4·5·5 카테고리, cycle 7 정정 후)
 - Track A·B persona reads_analysts 정합 (양쪽 박음 검증)
 - Cross-Agent Boundaries 표 존재
 - 박종훈 framework 직접 인용 금지 가드 (negation 컨텍스트)
 - 한국어 친화 용어 + cited 풀이 v3.1
 - 분석가별 특수 가드:
-  - principle_guardian: 명제 ID C·D·R·OS 정식 도입 + verdict 4종 + 점수 발행 X
-  - trader: 6 트리거 영문 ID 정식 표 (SPEC G2) + α 오버라이드 분기 + α 미발행 fallback (a)/(b)
+  - principle_guardian: 명제 ID C·D·R·OS 정식 도입 + verdict 4종 + 점수 발행 X + canon_categories 의 trading/operational_safeguards 정식 포함
+  - trader: 6 트리거 영문 ID 정식 표 (SPEC G2) + α 오버라이드 분기 + α 미발행 fallback (a)/(b) + operational_safeguards canon_categories 제외 (principle_guardian 권위 이전)
   - stock_analyst: 환각 가드 2 중 (자료 0 + INFRA 미비) + INFRA 들어오면 정정 trace
 - 본 분석가 권위 한정 명시 (각 분석가 발행 영역 X 명시)
 """
@@ -42,6 +42,7 @@ EXPECTED_CANON_CATEGORIES = {
         "principles/philosophy_seven_commandments",
         "principles/trading_doctrine",
         "principles/market_regime_rules",
+        "trading/operational_safeguards",
     ],
     "trader": [
         "trading/entry_exit",
@@ -49,7 +50,6 @@ EXPECTED_CANON_CATEGORIES = {
         "trading/trading_styles",
         "trading/market_regime_response",
         "trading/failure_lessons",
-        "trading/operational_safeguards",
     ],
     "stock_analyst": [
         "stock-analysis/fundamental_analysis",
@@ -373,14 +373,33 @@ def test_trader_alpha_fallback_branches() -> None:
     assert ("(b)" in text or "(b) 보류" in text), "trader: fallback 분기 (b) 누락"
 
 
-def test_trader_operational_safeguards_delegation() -> None:
-    """trader 의 operational_safeguards 권위 위임 명시 (principle_guardian 권위)."""
-    persona_path = ANALYSTS_DIR / "trader" / "persona.md"
-    text = persona_path.read_text(encoding="utf-8")
+def test_principle_guardian_owns_operational_safeguards() -> None:
+    """cycle 7 SPEC v2 정정: operational_safeguards 권위가 principle_guardian 으로 이전.
 
-    # operational_safeguards 자료의 권위 위임 명시
-    assert "operational_safeguards" in text, "trader: operational_safeguards 자료원 명시 누락"
-    assert "principle_guardian" in text, "trader: principle_guardian 권위 위임 명시 누락"
+    - principle_guardian manifest canon_categories 에 trading/operational_safeguards 정식 포함
+    - principle_guardian persona 의 Knowledge Categories § 에 명시
+    - trader persona 본문에 operational_safeguards 권위 위임 잔재가 정리됨 (canon_categories
+      이전 명시 키워드로만 등장, 단순 "권위 위임" 잔재 X)
+    """
+    # principle_guardian manifest 정식 포함
+    pg_manifest_path = ANALYSTS_DIR / "principle_guardian" / "manifest.yaml"
+    pg_manifest = yaml.safe_load(pg_manifest_path.read_text(encoding="utf-8"))
+    assert "trading/operational_safeguards" in pg_manifest["canon_categories"], (
+        "principle_guardian: trading/operational_safeguards canon_categories 정식 포함 누락"
+    )
+
+    # principle_guardian persona 의 Knowledge Categories § 명시
+    pg_persona = (ANALYSTS_DIR / "principle_guardian" / "persona.md").read_text(encoding="utf-8")
+    assert "trading/operational_safeguards" in pg_persona, (
+        "principle_guardian persona: Knowledge Categories § 에 trading/operational_safeguards 명시 누락"
+    )
+
+    # trader manifest canon_categories 에서 operational_safeguards 제거 확인
+    trader_manifest_path = ANALYSTS_DIR / "trader" / "manifest.yaml"
+    trader_manifest = yaml.safe_load(trader_manifest_path.read_text(encoding="utf-8"))
+    assert "trading/operational_safeguards" not in trader_manifest["canon_categories"], (
+        "trader: operational_safeguards 는 cycle 7 정정 후 principle_guardian 권위 이전 — canon_categories 에서 제거되어야 함"
+    )
 
 
 # ---------------------------------------------------------------------------

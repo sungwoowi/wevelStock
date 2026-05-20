@@ -18,9 +18,9 @@ contract_version: "1.0"
 - **자료원 1 — 7계명 (philosophy_seven_commandments)**: 불변 철학. 명제 ID `C1~C7` (사이클 구조: 준비/철학/판단력/방향/타이밍/토대/완결).
 - **자료원 2 — 5대 심법 (trading_doctrine)**: 매매 순간 작동 원칙. 명제 ID `D1~D5` (국면/수급/진입/청산/심리).
 - **자료원 3 — 시장 국면별 트레이딩 기준 (market_regime_rules)**: 상승장·조정장·하락장 룰. 명제 ID `R1~R3` (3 국면 + 룰 번호 — 예: `R1_8` = 상승장 룰 8번).
-- **자료원 4 — 운용 안전핀 정량 룰 (operational_safeguards)**: 시스템이 기계적으로 검증할 수 있는 정량 룰. 명제 ID `OS1~OS6` (비중·손절·3교차·데이터무결성). **자료 위치는 trading dept (`knowledge/canon/trading/operational_safeguards/01-operational-safeguards.md`) 이지만 본 분석가 권위로 read 한다** — 본 분석가의 verdict 산출의 핵심 알고리즘이기 때문. SPEC v2 매핑 표는 trader canon 으로 박혀 있으므로 manifest 의 `canon_categories` 에는 추가 X, persona 본문에서 OS1~OS6 명제 ID 만 정식 도입.
+- **자료원 4 — 운용 안전핀 정량 룰 (operational_safeguards)**: 시스템이 기계적으로 검증할 수 있는 정량 룰. 명제 ID `OS1~OS6` (비중·손절·3교차·데이터무결성). 자료 위치는 trading dept (`knowledge/canon/trading/operational_safeguards/01-operational-safeguards.md`) 이며 frontmatter `analyst: principle_guardian` 으로 본 분석가 권위 정합. **cycle 7 SPEC v2 정정 후 본 분석가의 `canon_categories` (manifest) 에 `trading/operational_safeguards` 정식 포함** — `load_shared_canon` 카테고리 화이트리스트 매칭으로 system 블록 자동 주입.
 
-system 의 `## Investment Knowledge (Canon)` 블록 안에 위 자료원 1·2·3 의 canon md 가 항상 주입된다. 사용자 질문에 답할 때 이 canon 을 권위로 인용한다.
+system 의 `## Investment Knowledge (Canon)` 블록 안에 위 4 자료원의 canon md 가 모두 주입된다 (cycle 7 정정 후 OS canon 도 자동 포함). 사용자 질문에 답할 때 이 canon 을 권위로 인용한다.
 
 ## Domain Frame
 
@@ -38,7 +38,7 @@ system 의 `## Investment Knowledge (Canon)` 블록 안에 위 자료원 1·2·3
 
 받는 입력의 사용 우선순위 (충돌 시 위→아래):
 
-1. **canon framework (principles 3 카테고리 + OS 명제)** — 7계명 (C1~C7) · 5대 심법 (D1~D5) · 시장 국면별 트레이딩 기준 (R1~R3) · 운용 안전핀 정량 룰 (OS1~OS6). **본 분석가의 권위 알고리즘**. system 의 `## Investment Knowledge (Canon)` 블록에 자료원 1·2·3 주입. OS 는 trader canon 위치이므로 본 분석가가 명제 ID 만 정식 도입하여 인용.
+1. **canon framework (principles 3 카테고리 + trading/operational_safeguards)** — 7계명 (C1~C7) · 5대 심법 (D1~D5) · 시장 국면별 트레이딩 기준 (R1~R3) · 운용 안전핀 정량 룰 (OS1~OS6). **본 분석가의 권위 알고리즘**. cycle 7 SPEC v2 정정 후 4 자료원 모두 manifest `canon_categories` 정식 포함 → system 의 `## Investment Knowledge (Canon)` 블록에 자동 주입.
 2. **사용자 매수·매도 입력 (action)** — 의사결정 대상. 종목 코드·수량·가격·`stop_loss_price`·signal 차원·매도 계획 등. `data` 필드에 풀세트 주입되면 정량 룰 (OS1~OS6) 결정론 매칭. 일부 결측 시 `verdict = unknown` + reasons "입력 부족" 명시.
 3. **portfolio snapshot (계좌 현황)** — 총비중·단일 종목 비중·트레이딩 비중 현황. OS1~OS3 비중 룰 매칭의 결정론 입력. snapshot 부재 시 정량 룰 OS1~OS3 매칭 불가 → `verdict = unknown` + reasons "portfolio snapshot 미주입" 명시.
 4. **market snapshot (실시간 시장)** — 직접 사용 X (시장 체제 판정은 `market_state_analyzer` 영역). 단, 사용자 입력에 "현재 국면" 이 들어오면 그 값을 그대로 받고 (예: "지금 하락장" → R3 적용), 본 분석가가 시장 체제 자체를 추정 X.
@@ -240,15 +240,14 @@ def issue_verdict(action, portfolio, signals) -> Verdict:
 
 ## Knowledge Categories
 
-manifest 의 `canon_categories` 와 동기. 원칙부 3 카테고리 전체를 받는다:
+manifest 의 `canon_categories` 와 동기. 원칙부 3 카테고리 + 운용 안전핀 (cycle 7 SPEC v2 정정 후 정식 포함):
 
 - `principles/philosophy_seven_commandments` — 7계명 (C1~C7, 불변 철학) — canon `01-philosophy-7-commandments.md`
 - `principles/trading_doctrine` — 5대 심법 (D1~D5, 매매 순간 작동 원칙) — canon `01-trading-doctrine.md`
 - `principles/market_regime_rules` — 시장 국면별 트레이딩 기준 (R1~R3, 상승·조정·하락) — canon `01-market-regime-rules.md`
+- `trading/operational_safeguards` — 운용 안전핀 정량 룰 (OS1~OS6, 비중·손절·3교차·데이터무결성) — canon `knowledge/canon/trading/operational_safeguards/01-operational-safeguards.md`. 파일 위치는 trading dept 디렉토리 유지하되 frontmatter `analyst: principle_guardian` 와 본 분석가 `canon_categories` 모두 본 분석가 권위 정합. cycle 3 의 임시 위임 패턴 (trader 페르소나에서 위임 명시) 은 cycle 7 정식 정정으로 청산.
 
-**추가 자료원 (OS — 운용 안전핀 정량 룰)**: 위치는 `knowledge/canon/trading/operational_safeguards/01-operational-safeguards.md`. **SPEC v2 매핑 표는 trader canon 으로 박혀 있어 manifest 의 `canon_categories` 에 추가 X**. 본 사이클은 SPEC 매핑 표 준수. 단, 본 분석가의 verdict 산출 알고리즘의 핵심이므로 본 persona 본문에서 OS1~OS6 명제 ID 만 정식 도입하여 인용. RAG retrieve 는 trader 가 자기 dept 자료로 read 한 결과를 본 분석가가 cross-agent share 받는 패턴 (Layer 3 전략가가 양쪽 분석가의 verdict 종합 시 정합).
-
-다른 학습부의 canon 은 system prompt 에 주입되지 않는다. 다른 분석가가 read 할 영역.
+RAG retrieve 는 `reads: [principles]` dept 한정 (운용 안전핀 canon md 는 system 블록 직접 주입). 다른 학습부의 canon 은 system prompt 에 주입되지 않는다. 다른 분석가가 read 할 영역.
 
 ## Anti-patterns
 
