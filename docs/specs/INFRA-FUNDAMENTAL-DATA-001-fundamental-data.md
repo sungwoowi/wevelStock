@@ -3,8 +3,8 @@ spec_id: INFRA-FUNDAMENTAL-DATA-001
 title: 분기 실적·EPS·매출 추세 fundamental 데이터 인프라 — yfinance Default 8 필드 + DB cache + 주 1회 cron
 team: shared
 type: feature
-status: draft
-version: 1
+status: implemented
+version: 2
 owner: platform
 generates:
   - collectors/fundamentals.py
