@@ -9,45 +9,39 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **9 분석가 풀세트 production 검증 완료 ✨ + Track Selector 양 트랙 시연 정합** (cycle 11, 2026-05-21). MS3 (cycle 10.5) + 자료 0 시드 5 분석가 + Track A·B 풀세트 = production 단위 검증 베이스라인 확보:
+**현재 위치**: **`INFRA-SNAPSHOT-EXTEND-001` SPEC frozen ✨** (cycle 12, 2026-05-21). cycle 11 발견 부채 1 (snapshot 데이터 부재 = 5 분석가 본격 판정 차단점) 해소 SPEC. 5 라운드 면담 결단 5건 박음 + cycle 5/9 패턴 미러 (SPEC frozen 만, 구현 15 단계는 cycle 13).
 
-- **5 분석가 호출** (~$0.005 / ~57s): market_state_analyzer (unknown) / stock_picker (점수 null) / trading_journalist (거부) / flow_analyzer (insufficient_data) / news_curator (자가 진단 거부)
-- **5축 검증 100% 정합 (5/5)**: boundary + 환각 가드 + verdict-confidence 매핑 + StandardOutput JSON 계약 + cited v3.1 (단 거부 응답 2건은 풀이 누락)
-- **boundary 침범 시나리오 2 케이스 정합**: market_state ← 종목 매수가 / flow_analyzer ← 시장 체제 → 위임 권고 + 자가 추정 거부
-- **Track Selector 양 트랙 시연**: Track A (long: 005930) verdict=wait (scores 0/6 missing) / Track B (swing: 005930) verdict=wait (scores 0/5 missing) → 분석가 점수 부재 → 매매 직전 3초 체크리스트 + 운용 안전핀 인용 → wait 권고 정합
+**5 라운드 면담 결단 5건**:
+- **R1 데이터원**: chart_ohlcv (cycle 6) 재사용 = 지수 ticker (KOSPI `0001` / KOSDAQ `1001`) + 14 섹터 ETF 추가 → 시장매크로·섹터 RS 파생 / 수급 60일 = 신규 테이블 `supply_demand_history` + KIS 5주체 EOD fetch / briefing_parts 보조 (intraday 흐름·breadth)
+- **R2 신규 필드 6**: A 시장매크로 4 (`kr_index_hierarchy` / `kr_breadth` / `kr_ma_trend` / `distribution_days`) + B 섹터 RS 1 (`sector_rs` 14 섹터) + C 수급 60일 1 (`kr_supply_60d` agreement_score 포함). 종목 단위 chart_ohlcv read 위임
+- **R3 cron + DB**: 통합 cron 1개 `snapshot_macro_refresh` 평일 18:00 KST + 신규 DB 2 테이블 (`market_macro_snapshot` 일별 + `supply_demand_history` 일별), schema_version 6→7
+- **R4 render + contract**: `[3]` 블록 확장 (기존 8 섹션 + 신규 9·10·11). `market-snapshot-md-v1` 정식 계약 = cycle 1~2 ad-hoc 의 SPEC 그라운딩 = 11 섹션 풀세트
+- **R5 본 사이클 범위**: SPEC frozen 만, 구현 풀세트 = cycle 13 (~2 세션)
 
-**cycle 11 자율 정정 1건**: stock_picker manifest max_tokens 4000 → 6000 (cycle 10.5 stock_analyst 패턴 1:1 미러).
+**산출물**: `docs/specs/INFRA-SNAPSHOT-EXTEND-001-snapshot-extend.md` 신설 (~290줄). frontmatter generates 11 + modifies 8 + depends_on 2 (INFRA-CHART-DATA-001 v2 + ANALYST-PERSONAS-001 v2) + contracts 1. 12 § (목적 / 배경 / 핵심 정의 / Phase 분리 / 명세 14 sub-§ / non-goals 7 / SLOT 5 / 영향 SPEC 4 / 구현 순서 15 단계 / 본 사이클). 코드 변경 0.
 
-**발견 부채 4건 (RESUME Top 3 우선순위 변경 권유)**:
-1. **snapshot 데이터 미주입 = 본격 판정 차단 (최우선 부채, Top 1 진입 차단점)** — 5 분석가 모두 snapshot 부족으로 본격 판정 불가. **`INFRA-SNAPSHOT-EXTEND-001`** 가칭 신설 권유.
-2. **stock_picker max_tokens 잘림** — cycle 11 6000 정정 완료 ✓
-3. **거부 응답 cited v3.1 룰 명확화** — 9 분석가 표준 룰 정의 (가벼운 SPEC `PERSONA-REFUSAL-CITED-RULE-001` 가칭).
-4. **news_curator prompt 32,871 chars** — 다른 분석가 2배, 페르소나 슬림화 후보 (NEWS-SOURCE-001 SPEC 진행 시 동시).
-
-**SLOT S2 결정**: news_curator 자료원 = Perplexity MCP 기본 + 유튜브 요약 채널 + 시간축 라벨링 + 학습부 DB + UX/UI = 대규모 후속 SPEC (`NEWS-SOURCE-001` 가칭). 메모리 `project_news_source_decision.md` 신규.
-
-**마지막 작업일**: 2026-05-21 (cycle 11 자료 0 시드 5 분석가 + Track Selector 풀세트 production 검증)
-**마지막 세션 로그**: [2026-05-21_seed-analysts-production-verification.md](c_worked/2026-05-21_seed-analysts-production-verification.md).
-**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = `ce084b7`. cycle 11 = 본 commit + push 진행.
+**마지막 작업일**: 2026-05-21 (cycle 12 INFRA-SNAPSHOT-EXTEND-001 SPEC frozen)
+**마지막 세션 로그**: [2026-05-21_infra-snapshot-extend-spec.md](c_worked/2026-05-21_infra-snapshot-extend-spec.md).
+**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = `ce084b7`. cycle 11 = `3747a00`. cycle 12 = 본 commit + push 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — cycle 11 발견으로 우선순위 변경 권유
+## 🎯 다음에 할 일 (Top 3) — cycle 12 SPEC frozen 후 cycle 13 구현 진입
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. `INFRA-SNAPSHOT-EXTEND-001` SPEC 신설 + 구현 (~1.5 세션) — cycle 11 발견 차단점 해소 ✨
-- **왜**: **cycle 11 production 검증 결과 발견된 본격 판정 차단점**. 5 분석가 모두 snapshot 데이터 부재로 unknown/insufficient_data/점수 null 발행 = 9 분석가 풀세트가 production 진정 판정 도달 X. Track Selector 가 항상 wait. **Top 1 (production UX, 옛 Top 1) 의 차단점**: UX 라우팅 받은 분석가가 모두 데이터 부족으로 무의미한 답변 발행 시 사용자가 받는 답변이 무의미.
-- **범위**: `/spec-interview` 5 라운드 면담 → collectors/snapshot.py 보강 (지수 위계·등락 추세·breadth·거래량 / 섹터 RS·수급망·정배열·CAN SLIM 7축 / 5 주체 수급) + 4~5 collector 신규/보강 + 멱등성·시점 일관성 패턴 + 테스트.
-- **예상 산출**: 5 분석가 본격 판정 가능 → Track Selector verdict=ok 발행 가능 → 옛 Top 1 (UX) 진입 답변 의미 회복.
+### 1. `INFRA-SNAPSHOT-EXTEND-001` 구현 풀세트 (~2 세션, cycle 13) ✨ — SPEC frozen 직후 구현 진입
+- **왜**: cycle 12 (본 사이클) SPEC frozen 완료. cycle 5/9 패턴 정합 = 다음 사이클 구현 풀세트. 본 인프라 활성화 = market_state_analyzer / stock_picker / flow_analyzer 본격 판정 가능 + Track Selector verdict=ok 가능 + production UX 진입 차단점 해소.
+- **범위**: 15 단계 구현 (DB migration v7 + KIS 지수 chart endpoint 확장 + collectors 3 신규 (market_macro / sector_rs / supply_demand_history) + snapshot.py 통합 + cron `snapshot_macro_refresh` 평일 18:00 KST + render 9~11 섹션 + 25 테스트 케이스 + production smoke). cycle 6 INFRA-CHART-DATA-001 + cycle 10 INFRA-FUNDAMENTAL-DATA-001 패턴 미러.
+- **예상 산출**: 3 분석가 본격 판정 발행 ✨ + Track Selector verdict=ok 가능 + production UX 답변 의미 회복 + 5 분석가 persona 마이크로 정정 (cycle 13 동시).
 
 ### 2. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
-- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. stock_analyst 만 영향, 다른 분석가와 독립.
+- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. stock_analyst 만 영향, snapshot extend 와 독립적으로 진행 가능.
 - **범위**: `/spec-interview` 5 라운드 면담 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 자료 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
 - **예상 산출**: α 값 정상 발행 → verdict=confirmed_* 도달 → 다음 MS4 (실 매매 시연) 진입 베이스라인.
 
-### 3. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 본격 사이클 (옛 Top 1, snapshot extend 후 자연 진입)
-- **왜**: cycle 11 발견으로 **Top 3 강등 권유** — snapshot extend (Top 1) 해소 후 진입이 자연. snapshot 데이터 부재 상태에서 UX 만들면 답변이 항상 wait/unknown 으로 무의미.
+### 3. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 본격 사이클 (snapshot extend 후 자연 진입)
+- **왜**: snapshot extend (Top 1) 해소 후 진입이 자연. snapshot 데이터 부재 상태에서 UX 만들면 답변이 항상 wait/unknown 으로 무의미.
 - **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
 - **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 양쪽 권고 종합 + snapshot 풀세트 위에서 의미 있는 답변).
 
@@ -220,7 +214,12 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-20 cycle 9 — INFRA-FUNDAMENTAL-DATA-001 SPEC 5 라운드 면담)**
+**이번 세션에 굳힌 판단 (2026-05-21 cycle 12 — INFRA-SNAPSHOT-EXTEND-001 SPEC 5 라운드 면담)**
+- **SPEC frozen → 구현 풀세트 2 사이클 분할 패턴 = 3 회 연속 검증 ✨**: cycle 5 (INFRA-CHART-DATA-001) / cycle 9 (INFRA-FUNDAMENTAL-DATA-001) / cycle 12 (INFRA-SNAPSHOT-EXTEND-001) 모두 동일 패턴. ~0.5 세션 SPEC + ~2 세션 구현 분할. 사용자 검토 시간 확보 + 큰 commit 위험 최소. **3 회 누적 검증 = 영구 ritual 격상**. 미래 인프라 SPEC 신설 시 default 분할 패턴.
+- **contract 정식 명문화 = ad-hoc 의 SPEC 그라운딩 패턴**: `market-snapshot-md-v1` 의 본 SPEC 정의 = cycle 1~2 의 ad-hoc 구현 (`render_snapshot_md` 8 섹션) 의 SPEC 그라운딩. 새 SPEC 작성 시 기존 ad-hoc 자산이 있다면 `v1.0 = 현재 풀세트 + 신규 섹션 누적` 형식 권유. `compose.build_pipeline_prompt` 시그니처 변경 X 가 자연 (chart v2 / fundamental v2 와 같은 [N] 블록 신규 추가 패턴 대비, snapshot 은 기존 [3] 블록 확장만).
+- **briefing_parts 활용 본질 = read-only 보조 source 정합**: 본 SPEC 의 정규 DB (`supply_demand_history` 등) + briefing_parts 시계열 차분 = intraday 흐름 보조 (flow_analyzer 자금 유입 속도 0.2 축). retention 90일 한계로 영구 시계열은 별도 DB 가 본질. 단 정규 cron 외 보조 source 로 활용 가능 = 미래 인프라 SPEC 설계 시 "정규 DB + briefing_parts 차분" 이중 활용 패턴 정립.
+
+**직전 세션 판단 (2026-05-20 cycle 9 — INFRA-FUNDAMENTAL-DATA-001 SPEC 5 라운드 면담)**
 - **`/spec-interview` skill ritual = 첫 본격 적용**: cycle 5 의 INFRA-CHART-DATA-001 SPEC 면담은 비공식 진행이었으나 cycle 9 = `/spec-interview` skill 명시 발동 + AskUserQuestion 으로 R1~R5 옵션 제시 + 사용자 결정. 5 라운드 = 1 라운드당 2~3 옵션 + 권장 first option (Recommended). 사용자 시간 부담 최소. 미래 새 SPEC 신설 시 동일 ritual 우선.
 - **SPEC frozen → 구현 풀세트 2 사이클 분할 패턴 정합**: cycle 5 (INFRA-CHART-DATA-001 SPEC frozen, ad6ec07) → cycle 6 (구현 풀세트, 665796f) 패턴이 cycle 9 (INFRA-FUNDAMENTAL-DATA-001 SPEC frozen) → cycle 10 (구현 풀세트 예정) 으로 재현. **SPEC 만 사이클 = ~0.5 세션 / 구현 풀세트 = ~2 세션** 분리가 사용자 검토 시간 확보 + 큰 commit 위험 최소화. 미래 큰 SPEC 신설 시 동일 분할 권유.
 - **chart v3 정정 패턴 → fundamental v4 정정 1:1 미러**: stock_analyst persona 의 환각 가드 해제 패턴이 cycle 6 chart v3 (α·F1·F4 활성화) → cycle 10 fundamental v4 (F5·F2 활성화) 로 동일 트레이스. § Reasoning Doctrine F1~F5 정의 row + § Outputs 격자 [1] Quality Grid + manifest response_rules + reads_* 플래그 = 4 위치 일관 박음. 미래 인프라성 SPEC 의 persona 정정 시 동일 패턴 재사용.
