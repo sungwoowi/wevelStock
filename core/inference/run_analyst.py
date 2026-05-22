@@ -23,6 +23,7 @@ from typing import Any
 
 import yaml
 
+from collectors.anchors import alpha_3tf_metadata, compute_alpha_3tf, render_alpha_3tf_md
 from collectors.charts import build_chart_data, render_chart_data_md
 from collectors.fundamentals import get_fundamentals, render_fundamental_data_md
 from collectors.snapshot import MarketSnapshot, build_market_snapshot, render_snapshot_md
@@ -347,6 +348,53 @@ async def _maybe_build_chart_data_md(
     }
 
 
+async def _maybe_build_alpha_3tf_md(
+    spec: AnalystSpec, target_ticker: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """WAVE-ALPHA-001 — reads_chart_data + target_ticker 충족 시 α 3 timeframe 산출.
+
+    Stock_analyst 만 활성 (reads_chart_data=True). chart_ohlcv 와 같은 OHLCV 를 활용하므로
+    chart_data 와 동일 trigger 로 묶음. 분리 필요 시 manifest flag 신설.
+
+    Returns:
+        (alpha_3tf_md, alpha_meta). md=None 이면 metadata 만 base dict 풀세트.
+    """
+    base_meta: dict[str, Any] = {
+        "alpha_3tf_failures": [],
+        "alpha_3tf_ticker_used": None,
+        "alpha_daily": None,
+        "alpha_weekly": None,
+        "alpha_monthly": None,
+    }
+    if not spec.reads_chart_data:
+        return None, base_meta
+    if not target_ticker or not target_ticker.strip():
+        base_meta["alpha_3tf_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    resolved_ticker, _ = resolve_ticker(target_ticker)
+    if resolved_ticker is None:
+        base_meta["alpha_3tf_ticker_used"] = target_ticker
+        base_meta["alpha_3tf_failures"] = [f"ticker_resolve_failed:{target_ticker}"]
+        return None, base_meta
+
+    try:
+        results = await compute_alpha_3tf(resolved_ticker)
+    except Exception as e:  # noqa: BLE001
+        log.warning("alpha_3tf_inject_failed", ticker=resolved_ticker, error=str(e))
+        base_meta["alpha_3tf_ticker_used"] = resolved_ticker
+        base_meta["alpha_3tf_failures"] = [f"compute_alpha_3tf:{type(e).__name__}"]
+        return None, base_meta
+
+    alpha_md = render_alpha_3tf_md(results, resolved_ticker)
+    meta = {
+        "alpha_3tf_failures": [],
+        "alpha_3tf_ticker_used": resolved_ticker,
+        **alpha_3tf_metadata(results),
+    }
+    return alpha_md, meta
+
+
 async def _maybe_build_fundamental_data_md(
     spec: AnalystSpec, target_ticker: str | None
 ) -> tuple[str | None, dict[str, Any]]:
@@ -458,6 +506,7 @@ async def run_analyst(
     market_snapshot_md = render_snapshot_md(snapshot)
 
     chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+    alpha_3tf_md, alpha_meta = await _maybe_build_alpha_3tf_md(spec, target_ticker)
     fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
         spec, target_ticker
     )
@@ -473,6 +522,7 @@ async def run_analyst(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         chart_data_md=chart_data_md,
+        alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
         response_rules=spec.response_rules,
     )
@@ -533,6 +583,7 @@ async def run_analyst(
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
         **_snapshot_extend_metadata(snapshot),
         **chart_meta,
+        **alpha_meta,
         **fundamental_meta,
     }
 
@@ -588,6 +639,7 @@ async def run_analyst_stream(
     market_snapshot_md = render_snapshot_md(snapshot)
 
     chart_data_md, chart_meta = await _maybe_build_chart_data_md(spec, target_ticker)
+    alpha_3tf_md, alpha_meta = await _maybe_build_alpha_3tf_md(spec, target_ticker)
     fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
         spec, target_ticker
     )
@@ -603,6 +655,7 @@ async def run_analyst_stream(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         chart_data_md=chart_data_md,
+        alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
         response_rules=spec.response_rules,
     )
@@ -687,6 +740,7 @@ async def run_analyst_stream(
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
         **chart_meta,
+        **alpha_meta,
         **fundamental_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }

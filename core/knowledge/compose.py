@@ -180,6 +180,7 @@ async def build_pipeline_prompt(
     canon_categories: list[str] | None = None,
     market_snapshot_md: str | None = None,
     chart_data_md: str | None = None,
+    alpha_3tf_md: str | None = None,
     fundamental_data_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
@@ -191,14 +192,16 @@ async def build_pipeline_prompt(
       [2] Memory context (recent days + rollups)       — cached
       [3] Market snapshot (5분 갱신)                    — not cached
       [4] Chart data (INFRA-CHART-DATA-001)             — not cached (60s 갱신)
-      [5] Fundamental data (INFRA-FUNDAMENTAL-DATA-001) — not cached (24h 갱신)
-      [6] RAG chunks (query 종속)                       — not cached
-      [7] Response rules                               — not cached
+      [5] α 3 timeframe (WAVE-ALPHA-001)                — not cached (anchor 캐시 30일)
+      [6] Fundamental data (INFRA-FUNDAMENTAL-DATA-001) — not cached (24h 갱신)
+      [7] RAG chunks (query 종속)                       — not cached
+      [8] Response rules                               — not cached
 
     RAG: `query_for_rag` 와 `rag_dept` 둘 다 주어지면 retrieve. 둘 다 없으면 skip.
     Market snapshot: `market_snapshot_md` 주어지면 RAG 직전 삽입 (캐시 분리선 뒤).
     Chart data: `chart_data_md` 주어지면 snapshot 직후 RAG 직전 삽입 (stock_analyst 한정).
-    Fundamental data: `fundamental_data_md` 주어지면 chart 직후 RAG 직전 삽입 (stock_analyst 한정).
+    α 3 timeframe: `alpha_3tf_md` 주어지면 chart 직후 (stock_analyst 한정, WAVE-ALPHA-001).
+    Fundamental data: `fundamental_data_md` 주어지면 α 직후 RAG 직전 삽입 (stock_analyst 한정).
     """
     blocks: list[dict] = []
 
@@ -253,7 +256,15 @@ async def build_pipeline_prompt(
                 else f"## Chart Data\n{chart_data_md}",
         })
 
-    # [5] Fundamental data (not cached — 24h 갱신, INFRA-FUNDAMENTAL-DATA-001)
+    # [5] α 3 timeframe (not cached — anchor 캐시 30일, WAVE-ALPHA-001)
+    if alpha_3tf_md:
+        blocks.append({
+            "type": "text",
+            "text": alpha_3tf_md if alpha_3tf_md.lstrip().startswith("##")
+                else f"## α 3 timeframe\n{alpha_3tf_md}",
+        })
+
+    # [6] Fundamental data (not cached — 24h 갱신, INFRA-FUNDAMENTAL-DATA-001)
     if fundamental_data_md:
         blocks.append({
             "type": "text",
