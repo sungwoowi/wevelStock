@@ -27,6 +27,12 @@ _HEADERS = {
 PRODID_K200_FUTURES = "KR___FUK2I"
 BLD_MAIN_INVESTOR = "dbms/MDC/MAIN/MDCMAIN00103"
 
+# 시장 등락 종목 수 (상승/하락/보합) — INFRA-SNAPSHOT-EXTEND-001
+# KRX 통계 페이지 STAT/04/0402 의 backend bld. 정확한 spec 은 SLOT S4 = production smoke 시 검증.
+BLD_MARKET_BREADTH = "dbms/MDC/STAT/standard/MDCSTAT04302"
+MKTID_KOSPI = "STK"   # 코스피
+MKTID_KOSDAQ = "KSQ"  # 코스닥
+
 
 def _parse_signed_int(s: str) -> int:
     """KRX 응답의 콤마 포함 부호 정수 → int. 빈 값/오류 시 0."""
@@ -102,4 +108,79 @@ class KRXClient:
             if not result["trade_date"]:
                 result["trade_date"] = row.get("TRD_DD", "")
 
+        return result
+
+    async def market_breadth(self, market: str = "KOSPI") -> dict[str, Any]:
+        """시장 등락 종목 수 (상승/하락/보합/상한/하한). INFRA-SNAPSHOT-EXTEND-001.
+
+        KRX 통계 페이지 backend (MDCSTAT04302) 호출. market_state_analyzer breadth 축 base.
+        정확한 bld·payload 는 SLOT S4 = production smoke 시 검증. 차단 시 KIS 종목 list
+        iterate fallback 안 검토.
+
+        Args:
+            market: "KOSPI" | "KOSDAQ"
+
+        Returns:
+            {
+              "market": "KOSPI",
+              "trade_date": "20260521",
+              "advancing": int,    # 상승 종목 수
+              "declining": int,    # 하락 종목 수
+              "unchanged": int,    # 보합 종목 수
+              "limit_up": int,     # 상한가
+              "limit_down": int,   # 하한가
+              "breadth_ratio": float,  # advancing / (advancing + declining)
+              "source": "krx",
+            }
+        """
+        from datetime import date as _date
+
+        market_upper = market.upper()
+        if market_upper == "KOSPI":
+            mkt_id = MKTID_KOSPI
+        elif market_upper == "KOSDAQ":
+            mkt_id = MKTID_KOSDAQ
+        else:
+            raise ValueError(f"market must be 'KOSPI' or 'KOSDAQ', got {market!r}")
+
+        today_str = _date.today().strftime("%Y%m%d")
+        data = await self._post_json({
+            "bld": BLD_MARKET_BREADTH,
+            "mktId": mkt_id,
+            "trdDd": today_str,
+            "share": "1",
+            "money": "1",
+        })
+
+        rows = data.get("output") or data.get("OutBlock_1") or []
+        result: dict[str, Any] = {
+            "market": market_upper,
+            "trade_date": today_str,
+            "advancing": 0,
+            "declining": 0,
+            "unchanged": 0,
+            "limit_up": 0,
+            "limit_down": 0,
+            "breadth_ratio": 0.0,
+            "source": "krx",
+        }
+        # KRX 응답 행 식별자가 한국어 라벨 ("상승" / "하락" / "보합") 로 추정.
+        # 정확한 키는 SLOT S4 production 검증 시 확정. 일단 휴리스틱.
+        for row in rows:
+            label = row.get("ISU_NM", "") or row.get("INVST_TP_NM", "") or ""
+            count = _parse_signed_int(row.get("ISU_CNT", "") or row.get("VAL", "0"))
+            if "상승" in label and "상한" not in label:
+                result["advancing"] = count
+            elif "하락" in label and "하한" not in label:
+                result["declining"] = count
+            elif "보합" in label:
+                result["unchanged"] = count
+            elif "상한" in label:
+                result["limit_up"] = count
+            elif "하한" in label:
+                result["limit_down"] = count
+
+        denom = result["advancing"] + result["declining"]
+        if denom > 0:
+            result["breadth_ratio"] = round(result["advancing"] / denom, 4)
         return result

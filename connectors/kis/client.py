@@ -525,6 +525,10 @@ class KISClient:
     # Chart data APIs (INFRA-CHART-DATA-001)
     # ------------------------------------------------------------------
 
+    # 지수 ticker → FID_COND_MRKT_DIV_CODE='U'. 주식·ETF 는 'J'.
+    # INFRA-SNAPSHOT-EXTEND-001: 시장매크로 4축은 KOSPI(0001)/KOSDAQ(1001) 월봉·일봉 chart 필요.
+    _INDEX_TICKERS: frozenset[str] = frozenset({"0001", "1001", "2001"})
+
     async def get_daily_chart(
         self,
         ticker: str,
@@ -537,6 +541,9 @@ class KISClient:
         KIS 응답은 1 회 호출 당 최대 ~100 봉. 5 년 (1825 봉) 은 페이징으로 누적.
         역순 (최신 → 과거) 으로 받아 정순 (과거 → 최신) 으로 정렬해 반환.
 
+        ticker 가 지수 (0001 KOSPI / 1001 KOSDAQ / 2001 KOSPI200) 일 경우
+        FID_COND_MRKT_DIV_CODE 를 'U' 로 분기. (SLOT S5 — production smoke 시 정확한 endpoint 검증.)
+
         Returns:
             list of {date, open, high, low, close, volume, change_rate, value}
             (정순, 최대 period_days 길이)
@@ -547,6 +554,7 @@ class KISClient:
         today = _date.today()
         start_dt = today - timedelta(days=int(period_days * 1.6))  # 주말·휴장 보정
         adj_flag = "1" if adjust else "0"
+        market_div = "U" if ticker in self._INDEX_TICKERS else "J"
 
         bars: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -559,7 +567,7 @@ class KISClient:
                 "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
                 tr_id="FHKST03010100",
                 params={
-                    "FID_COND_MRKT_DIV_CODE": "J",
+                    "FID_COND_MRKT_DIV_CODE": market_div,
                     "FID_INPUT_ISCD": ticker,
                     "FID_INPUT_DATE_1": start_dt.strftime("%Y%m%d"),
                     "FID_INPUT_DATE_2": cur_end.strftime("%Y%m%d"),
