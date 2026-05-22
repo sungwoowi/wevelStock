@@ -9,41 +9,44 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **`INFRA-SNAPSHOT-EXTEND-001` SPEC frozen ✨** (cycle 12, 2026-05-21). cycle 11 발견 부채 1 (snapshot 데이터 부재 = 5 분석가 본격 판정 차단점) 해소 SPEC. 5 라운드 면담 결단 5건 박음 + cycle 5/9 패턴 미러 (SPEC frozen 만, 구현 15 단계는 cycle 13).
+**현재 위치**: **`INFRA-SNAPSHOT-EXTEND-001` 구현 풀세트 + production smoke 실증 해소 ✨** (cycle 13, 2026-05-22). cycle 12 SPEC frozen 직후 4 sub-cycle 분할 진행 (13.1 DB+collectors → 13.2a snapshot 통합 → 13.2b cron+seed → 13.3 SLOT S5 정정). **MS3 production UX 차단점 풀세트 실증 해소** = market_state_analyzer `strong_bull` · 95% / flow_analyzer KOSPI 60일 수치 풀세트 / stock_picker 시나리오 분포 활성.
 
-**5 라운드 면담 결단 5건**:
-- **R1 데이터원**: chart_ohlcv (cycle 6) 재사용 = 지수 ticker (KOSPI `0001` / KOSDAQ `1001`) + 14 섹터 ETF 추가 → 시장매크로·섹터 RS 파생 / 수급 60일 = 신규 테이블 `supply_demand_history` + KIS 5주체 EOD fetch / briefing_parts 보조 (intraday 흐름·breadth)
-- **R2 신규 필드 6**: A 시장매크로 4 (`kr_index_hierarchy` / `kr_breadth` / `kr_ma_trend` / `distribution_days`) + B 섹터 RS 1 (`sector_rs` 14 섹터) + C 수급 60일 1 (`kr_supply_60d` agreement_score 포함). 종목 단위 chart_ohlcv read 위임
-- **R3 cron + DB**: 통합 cron 1개 `snapshot_macro_refresh` 평일 18:00 KST + 신규 DB 2 테이블 (`market_macro_snapshot` 일별 + `supply_demand_history` 일별), schema_version 6→7
-- **R4 render + contract**: `[3]` 블록 확장 (기존 8 섹션 + 신규 9·10·11). `market-snapshot-md-v1` 정식 계약 = cycle 1~2 ad-hoc 의 SPEC 그라운딩 = 11 섹션 풀세트
-- **R5 본 사이클 범위**: SPEC frozen 만, 구현 풀세트 = cycle 13 (~2 세션)
+**cycle 13 4 sub-cycle 산출**:
+- **13.1** (`bd1daaf`) — DB v7 (market_macro_snapshot + supply_demand_history 2 테이블) + 3 collector (market_macro / sector_rs / supply_demand_history) + 2 connector 분기 (KIS index ticker / KRX market_breadth) + 18 test
+- **13.2a** (`41f62e8`) — collectors/snapshot.py 통합 (MarketSnapshot 4 신규 필드 + 3 fetcher 병렬 asyncio.gather) + render_snapshot_md 9~11 섹션 graceful skip + run_analyst metadata 4 키 + 14 test
+- **13.2b** (`a54f91c`) — server/schedulers/jobs/snapshot_macro.py 신규 cron (평일 18:05 KST) + register_infra_jobs 등록 + collectors/charts.py seed (지수 + 15 ETF) + justfile 2 레시피
+- **13.3** (`bf8140d`) — SLOT S5 정정 = KIS 지수 chart 별도 endpoint `inquire-daily-indexchartprice` + tr_id `FHKUP03500100` + 응답 키 `bstp_nmix_*` 분기 + change_rate 일괄 계산
 
-**산출물**: `docs/specs/INFRA-SNAPSHOT-EXTEND-001-snapshot-extend.md` 신설 (~290줄). frontmatter generates 11 + modifies 8 + depends_on 2 (INFRA-CHART-DATA-001 v2 + ANALYST-PERSONAS-001 v2) + contracts 1. 12 § (목적 / 배경 / 핵심 정의 / Phase 분리 / 명세 14 sub-§ / non-goals 7 / SLOT 5 / 영향 SPEC 4 / 구현 순서 15 단계 / 본 사이클). 코드 변경 0.
+**Production smoke 실증**: KOSPI/KOSDAQ 각 1,250봉 적재 + refresh-snapshot-macro 양 시장 row → market_state_analyzer 본격 판정 `strong_bull` confidence 95% (cycle 11 unknown 0% → 진전 ✨) + Track A/B 진입 환경 친화 (cycle 11 차단 → 진전) + 실 수치 인용 (KOSPI 7,871.71 / ma20 slope +4.48% / ma60 slope +11.47%).
 
-**마지막 작업일**: 2026-05-21 (cycle 12 INFRA-SNAPSHOT-EXTEND-001 SPEC frozen)
-**마지막 세션 로그**: [2026-05-21_infra-snapshot-extend-spec.md](c_worked/2026-05-21_infra-snapshot-extend-spec.md).
-**Git**: cycle 10 = `1532760`→`2181ee7`→`ca93dc6`→`0f2d415`→`1bd1ff8`. cycle 10.5 = `ce084b7`. cycle 11 = `3747a00`. cycle 12 = 본 commit + push 진행.
+**테스트**: 422 → 465 passed (신규 32, 회귀 0). **SPEC 완료도**: generates 11/11, modifies 7/8 (compose.py implicit 정합).
+
+**미해결 부채**: SLOT S4 (KRX breadth bld) — 후보 4종 400, manual devtools 추출 필요. graceful skip 으로 영향 작음.
+
+**마지막 작업일**: 2026-05-22 (cycle 13 INFRA-SNAPSHOT-EXTEND-001 풀세트 + production smoke)
+**마지막 세션 로그**: [2026-05-22_infra-snapshot-extend-impl.md](c_worked/2026-05-22_infra-snapshot-extend-impl.md).
+**Git**: cycle 12 = `438a235`. cycle 13 = `bd1daaf`→`41f62e8`→`a54f91c`→`bf8140d`. 본 wrap-up commit + push 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — cycle 12 SPEC frozen 후 cycle 13 구현 진입
+## 🎯 다음에 할 일 (Top 3) — cycle 13 INFRA-SNAPSHOT-EXTEND 풀세트 후 production UX 자연 진입
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. `INFRA-SNAPSHOT-EXTEND-001` 구현 풀세트 (~2 세션, cycle 13) ✨ — SPEC frozen 직후 구현 진입
-- **왜**: cycle 12 (본 사이클) SPEC frozen 완료. cycle 5/9 패턴 정합 = 다음 사이클 구현 풀세트. 본 인프라 활성화 = market_state_analyzer / stock_picker / flow_analyzer 본격 판정 가능 + Track Selector verdict=ok 가능 + production UX 진입 차단점 해소.
-- **범위**: 15 단계 구현 (DB migration v7 + KIS 지수 chart endpoint 확장 + collectors 3 신규 (market_macro / sector_rs / supply_demand_history) + snapshot.py 통합 + cron `snapshot_macro_refresh` 평일 18:00 KST + render 9~11 섹션 + 25 테스트 케이스 + production smoke). cycle 6 INFRA-CHART-DATA-001 + cycle 10 INFRA-FUNDAMENTAL-DATA-001 패턴 미러.
-- **예상 산출**: 3 분석가 본격 판정 발행 ✨ + Track Selector verdict=ok 가능 + production UX 답변 의미 회복 + 5 분석가 persona 마이크로 정정 (cycle 13 동시).
+### 1. production UX 본질 구현 (~3 세션) ✨ — MS3 차단점 해소 후 자연 진입
+- **왜**: cycle 13 의 핵심 산출 = 3 분석가 본격 판정 활성. 옛 Top 3 의 차단점 (snapshot 부재 상태 UX 무의미) 해소 ✨. 가장 큰 사용자 가치 = 자연어 채팅창에서 의미 있는 답변 가능 단계. `feedback_webapp_production_ux.md` 본격 사이클.
+- **범위**: 자연어 intent extractor (Haiku 4.5 분류 또는 결정론 키워드 룰) + Track Selector 자동 라우팅 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 토글 별도 페이지 보존. 30 시나리오 우주 (사용자 명시 5 + Claude 4차 25) 의 기본 라우팅.
+- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 권고 종합 + snapshot 풀세트 위에서 의미 있는 답변).
 
 ### 2. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
-- **왜**: MS3 완전 도달 후 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). α 산출 가능해지면 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. stock_analyst 만 영향, snapshot extend 와 독립적으로 진행 가능.
-- **범위**: `/spec-interview` 5 라운드 면담 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 자료 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
-- **예상 산출**: α 값 정상 발행 → verdict=confirmed_* 도달 → 다음 MS4 (실 매매 시연) 진입 베이스라인.
+- **왜**: 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). 산출 가능 시 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. snapshot extend 와 독립 진행 가능 (stock_analyst 단독).
+- **범위**: `/spec-interview` 5 라운드 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
+- **예상 산출**: α 값 정상 발행 → verdict=confirmed_* → MS4 (실 매매 시연) 진입 베이스라인.
 
-### 3. production UX 본질 구현 (~3 세션) — `feedback_webapp_production_ux.md` 본격 사이클 (snapshot extend 후 자연 진입)
-- **왜**: snapshot extend (Top 1) 해소 후 진입이 자연. snapshot 데이터 부재 상태에서 UX 만들면 답변이 항상 wait/unknown 으로 무의미.
-- **범위**: 자연어 intent extractor (Haiku 4.5 분류 호출 또는 결정론 키워드 룰) + Track Selector manifest input_routing 자동 분기 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 검증용 토글 보존 (별도 페이지).
-- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 양쪽 권고 종합 + snapshot 풀세트 위에서 의미 있는 답변).
+### 3. **SLOT S4 (KRX breadth bld) 정정 + 후속 부채 묶음** (~0.3 세션 소규모) — production UX 또는 WAVE-ALPHA 와 묶기 가능
+- **왜**: cycle 13 잔여 발견 부채. market_macro breadth 축 활성 = market_state_analyzer 4축 풀세트. 단독으로는 작아 다음 사이클과 묶는 게 자연.
+- **범위**: KRX 데이터시스템 (data.krx.co.kr) "통계 > 주식 > 등락 종목수" 페이지 manual devtools 추출 → 정확한 bld 확보 → `connectors/krx/client.py` BLD_MARKET_BREADTH 교체 + market_breadth 응답 키 매핑 정정. 차단 시 KIS volume_rank fallback 검토.
+- **예상 산출**: market_state_analyzer 4축 풀세트 (위계 + 추세 + DD + **breadth** 완성).
 
 (추가 백로그: **`NEWS-SOURCE-001` SPEC 신설** (가칭, news_curator SLOT S2 해소 — Perplexity MCP + 유튜브 요약 + 시간축 라벨링 + 학습부 DB + UX/UI, 대규모 후속) / **`PERSONA-REFUSAL-CITED-RULE-001` SPEC 신설** (가칭, 거부 응답 cited v3.1 룰 9 분석가 표준 룰, 가벼운 SPEC) / **news_curator persona 슬림화** (prompt 32K → 17K 목표, NEWS-SOURCE-001 진행 시 동시) / **Layer 4 계좌관리자 1+ N** (M5, 계좌 4개 자산배분) / **Layer 5 회고분석가** (M4, `RETROSPECT-ANALYST-001` 본체, PROPOSAL 발행) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어) / **INFRA-US-MACRO-SNAPSHOT-001** (yfinance/FRED 미 매크로) / **INFRA-RELIABILITY-VALIDATOR-001** (Layer 2.5/3.5 Haiku 검증, M2) / **scoring.py s_score·buy_score·alpha 정식 가중치** (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
@@ -62,7 +65,7 @@
 | **MS4** | 실 매매 시연 (권고 → 자금액 변환 → 주문) | Layer 4 계좌관리자 + `GUIDANCE-ACCURACY-TRACKER-001` | +2~3 세션 |
 | **MS5** | 자가 진화 사이클 (회고 → PROPOSAL → manifest 갱신) | Layer 5 회고분석가 + 5 KPI 누적 (3~6 개월 운영) | +1 세션 + 운영 시간 |
 
-**현재 위치**: cycle 10.5 (2026-05-21) 후 = **MS0·MS1·MS2·MS3 완전 도달 ✨** (INFRA-FUNDAMENTAL-DATA-001 구현 풀세트 + stock_analyst v4 정정 + production smoke 검증 성공). F1~F5 풀세트 정상 발행 + chart_data_md [4] + fundamental_data_md [5] 둘 다 활성. α (anchor 공식 SLOT S1) + F3 (flow_analyzer 동시 호출) 추가 → MS4 진입 베이스라인.
+**현재 위치**: cycle 13 (2026-05-22) 후 = **MS0·MS1·MS2·MS3 완전 도달 + production UX 차단점 실증 해소 ✨**. INFRA-SNAPSHOT-EXTEND-001 풀세트 = market_state_analyzer / stock_picker / flow_analyzer 본격 판정 활성 (cycle 11 unknown/null → strong_bull 95% / 60일 수치 풀세트 / 시나리오 분포). 다음 = production UX 진입 (Top 1) → α (Top 2) → MS4.
 
 ---
 
