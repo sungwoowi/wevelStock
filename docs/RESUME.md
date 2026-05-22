@@ -9,7 +9,15 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **WAVE-ALPHA 구현 cycle 14.2 + 14.3 풀세트 완료 ✨ — MS4 베이스라인 도달** (2026-05-23). cycle 14.1 (canon 21 명제 + DB v8 + scoring.alpha 시간 정규화, `a536428`) 직후 자연 진입. **collectors/anchors.py 신규 (commit 14.2 `7c60944`)** + **stock_analyst persona v4→v5 + 테스트 ~74 + 005930 smoke (commit 14.3 `e2ee94b`)**. cycle 5/9/12/14 의 "SPEC frozen → sub-cycle 구현 분할" 패턴 **6 회째 누적**.
+**현재 위치**: **production UX SPEC 진입 머티턴 조사 + LLM 3계층 정책 신설 ✨** (2026-05-23 후속 세션). cycle 14.3 (WAVE-ALPHA 풀세트 완료, MS4 베이스라인 도달, commit `e2ee94b` + wrap-up `2cdfaf3`) 직후 자연 진입. 본 세션 = **머티턴 인터뷰 모드** (코드 0, plan 파일 7차 갱신) — 조사 3 explore + Plan agent 1 + 사용자 합의 8건. **다음 세션 = `/spec-interview PRODUCTION-UX-001` 5라운드 7 결정 freeze**.
+
+**본 세션 산출** (commit wrap-up 진행 예정):
+- **`C:\Users\HOME\.claude\plans\jazzy-roaming-snail.md`** = 신규 plan 파일 7차 점진 갱신 (조사 결과 + Intent 분류 3안 비교표 + sub-cycle 3 분할 + LLM 3계층 정책 + 7 결정 freeze 항목)
+- **사용자 합의 8건**: (1) Top 1 production UX / (2) 머티턴 인터뷰 / (3) 기존 webapp 데모 보존 + 신규 채팅창 0 부터 / (4) Intent 분류 = C 하이브리드 (anchors.py 패턴 mirror) / (5) 다음 세션 SPEC 인터뷰 5라운드 / (6) **LLM 3계층 정책 신설 (FAST/BALANCED/DEEP)** / (7) 적용 범위 = D 점진 (신규 영역만 즉시, 기존 영역은 후속 SPEC) / (8) SLOT S6 = 본 SPEC Intent 파서 강건화로 동일 해소
+- **LLM 모델 3계층 매핑**: FAST = Gemini Flash-lite / Haiku 4.5 (Intent 분류·JSON 추출·자연어 변환) / BALANCED = Gemini Flash / Sonnet 4.6 (분석가·전략가 본문) / DEEP = Gemini Pro / Opus 4.7 (회고분석가 M4·메타 추론). config `llm.tiers` + `llm.areas` 스키마 신설 (외부 설정, 코드 수정 없이 갈아끼움).
+- **인프라 80% 완성 확인**: `track_selector.select_tracks` / `run_strategist*` / `/api/strategists/{id}/chat*` SSE / `resolve_ticker` (30 종목) / `core/llm/client.py` provider-agnostic (mock/claude_code/gemini/anthropic + fallback chain) 모두 작동. **신설 필요 = Intent Classifier + 종합 답변 포맷터 + 신규 라우트 `webapp/src/app/production-chat/page.tsx` 2 영역만**.
+
+**WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 - **`collectors/anchors.py` 신규** (~600 LOC) = extract_swing_candidates (Stage 1 결정론 rolling local extrema + min_gap 필터) + select_anchors_via_llm (Stage 2 Haiku 4.5 직관 + JSON 유효성 검증) + 3 단 캐싱 (llm_call_cache type='anchor_selection', TTL 30 일, cache_key "ticker|tf|cutoff") + load_manual_anchors (manual_anchors DB SELECT 우선) + E6 fallback (Stage 2 실패 시 결정론 candidate 마지막 3 개, source='deterministic_fallback') + compute_alpha_3tf 진입점 (3 timeframe 풀세트, cutoff_date 백테스팅 친화 canon WX1) + render_alpha_3tf_md ([5] α 3 timeframe 블록) + alpha_3tf_metadata helper
@@ -31,34 +39,35 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools 또는 대체) / SLOT S1·S2·S3·S6 후속 SPEC / LLM Stage 2 Gemini JSON 파싱 결함 (SLOT S6 보강 영역) / production UX webapp 자연어 채팅창 (Top 1 진입 가능).
+**미해결 부채**: SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / **SLOT S6 (LLM Stage 2 Gemini JSON 파싱 결함) = PRODUCTION-UX-001 Intent 파서 강건화로 본질 동일 해소** / 기존 영역 (anchors.py + 분석가 9 + 전략가) LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001` 신규 후속 SPEC** (~0.5 세션 microcycle).
 
-**마지막 작업일**: 2026-05-23 (cycle 14.2 + 14.3 = anchors.py + run_analyst hook + persona v5 + 테스트 ~74 + 005930 smoke + DB v8 auto-migration)
-**마지막 세션 로그**: [2026-05-23_wave-alpha-impl-14-2-14-3.md](c_worked/2026-05-23_wave-alpha-impl-14-2-14-3.md).
-**Git**: cycle 14 SPEC = `dd4782f`. cycle 14.0 = `98cbf32`. cycle 14.1 = `a536428`. **cycle 14.2 = `7c60944`. cycle 14.3 = `e2ee94b`.** wrap-up commit + push 본 세션 진행.
+**마지막 작업일**: 2026-05-23 (production UX 머티턴 조사 + LLM 3계층 정책 신설 — 코드 0, plan 파일 7차 갱신, 사용자 합의 8건)
+**마지막 세션 로그**: [2026-05-23_production-ux-research-2.md](c_worked/2026-05-23_production-ux-research-2.md). 직전 = [2026-05-23_wave-alpha-impl-14-2-14-3.md](c_worked/2026-05-23_wave-alpha-impl-14-2-14-3.md).
+**Git**: cycle 14 SPEC = `dd4782f`. cycle 14.0 = `98cbf32`. cycle 14.1 = `a536428`. cycle 14.2 = `7c60944`. cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. **본 세션 wrap-up commit 진행 예정**.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — cycle 14 풀세트 완료 후 production UX 자연 진입
+## 🎯 다음에 할 일 (Top 3) — production UX SPEC 인터뷰 즉시 진입
 
-우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
+우선순위 순. 본 세션 합의 후 다음 진입은 Top 1 SPEC 인터뷰 5라운드.
 
-### 1. production UX 본질 구현 (~3 세션) ✨ — webapp 자연어 채팅창
-- **왜**: cycle 14.2·14.3 완료 → MS4 베이스라인 도달. WAVE-ALPHA SPEC 부록 A 자연어 변환 사전 활용 가능. 가장 큰 사용자 가치 = 자연어 채팅창에서 의미 있는 종합 답변. 30 시나리오 우주 라우팅 (메모리 `feedback_production_answer_brevity` + `feedback_webapp_production_ux`).
-- **범위**: 자연어 intent extractor (Haiku 4.5 분류 또는 결정론 키워드 룰) + Track Selector 자동 라우팅 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown, **코드 라벨 금지 + 1~3 줄 결론 + 1~3 줄 근거**) + webapp 단일 채팅창 UI 재구성 + R&D 토글 별도 페이지 보존.
-- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → α + Track A·B 권고 종합 답변).
+### 1. PRODUCTION-UX-001 SPEC 인터뷰 5라운드 (~1 세션) ✨ — 7 결정 freeze
+- **왜**: 본 세션 머티턴 조사 완료 → 큰 설계 결정 7개 확정 필요. SPEC frozen 후 PROD-UX-1·2·3 구현 진입 시 재설계 위험 최소화 (CLAUDE.md 원칙 2 정합).
+- **freeze 대상 7 결정**: (1) 30 시나리오 ↔ agent_route 매핑 권위 / (2) 종합 답변 포맷 contract (raw 압축 방식, 포맷 LLM 1콜 추가 여부) / (3) manual fallback trigger 임계 (confidence < ?) / (4) 코드 라벨 사전 권위 (S-Score/α/F-Score 한국어명) / (5) production-chat vs 기존 webapp 분리 경계 (데모 deprecate/보존) / (6) 30 시나리오 우주 v1 freeze 범위 / (7) Intent Classifier LLM provider/model 정책 (FAST 계층 적용 + fallback chain + JSON 파서 강건화 = SLOT S6 본질 해소)
+- **참조**: plan 파일 `C:\Users\HOME\.claude\plans\jazzy-roaming-snail.md` + 메모리 (`feedback_webapp_production_ux` / `feedback_production_answer_brevity` / `feedback_llm_intuition_distribution`) + WAVE-ALPHA SPEC 5라운드 양식 mirror
+- **예상 산출**: `docs/specs/PRODUCTION-UX-001-natural-language-chat.md` frozen + sub-cycle 3 분할 안 확정
 
-### 2. WAVE-ALPHA SLOT 후속 SPEC 묶음 (~3~4 세션 분산) — 본질 정수 정리
-- **S1** `WAVE-ALPHA-TARGETS-001` (~1 세션) — target_prices 3 단 (보수/중립/공격) 산출 룰. stock_analyst verdict=confirmed_high_quality 시 발행. v5 persona 의 `target_prices=null` 강제 해소.
-- **S6** LLM Stage 2 prompt 튜닝 + Sonnet 4.6 업그레이드 검토 (~0.5 세션) — Gemini JSON 파싱 결함 본질 해결. anchors.py 의 select_anchors_via_llm provider 명시 옵션 + parser 강건성 + prompt 강화.
-- **S2** `WAVE-ALPHA-WATCH-001` — 월봉 황제주 watchlist + 알림 cron (cron + telegram + watchlist DB)
-- **S3** `WAVE-ALPHA-BACKTEST-001` — 백테스팅 본체 (사용자 라운드 1 본질). 본 SPEC alpha() cutoff_date 친화 설계 활용.
-- **S4** `WAVE-ALPHA-CANON-001` — 풀세트 canon W5+ 사용자 자가 정리 + 양질도 10 점.
+### 2. PROD-UX-1 구현 (~1 세션, SPEC frozen 후) — Intent Classifier + 기본 채팅
+- **왜**: SPEC 7 결정 박은 직후 최소 시연 단위. "삼성전자 살까" → track_a 호출 → raw 응답 표시. 인프라 80% 완성 (track_selector + run_strategist + SSE) → 신설 2 모듈만.
+- **산출물**: `core/intent/{classifier.py 250 / cache.py 80 / router.py 180 / system_prompt.md 100}` + `config/scenario_keywords.yaml 200` + `POST /api/chat/production 150` + `webapp/src/app/production-chat/page.tsx 200` + `tests/intent/test_classifier_golden.py 250` (90건 골든 eval ≥ 85% 정확도, Stage 1 hit ≥ 40%, cache 2회차 ≥ 95%)
+- **Intent C 하이브리드 default LLM = Gemini Flash-lite** (FAST 계층, 무료 티어 1,500회/일) + fallback chain (Flash-lite → Haiku 4.5 → mock)
 
-### 3. SLOT S4 KIS breadth 정확도 정정 (~0.3 세션 microcycle) — Top 1·2 와 묶기 권장
-- **왜**: cycle 14.0 = KIS volume_rank top30 fallback 봉합 = 거래대금 상위 30 종목 등락 분포 (전체 시장 breadth 아님). 정확도 정정 = KRX 데이터시스템 manual devtools 또는 다른 backend.
-- **범위**: data.krx.co.kr "통계 > 주식 > 등락 종목수" devtools Network 탭 POST bld 추출 → `BLD_MARKET_BREADTH` 교체. KIS fallback 은 retention.
-- **예상 산출**: market_state_analyzer 4축 풀세트 (위계 + 추세 + DD + breadth 전체 시장 정확도 활성).
+### 3. LLM-TIER-MIGRATION-001 SPEC 신설 + 점진 마이그레이션 (~0.5 세션 microcycle/영역)
+- **왜**: 본 세션 LLM 3계층 정책 (FAST/BALANCED/DEEP, Gemini-Anthropic 1:1 mirror) 신설 → 신규 영역만 즉시 적용 (적용 범위 D 합의). **기존 영역** (anchors.py Stage 2 / 분석가 9 / 전략가 / 회고분석가 M4) = 영역별 1 PR 단위 교체 + 회귀 검증.
+- **anchors.py Stage 2 우선** = SLOT S6 (Gemini JSON 파싱 결함) 와 한꺼번에 해소 가능. Flash → Flash-lite 강등 + parser 강건화 + prompt 튜닝
+- **예상 산출**: 영역별 config 갱신 + 회귀 테스트 통과 + 비용 측정 리포트 (전 시스템 LLM 비용 가시화)
+
+(추가 백로그: **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
 (추가 백로그: **`WAVE-ALPHA-CANON-001`** (SLOT S4 풀세트 canon W5+ 사용자 자가 정리 + 양질도 10 점) / **`WAVE-ALPHA-WATCH-001`** (SLOT S2 월봉 황제주 watchlist + 알림 cron) / **`WAVE-ALPHA-BACKTEST-001`** (SLOT S3 백테스팅 본체, 사용자 본질 직관) / **`NEWS-SOURCE-001`** SPEC 신설 (news_curator SLOT S2 해소 — Perplexity MCP + 유튜브 + 시간축 + 학습부 DB + UX/UI) / **`PERSONA-REFUSAL-CITED-RULE-001`** SPEC 신설 (거부 응답 cited v3.1 룰 9 분석가 표준) / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, `RETROSPECT-ANALYST-001`) / GUIDANCE-ACCURACY-TRACKER-001 구현 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5 Haiku 검증, M2) / scoring.py s_score·buy_score 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
