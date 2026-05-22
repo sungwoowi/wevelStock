@@ -509,3 +509,72 @@ def test_track_ab_read_principle_guardian_verdict() -> None:
         assert has_verdict, (
             f"{track_id} persona: principle_guardian verdict 인용 양식 누락"
         )
+
+
+# ---------------------------------------------------------------------------
+# WAVE-ALPHA-001 v5 sub-cycle 14.3 정정 (stock_analyst 통합 5 케이스)
+# ---------------------------------------------------------------------------
+
+
+def test_stock_analyst_v5_canon_fractal_wave_cited() -> None:
+    """v5: fractal_wave canon 21 명제 ID (WA·WF·WL·WE) 가 persona 에 인용됨."""
+    persona = (ANALYSTS_DIR / "stock_analyst" / "persona.md").read_text(encoding="utf-8")
+    # canon WA·WF·WL·WE prefix 모두 본문에 등장 (verdict 매트릭스 / α 산출 / 환각 가드 3 등)
+    for prefix in ("WA1", "WA2", "WA3", "WF1", "WF2", "WF3", "WL1", "WL2", "WL3", "WE1", "WE7"):
+        assert prefix in persona, f"v5 persona: canon ID {prefix} 인용 누락"
+
+
+def test_stock_analyst_v5_verdict_matrix_keywords() -> None:
+    """v5: verdict 매트릭스 (WL2 long/swing/중립 분기) 본문 박힘."""
+    persona = (ANALYSTS_DIR / "stock_analyst" / "persona.md").read_text(encoding="utf-8")
+    # verdict 매트릭스 § 헤더 + 분기 키워드
+    assert "verdict 매트릭스" in persona
+    assert "long:" in persona or "long " in persona
+    assert "swing:" in persona or "swing " in persona
+    assert "confirmed_high_quality" in persona
+    assert "confirmed_low_quality" in persona
+    assert "inconclusive" in persona
+    # 보수 우선 룰
+    assert "보수 우선" in persona
+
+
+def test_stock_analyst_v5_holding_period_mapping() -> None:
+    """v5: holding_period 매핑 (WL3 monthly→장기/weekly→중기/daily→단기)."""
+    persona = (ANALYSTS_DIR / "stock_analyst" / "persona.md").read_text(encoding="utf-8")
+    assert "holding_period 매핑" in persona
+    # 3 매핑 라벨
+    assert "장기" in persona
+    assert "중기" in persona
+    assert "단기" in persona
+    # 긴 timeframe 우선 룰
+    assert "긴 timeframe 우선" in persona
+
+
+def test_stock_analyst_v5_anchor_source_guard_3() -> None:
+    """v5: 환각 가드 3 (anchor 출처 강제 — manual/llm_stage2/deterministic_fallback/unavailable)."""
+    persona = (ANALYSTS_DIR / "stock_analyst" / "persona.md").read_text(encoding="utf-8")
+    assert "환각 가드 3 중" in persona
+    assert "anchor 출처 강제" in persona
+    for src in ("manual", "llm_stage2", "deterministic_fallback", "unavailable"):
+        assert src in persona, f"v5 persona: source={src} 명시 누락"
+
+
+def test_stock_analyst_v5_manifest_response_rules_wave_alpha() -> None:
+    """v5: manifest response_rules 의 WAVE-ALPHA 정정 본문 (시간 정규화 공식 + 매트릭스 + 가드 3)."""
+    manifest = yaml.safe_load(
+        (ANALYSTS_DIR / "stock_analyst" / "manifest.yaml").read_text(encoding="utf-8")
+    )
+    rr = manifest.get("response_rules", "")
+    # 시간 정규화 공식 본문
+    assert "k₁" in rr and "k₂" in rr
+    assert "ln(B/A)" in rr or "ln(B.price" in rr or "ln(B" in rr
+    # verdict 매트릭스
+    assert "verdict 매트릭스" in rr
+    # holding_period 매핑
+    assert "holding_period 매핑" in rr
+    # 가드 3 (anchor 출처 강제)
+    assert "환각 가드 3" in rr
+    assert "anchor 출처 강제" in rr
+    # source 4 종
+    for src in ("manual", "llm_stage2", "deterministic_fallback", "unavailable"):
+        assert src in rr, f"v5 manifest: source={src} 명시 누락"

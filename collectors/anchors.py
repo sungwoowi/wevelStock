@@ -592,15 +592,24 @@ async def _compute_one(
         except (ValueError, TypeError) as e:
             log.warning("llm_anchor_alpha_failed", ticker=ticker, tf=timeframe, error=str(e))
 
-    # 4) E6 fallback — 결정론 candidate 마지막 3 개
-    last3 = candidates[-3:]
+    # 4) E6 fallback — 결정론 candidate 마지막 3 개 (단 C < current 보장)
+    # current 와 너무 가까운 trailing candidate 는 제외 — α 계산 시 days(C→current) > 0 강제.
+    min_gap = max(1, TIMEFRAME_LIMITS[timeframe]["min_gap_days"] // 2)
+    cur_date = current[0]
+    usable = [c for c in candidates if (cur_date - c[0]).days >= min_gap]
+    if len(usable) < 3:
+        return _unavailable(
+            timeframe,
+            f"WE6 fallback failed: only {len(usable)} candidates ≥ {min_gap}d before current",
+        )
+    last3 = usable[-3:]
     a = (last3[0][0], last3[0][1])
     b = (last3[1][0], last3[1][1])
     c = (last3[2][0], last3[2][1])
     return _build_result(
         timeframe, a, b, c, current,
         source="deterministic_fallback",
-        reason="WE6 fallback (Stage 2 실패 또는 무효 → 결정론 마지막 3 candidate)",
+        reason="WE6 fallback (Stage 2 실패 또는 무효 → 결정론 마지막 3 candidate, C < current 가드 적용)",
     )
 
 
