@@ -525,8 +525,9 @@ class KISClient:
     # Chart data APIs (INFRA-CHART-DATA-001)
     # ------------------------------------------------------------------
 
-    # 지수 ticker → FID_COND_MRKT_DIV_CODE='U'. 주식·ETF 는 'J'.
-    # INFRA-SNAPSHOT-EXTEND-001: 시장매크로 4축은 KOSPI(0001)/KOSDAQ(1001) 월봉·일봉 chart 필요.
+    # 지수 ticker → 별도 endpoint (`inquire-daily-indexchartprice` + tr_id FHKUP03500100).
+    # 주식·ETF 와 응답 키 prefix 다름 (stck_* → bstp_nmix_*) + prdy_ctrt 부재 (직접 계산).
+    # INFRA-SNAPSHOT-EXTEND-001 SLOT S5 — cycle 13.3 정정 (sample 응답 검증 후).
     _INDEX_TICKERS: frozenset[str] = frozenset({"0001", "1001", "2001"})
 
     async def get_daily_chart(
@@ -536,25 +537,43 @@ class KISClient:
         period_days: int = 1825,
         adjust: bool = True,
     ) -> list[dict[str, Any]]:
-        """일봉 OHLCV historical. KIS `inquire-daily-itemchartprice` (FHKST03010100).
+        """일봉 OHLCV historical.
+
+        - 주식·ETF: KIS `inquire-daily-itemchartprice` (FHKST03010100), MRKT_DIV='J',
+          응답 키 stck_*. 수정주가 옵션 (FID_ORG_ADJ_PRC).
+        - 지수 (0001/1001/2001): KIS `inquire-daily-indexchartprice` (FHKUP03500100),
+          MRKT_DIV='U', 응답 키 bstp_nmix_*. 수정주가 무관. change_rate 직접 계산
+          (전일 close 대비). INFRA-SNAPSHOT-EXTEND-001 SLOT S5 정정.
 
         KIS 응답은 1 회 호출 당 최대 ~100 봉. 5 년 (1825 봉) 은 페이징으로 누적.
-        역순 (최신 → 과거) 으로 받아 정순 (과거 → 최신) 으로 정렬해 반환.
-
-        ticker 가 지수 (0001 KOSPI / 1001 KOSDAQ / 2001 KOSPI200) 일 경우
-        FID_COND_MRKT_DIV_CODE 를 'U' 로 분기. (SLOT S5 — production smoke 시 정확한 endpoint 검증.)
 
         Returns:
             list of {date, open, high, low, close, volume, change_rate, value}
-            (정순, 최대 period_days 길이)
+            (정순 = 과거 → 최신, 최대 period_days 길이)
         """
         from datetime import date as _date
         from datetime import timedelta
 
         today = _date.today()
         start_dt = today - timedelta(days=int(period_days * 1.6))  # 주말·휴장 보정
-        adj_flag = "1" if adjust else "0"
-        market_div = "U" if ticker in self._INDEX_TICKERS else "J"
+        is_index = ticker in self._INDEX_TICKERS
+        if is_index:
+            endpoint = "/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+            tr_id = "FHKUP03500100"
+            base_params = {
+                "FID_COND_MRKT_DIV_CODE": "U",
+                "FID_INPUT_ISCD": ticker,
+                "FID_PERIOD_DIV_CODE": "D",
+            }
+        else:
+            endpoint = "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+            tr_id = "FHKST03010100"
+            base_params = {
+                "FID_COND_MRKT_DIV_CODE": "J",
+                "FID_INPUT_ISCD": ticker,
+                "FID_PERIOD_DIV_CODE": "D",
+                "FID_ORG_ADJ_PRC": "1" if adjust else "0",
+            }
 
         bars: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -564,15 +583,12 @@ class KISClient:
         # 안전 가드: 최대 25 회 (= 2500 봉). period_days 1825 의 1.4 배 여유.
         for _ in range(25):
             data = await self._get(
-                "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
-                tr_id="FHKST03010100",
+                endpoint,
+                tr_id=tr_id,
                 params={
-                    "FID_COND_MRKT_DIV_CODE": market_div,
-                    "FID_INPUT_ISCD": ticker,
+                    **base_params,
                     "FID_INPUT_DATE_1": start_dt.strftime("%Y%m%d"),
                     "FID_INPUT_DATE_2": cur_end.strftime("%Y%m%d"),
-                    "FID_PERIOD_DIV_CODE": "D",  # D=일, W=주, M=월
-                    "FID_ORG_ADJ_PRC": adj_flag,
                 },
             )
             if data.get("rt_cd") != "0":
@@ -586,13 +602,20 @@ class KISClient:
                 # YYYYMMDD → YYYY-MM-DD
                 d_iso = f"{d_raw[:4]}-{d_raw[4:6]}-{d_raw[6:8]}"
                 try:
-                    open_v = float(r.get("stck_oprc") or 0)
-                    high_v = float(r.get("stck_hgpr") or 0)
-                    low_v = float(r.get("stck_lwpr") or 0)
-                    close_v = float(r.get("stck_clpr") or 0)
+                    if is_index:
+                        open_v = float(r.get("bstp_nmix_oprc") or 0)
+                        high_v = float(r.get("bstp_nmix_hgpr") or 0)
+                        low_v = float(r.get("bstp_nmix_lwpr") or 0)
+                        close_v = float(r.get("bstp_nmix_prpr") or 0)
+                        chg_rate = 0.0  # 지수 응답에 prdy_ctrt 없음 — 정렬 후 일괄 계산
+                    else:
+                        open_v = float(r.get("stck_oprc") or 0)
+                        high_v = float(r.get("stck_hgpr") or 0)
+                        low_v = float(r.get("stck_lwpr") or 0)
+                        close_v = float(r.get("stck_clpr") or 0)
+                        chg_rate = float(r.get("prdy_ctrt") or 0)
                     vol_v = int(float(r.get("acml_vol") or 0))
                     val_v = int(float(r.get("acml_tr_pbmn") or 0))
-                    chg_rate = float(r.get("prdy_ctrt") or 0)
                 except (ValueError, TypeError):
                     continue
                 if close_v <= 0:
@@ -624,6 +647,14 @@ class KISClient:
         bars.sort(key=lambda b: b["date"])
         if len(bars) > period_days:
             bars = bars[-period_days:]
+
+        # 지수: change_rate 가 응답에 부재 → 정렬 후 (close[i] - close[i-1]) / close[i-1] 일괄 계산
+        if is_index and bars:
+            prev_close = bars[0]["close"]
+            for b in bars[1:]:
+                if prev_close > 0:
+                    b["change_rate"] = round((b["close"] - prev_close) / prev_close * 100, 4)
+                prev_close = b["close"]
         return bars
 
     async def get_current_price(self, ticker: str) -> dict[str, Any]:
