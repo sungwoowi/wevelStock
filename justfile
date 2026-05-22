@@ -128,6 +128,17 @@ refresh-fundamentals:
 fetch-fundamental ticker *flags="":
     uv run python -m collectors.fundamentals fetch {{ticker}} {{flags}}
 
+# === 시장 스냅샷 확장 (INFRA-SNAPSHOT-EXTEND-001) ===
+
+# 시장매크로 + 5주체 60일 수급 통합 refresh
+# (수동 백업, cron `5 18 * * 1-5` 평일 18:05 KST 자동 실행 — chart_refresh 5분 후)
+refresh-snapshot-macro:
+    uv run python -c "import asyncio; from server.schedulers.jobs.snapshot_macro import run_snapshot_macro_refresh; import json; print(json.dumps(asyncio.run(run_snapshot_macro_refresh()), ensure_ascii=False, indent=2))"
+
+# 오늘 KOSPI/KOSDAQ 5주체 net 매수액 fetch + supply_demand_history upsert (디버깅용)
+fetch-supply-today:
+    uv run python -c "import asyncio; from collectors.supply_demand_history import refresh_supply_demand_today; import json; print(json.dumps(asyncio.run(refresh_supply_demand_today()), ensure_ascii=False, indent=2))"
+
 # === 추론부 (Layer 2 분석가 호출) ===
 
 # 분석가와 멀티턴 대화 (REPL). /exit /clear /save 명령. 종료 시 JSONL 자동 저장.

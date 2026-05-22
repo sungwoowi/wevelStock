@@ -617,20 +617,37 @@ def render_chart_data_md(chart: ChartData, *, name: str | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _seed_tickers() -> list[str]:
+    """`chart_ohlcv` 에 항상 적재되어야 하는 seed ticker list.
+
+    INFRA-SNAPSHOT-EXTEND-001 R1 결단: 지수 (KOSPI 0001 / KOSDAQ 1001) +
+    14 섹터 ETF (kr_sectors.DEFAULT_TRACKED_ETFS) 가 chart_ohlcv 적재 필요.
+    market_macro / sector_rs collector 가 chart_ohlcv 직접 read 위임.
+    """
+    from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
+
+    return ["0001", "1001"] + [t for t, _ in DEFAULT_TRACKED_ETFS]
+
+
 async def refresh_all_tickers(*, period_days: int = 1825) -> dict[str, Any]:
-    """`chart_ohlcv` 테이블에 적재된 distinct ticker 모두 daily refresh.
+    """`chart_ohlcv` 테이블 ticker (DB distinct + seed list union) 모두 daily refresh.
 
     APScheduler cron `0 18 * * 1-5` + `just refresh-charts` 진입점.
     rate limit 자체는 KISClient 의 _CALL_INTERVAL=1.1s 가 보장.
+
+    Seed ticker (INFRA-SNAPSHOT-EXTEND-001): 지수 0001/1001 + 14 섹터 ETF 자동 포함.
+    첫 cron 발동 시 KIS get_daily_chart 호출로 적재됨 (지수는 SLOT S5 = U div_code).
 
     Returns:
         {"refreshed": [...], "failed": [...], "elapsed_s": float}
     """
     db = get_db()
     rows = db.fetch_all("SELECT DISTINCT ticker FROM chart_ohlcv ORDER BY ticker")
-    tickers = [r["ticker"] for r in rows]
+    db_tickers = [r["ticker"] for r in rows]
+    seed = _seed_tickers()
+    tickers = sorted(set(db_tickers) | set(seed))
     if not tickers:
-        log.info("chart_refresh_skipped", reason="no tickers in DB")
+        log.info("chart_refresh_skipped", reason="no tickers (DB + seed empty)")
         return {"refreshed": [], "failed": [], "elapsed_s": 0.0}
 
     started = time.monotonic()
