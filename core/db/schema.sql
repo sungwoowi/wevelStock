@@ -71,8 +71,11 @@ CREATE TABLE IF NOT EXISTS llm_call_cache (
     tokens_out    INTEGER,
     cost_usd      REAL,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-    ttl_days      INTEGER DEFAULT 7
+    ttl_days      INTEGER DEFAULT 7,
+    type          TEXT NOT NULL DEFAULT 'general'   -- v8: 'general' | 'anchor_selection' | 'analyst'
 );
+
+CREATE INDEX IF NOT EXISTS idx_llm_call_cache_type ON llm_call_cache(type);
 
 -- ============================================================
 -- notifications_log — 알림 발송 이력 (webapp 조회용)
@@ -367,6 +370,26 @@ CREATE TABLE IF NOT EXISTS supply_demand_history (
 CREATE INDEX IF NOT EXISTS idx_supply_history_date ON supply_demand_history(date);
 
 -- ============================================================
+-- manual_anchors (v8) — 사용자 직접 박은 anchor (WAVE-ALPHA-001)
+-- Stage 1+2 (결정론 candidate + LLM Haiku 직관) 보다 우선
+-- ============================================================
+CREATE TABLE IF NOT EXISTS manual_anchors (
+    ticker             TEXT NOT NULL,           -- "005930" / "NVDA" / "0001" 등
+    timeframe          TEXT NOT NULL,           -- "daily" | "weekly" | "monthly"
+    anchor_a_date      TEXT NOT NULL,
+    anchor_a_price     REAL NOT NULL,
+    anchor_b_date      TEXT NOT NULL,
+    anchor_b_price     REAL NOT NULL,
+    anchor_c_date      TEXT NOT NULL,
+    anchor_c_price     REAL NOT NULL,
+    note               TEXT,
+    updated_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (ticker, timeframe)
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_anchors_ticker ON manual_anchors(ticker);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -381,3 +404,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (4);
 INSERT OR IGNORE INTO schema_version (version) VALUES (5);
 INSERT OR IGNORE INTO schema_version (version) VALUES (6);
 INSERT OR IGNORE INTO schema_version (version) VALUES (7);
+INSERT OR IGNORE INTO schema_version (version) VALUES (8);

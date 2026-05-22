@@ -442,9 +442,13 @@ CREATE TABLE manual_anchors (
 
 ## 부록 B — depends_on 의존 상세
 
-### INFRA-CHART-DATA-001 v2 (chart_ohlcv 깊이 확장)
+### INFRA-CHART-DATA-001 v2 (chart_ohlcv 깊이 = 이미 충족)
 
-현재 chart_ohlcv 종목별 일봉 적재 깊이 = 1년 (250 봉). 본 SPEC 의 monthly α (`min_bars=60, max_history_years=15`) + weekly α (`min_bars=156, max_history_years=5`) 요구 충족하려면 **종목별 일봉 5~10년** 필요. KIS API `inquire-daily-itemchartprice` 의 페이징 호출 2~3 회로 확보 가능. INFRA-CHART-DATA-001 v3 마이크로 정정 또는 본 SPEC sub-cycle 14.1 에서 동시 처리 결정.
+**cycle 14.1 시작 시 정정 (2026-05-22)**: SPEC 작성 시점 인식 = "현재 1년 (250 봉) → 5~10 년 확장 필요". 실 코드 확인 결과 **이미 5년 (1825 봉) fetch 적용** (`connectors/kis/client.py` get_daily_chart period_days=1825 default + 25 회 페이징 가드 2500 봉, `collectors/charts.py` build_chart_data period_days=1825 default). 본 SPEC 의 monthly α `min_bars=60` (= 60 개월 = 5 년) + weekly α `min_bars=156` (= 3 년) 요구 = **현 5 년 fetch 로 충족**.
+
+월봉 anchor 의 `max_history_years=15` 는 upper bound (15 년 이내에서 candidate 검색). 5 년 깊이로 자동 산출 가능. 그보다 더 과거 anchor 가 필요한 경우 = `manual_anchors` 테이블 (cycle 14.1 신규) override 로 처리.
+
+**결론**: INFRA-CHART-DATA-001 v3 마이크로 정정 또는 별 commit **불필요**. 본 sub-cycle 14.1 = canon + DB + scoring 만 진행.
 
 ### ANALYST-PERSONAS-001 v2 (stock_analyst v3 → v4)
 

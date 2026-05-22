@@ -7,15 +7,15 @@ ANALYST-PERSONAS-001 v2 옵션 b — 채점은 코드 stage, canon md 는 원리
 발행 분석가 / canon 인용:
     s_score:   stock_picker      / principles/stock_selection
     t_score:   trader            / trading/entry_exit (α 오버라이드 적용)
-    alpha:     stock_analyst     / stock-analysis/fractal_wave (W1 등)
+    alpha:     stock_analyst     / stock-analysis/fractal_wave (WA·WF·WL·WE·WX 21 명제, WAVE-ALPHA-001)
     buy_score: stock_picker (B)  / stock_selection/momentum_leaders (CAN SLIM 7축)
     f_score:   flow_analyzer     / flow_analysis/sector_flow + stock_flow
 
 공식 SLOT:
     s_score / t_score / buy_score 의 합산 공식 = SPEC S7 SLOT,
         분석가 manifest 작성 시 정식 가중치 확정. 현재 = 균등 가중 평균 placeholder.
-    alpha 공식 = WAVE-ALPHA-001 백로그.
-        현재 = ln(C/B) / ln(B/A) placeholder (current 인자는 정식 외삽 검증용).
+    alpha 공식 = WAVE-ALPHA-001 SPEC 정식 = 시간 정규화 기울기 비율
+        (k₁=ln(B/A)/days(A→B), k₂=ln(current/C)/days(C→current), α=k₂/k₁).
     f_score 공식 = SPEC v2 명시 (4 축 가중 합) — 그대로 구현.
     α 오버라이드 = STRATEGY-TRACK-001 명시 — 그대로 구현.
 """
@@ -23,6 +23,28 @@ ANALYST-PERSONAS-001 v2 옵션 b — 채점은 코드 stage, canon md 는 원리
 from __future__ import annotations
 
 import math
+from datetime import date
+from typing import Literal
+
+
+# ============================================================
+# WAVE-ALPHA-001 상수 (canon WL1 + WA5 정합)
+# ============================================================
+
+THRESHOLDS: dict[str, dict[str, float]] = {
+    "daily":   {"low": 0.5, "sweet_lo": 1.0, "sweet_hi": 4.0},
+    "weekly":  {"low": 0.7, "sweet_lo": 1.0, "sweet_hi": 3.0},
+    "monthly": {"low": 0.8, "sweet_lo": 1.0, "sweet_hi": 2.5},
+}
+
+TIMEFRAME_LIMITS: dict[str, dict[str, int]] = {
+    "daily":   {"min_gap_days": 5,   "min_bars": 250, "max_history_years": 3},
+    "weekly":  {"min_gap_days": 35,  "min_bars": 156, "max_history_years": 5},
+    "monthly": {"min_gap_days": 180, "min_bars": 60,  "max_history_years": 15},
+}
+
+AlphaLabel = Literal["trend_broken", "weak", "modest", "sweet", "overheated"]
+Anchor = tuple[date, float]  # (date, price)
 
 
 def _clamp(value: float, *, low: float = 0.0, high: float = 10.0) -> float:
@@ -112,40 +134,128 @@ def t_score(
     return _clamp(_round_to_half(adjusted))
 
 
-def alpha(anchor_a: float, anchor_b: float, anchor_c: float, current: float) -> float:
-    """가속계수 — stock_analyst 발행, stock-analysis/fractal_wave (W1 등) framework 권위.
+def _validate_anchor(name: str, value: Anchor) -> tuple[date, float]:
+    """Anchor tuple (date, price) 유효성 검증. (date, float) 반환."""
+    if not isinstance(value, tuple) or len(value) != 2:
+        raise TypeError(f"{name} must be tuple (date, price), got {type(value).__name__}")
+    d, p = value
+    if not isinstance(d, date):
+        raise TypeError(f"{name}.date must be datetime.date, got {type(d).__name__}")
+    if not isinstance(p, (int, float)) or isinstance(p, bool):
+        raise TypeError(f"{name}.price must be int or float, got {type(p).__name__}")
+    if p <= 0:
+        raise ValueError(f"{name}.price must be > 0, got {p}")
+    return d, float(p)
 
-    placeholder = ln(C/B) / ln(B/A) (B→C 추세 vs A→B 추세 비).
-    정식 공식 = WAVE-ALPHA-001 SPEC (백로그). current 인자는 외삽 검증용 (현재 미사용).
+
+def alpha(
+    anchor_a: Anchor,
+    anchor_b: Anchor,
+    anchor_c: Anchor,
+    current: Anchor,
+) -> float | None:
+    """가속계수 (시간 정규화 기울기 비율) — stock_analyst 발행, WAVE-ALPHA-001 정식.
+
+    canon: WF1 (k₁) + WF2 (k₂) + WF3 (α=k₂/k₁) + WE2 (k1_flat) + WE3 (trend_broken).
+
+    공식:
+        k₁ = ln(B.price / A.price) / (B.date - A.date).days
+        k₂ = ln(current.price / C.price) / (current.date - C.date).days
+        α  = k₂ / k₁
 
     Args:
-        anchor_a, anchor_b, anchor_c: 1·2·3차 앵커 가격 (> 0, 단조 증가).
-        current: 현재 가격 (> 0). 정식 공식에서 외삽 검증용.
+        anchor_a: (date, price) — 1차 발산 시작점 (장기 바닥 후 첫 상승 진입)
+        anchor_b: (date, price) — 1차 발산 정점
+        anchor_c: (date, price) — 1차 되돌림 저점 = 2차 발산 시작점
+        current:  (date, price) — 현재가 (외삽 검증용)
 
     Returns:
-        α ≥ 0 (정상 추세 ≈ 1.0, 발산 시작 ≥ 1.3, 강발산 ≥ 1.5, 폭주 ≥ 2.0).
+        α (무차원) 또는 None (WE2 k1_flat 시).
+        - α > 0 = 2차 발산 진행 (정상)
+        - α ≤ 0 = trend_broken (current ≤ C, canon WE3)
 
     Raises:
-        ValueError: 가격 ≤ 0 또는 앵커 비단조 (A < B < C 강제).
+        TypeError: 인자 타입 위반
+        ValueError: 가격 ≤ 0, 시간 역행 (days ≤ 0).
     """
-    for name, val in (
-        ("anchor_a", anchor_a),
-        ("anchor_b", anchor_b),
-        ("anchor_c", anchor_c),
-        ("current", current),
-    ):
-        if not isinstance(val, (int, float)) or isinstance(val, bool):
-            raise TypeError(f"{name} must be int or float, got {type(val).__name__}")
-        if val <= 0:
-            raise ValueError(f"{name} must be > 0, got {val}")
-    if not (anchor_a < anchor_b < anchor_c):
-        raise ValueError(
-            f"앵커 단조 증가 위배 — A < B < C 강제 "
-            f"(got A={anchor_a}, B={anchor_b}, C={anchor_c})"
-        )
-    base_slope = math.log(anchor_b / anchor_a)
-    next_slope = math.log(anchor_c / anchor_b)
-    return next_slope / base_slope
+    a_date, a_price = _validate_anchor("anchor_a", anchor_a)
+    b_date, b_price = _validate_anchor("anchor_b", anchor_b)
+    c_date, c_price = _validate_anchor("anchor_c", anchor_c)
+    cur_date, cur_price = _validate_anchor("current", current)
+
+    days_ab = (b_date - a_date).days
+    days_c_cur = (cur_date - c_date).days
+    if days_ab <= 0:
+        raise ValueError(f"B.date must be after A.date, got A={a_date}, B={b_date}")
+    if days_c_cur <= 0:
+        raise ValueError(f"current.date must be after C.date, got C={c_date}, current={cur_date}")
+
+    k1 = math.log(b_price / a_price) / days_ab
+    if abs(k1) < 1e-6:
+        return None  # canon WE2 — 1차 발산 평탄, α 무의미
+    k2 = math.log(cur_price / c_price) / days_c_cur
+    return k2 / k1
+
+
+def interpret_alpha(value: float | None, timeframe: str) -> AlphaLabel | None:
+    """α → 5 단계 label (canon WL1). timeframe 별 차등 임계.
+
+    Args:
+        value: alpha() 산출값 또는 None
+        timeframe: "daily" | "weekly" | "monthly"
+
+    Returns:
+        "trend_broken" | "weak" | "modest" | "sweet" | "overheated" 또는 None
+        (value is None 또는 NaN).
+
+    Raises:
+        ValueError: timeframe 미지정.
+    """
+    if timeframe not in THRESHOLDS:
+        raise ValueError(f"timeframe must be one of {list(THRESHOLDS)}, got {timeframe!r}")
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+    t = THRESHOLDS[timeframe]
+    if value <= 0:
+        return "trend_broken"
+    if value < t["low"]:
+        return "weak"
+    if value < t["sweet_lo"]:
+        return "modest"
+    if value < t["sweet_hi"]:
+        return "sweet"
+    return "overheated"
+
+
+def progress_to_b(current_price: float, b_price: float) -> float:
+    """1차 정점 대비 현재가 비율 (canon WF4).
+
+    ≥ 1.0 = B 돌파, 0.7~1.0 = B 근접 (sweet 근접), < 0.7 = 잠재력 큼.
+    """
+    if not isinstance(current_price, (int, float)) or isinstance(current_price, bool):
+        raise TypeError(f"current_price must be number, got {type(current_price).__name__}")
+    if not isinstance(b_price, (int, float)) or isinstance(b_price, bool):
+        raise TypeError(f"b_price must be number, got {type(b_price).__name__}")
+    if b_price <= 0:
+        raise ValueError(f"b_price must be > 0, got {b_price}")
+    return current_price / b_price
+
+
+def duration_ratio(a_date: date, b_date: date, c_date: date, current_date: date) -> float:
+    """1차 발산 시간 대비 2차 진행 시간 비율 (canon WF4).
+
+    < 0.3 = 2차 너무 초기 (외삽 신뢰도 낮음)
+    0.3~1.0 = 진행 중
+    > 1.0 = 2차가 1차보다 길게 진행
+    """
+    for name, d in (("a_date", a_date), ("b_date", b_date), ("c_date", c_date), ("current_date", current_date)):
+        if not isinstance(d, date):
+            raise TypeError(f"{name} must be datetime.date, got {type(d).__name__}")
+    days_ab = (b_date - a_date).days
+    days_c_cur = (current_date - c_date).days
+    if days_ab <= 0:
+        raise ValueError(f"B.date must be after A.date, got A={a_date}, B={b_date}")
+    return days_c_cur / days_ab
 
 
 def buy_score(

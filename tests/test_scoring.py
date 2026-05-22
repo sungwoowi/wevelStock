@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 
 import pytest
 
@@ -147,57 +148,135 @@ class TestTScore:
 
 
 # ============================================================
-# alpha — 가속계수 (stock_analyst, placeholder)
+# alpha — 가속계수 (stock_analyst, WAVE-ALPHA-001 정식 시간 정규화 공식)
 # ============================================================
 
 
 class TestAlpha:
-    def test_linear_growth(self) -> None:
-        # 100 → 110 → 121 (10% 동일 비율)
-        # ln(110/100) ≈ 0.0953, ln(121/110) ≈ 0.0953 → α ≈ 1.0
-        assert alpha(100, 110, 121, 121) == pytest.approx(1.0, rel=1e-6)
+    """canon WF1 + WF2 + WF3 + WE2 + WE3 1:1 검증.
 
-    def test_accelerating_growth(self) -> None:
-        # 100 → 120 → 150 (20% → 25% 가속)
-        # ln(120/100) ≈ 0.1823, ln(150/120) ≈ 0.2231 → α ≈ 1.224
-        result = alpha(100, 120, 150, 150)
-        assert result > 1.0
-        assert result == pytest.approx(math.log(150 / 120) / math.log(120 / 100), rel=1e-9)
+    14.1 commit 시 새 시그니처 (Anchor=tuple[date,float]) 로 전환. 풀세트 ~25 케이스는
+    14.3 별 세션의 tests/test_alpha.py 신규에서 박힘.
+    """
 
-    def test_strong_divergence_above_1_5(self) -> None:
-        # 100 → 110 → 200 (10% → 82%) → α >> 1.5
-        result = alpha(100, 110, 200, 200)
-        assert result > 1.5
+    def test_alpha_one_to_one(self) -> None:
+        # k₁ == k₂ → α = 1.0 (정상 추세 복제)
+        # A→B: 100 days, ln(2) → k₁ = ln(2)/100
+        # C→cur: 100 days, ln(2) → k₂ = ln(2)/100
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 200.0)   # +100 일
+        c = (date(2023, 7, 1), 150.0)
+        cur = (date(2023, 10, 9), 300.0)  # +100 일, ln(300/150)=ln(2)
+        assert alpha(a, b, c, cur) == pytest.approx(1.0, rel=1e-9)
 
-    def test_decelerating(self) -> None:
-        # 100 → 150 → 160 (50% → 6.7%) → α < 1.0
-        result = alpha(100, 150, 160, 160)
-        assert result < 1.0
-        assert result > 0
+    def test_alpha_accelerating(self) -> None:
+        # 1차 100→200 (100일, ln(2)/100), 2차 150→300 (50일, ln(2)/50) → α = 2.0
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 200.0)
+        c = (date(2023, 7, 1), 150.0)
+        cur = (date(2023, 8, 20), 300.0)  # +50 일
+        result = alpha(a, b, c, cur)
+        assert result == pytest.approx(2.0, rel=1e-6)
 
-    def test_non_monotonic_raises(self) -> None:
-        # B ≤ A 위배
-        with pytest.raises(ValueError, match="단조 증가"):
-            alpha(100, 100, 110, 110)
+    def test_alpha_decelerating(self) -> None:
+        # 1차 100→200 (100일, k₁), 2차 150→200 (100일, k₂=ln(4/3)/100 < k₁) → α < 1
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 200.0)
+        c = (date(2023, 7, 1), 150.0)
+        cur = (date(2023, 10, 9), 200.0)
+        result = alpha(a, b, c, cur)
+        assert result is not None
+        assert 0.0 < result < 1.0
 
-    def test_non_monotonic_c_le_b(self) -> None:
-        with pytest.raises(ValueError, match="단조 증가"):
-            alpha(100, 110, 110, 120)
+    def test_alpha_trend_broken_current_equal_c(self) -> None:
+        # current = C → ln(C/C) = 0 → α = 0 (canon WE3)
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 200.0)
+        c = (date(2023, 7, 1), 150.0)
+        cur = (date(2023, 10, 9), 150.0)
+        assert alpha(a, b, c, cur) == 0.0
 
-    def test_zero_anchor_raises(self) -> None:
+    def test_alpha_trend_broken_current_below_c(self) -> None:
+        # current < C → α < 0 (canon WE3)
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 200.0)
+        c = (date(2023, 7, 1), 150.0)
+        cur = (date(2023, 10, 9), 120.0)
+        result = alpha(a, b, c, cur)
+        assert result is not None
+        assert result < 0.0
+
+    def test_alpha_k1_flat_returns_none(self) -> None:
+        # A == B → k₁ = 0 → canon WE2 → None
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 100.0)  # 동일가
+        c = (date(2023, 7, 1), 80.0)
+        cur = (date(2023, 10, 9), 110.0)
+        assert alpha(a, b, c, cur) is None
+
+    def test_alpha_time_normalized(self) -> None:
+        # 1차 6개월 100→200, 2차 12개월 150→300 = 같은 비율, 시간 2 배 → k₂ = k₁/2 → α = 0.5
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 7, 1), 200.0)    # 181 일
+        c = (date(2023, 8, 1), 150.0)
+        cur = (date(2024, 7, 28), 300.0)  # 362 일 (≈ 181×2)
+        result = alpha(a, b, c, cur)
+        assert result is not None
+        # k₁ = ln(2)/181, k₂ = ln(2)/362, α = 181/362 ≈ 0.5
+        assert result == pytest.approx(181 / 362, rel=1e-6)
+
+    def test_alpha_zero_price_raises(self) -> None:
         with pytest.raises(ValueError, match="> 0"):
-            alpha(0, 110, 121, 130)
+            alpha(
+                (date(2023, 1, 1), 0.0),
+                (date(2023, 4, 11), 200.0),
+                (date(2023, 7, 1), 150.0),
+                (date(2023, 10, 9), 300.0),
+            )
 
-    def test_negative_anchor_raises(self) -> None:
+    def test_alpha_negative_price_raises(self) -> None:
         with pytest.raises(ValueError, match="> 0"):
-            alpha(100, -110, 121, 130)
+            alpha(
+                (date(2023, 1, 1), 100.0),
+                (date(2023, 4, 11), -200.0),
+                (date(2023, 7, 1), 150.0),
+                (date(2023, 10, 9), 300.0),
+            )
 
-    def test_invalid_type(self) -> None:
+    def test_alpha_time_reverse_raises(self) -> None:
+        # B.date < A.date → 시간 역행
+        with pytest.raises(ValueError, match="B.date must be after A.date"):
+            alpha(
+                (date(2023, 4, 11), 100.0),
+                (date(2023, 1, 1), 200.0),  # B before A
+                (date(2023, 7, 1), 150.0),
+                (date(2023, 10, 9), 300.0),
+            )
+
+    def test_alpha_current_before_c_raises(self) -> None:
+        with pytest.raises(ValueError, match="current.date must be after C.date"):
+            alpha(
+                (date(2023, 1, 1), 100.0),
+                (date(2023, 4, 11), 200.0),
+                (date(2023, 10, 9), 150.0),
+                (date(2023, 7, 1), 300.0),  # current before C
+            )
+
+    def test_alpha_invalid_type(self) -> None:
         with pytest.raises(TypeError):
-            alpha("100", 110, 121, 130)  # type: ignore[arg-type]
+            alpha(
+                100,  # type: ignore[arg-type]
+                (date(2023, 4, 11), 200.0),
+                (date(2023, 7, 1), 150.0),
+                (date(2023, 10, 9), 300.0),
+            )
 
-    def test_determinism(self) -> None:
-        values = [alpha(100, 130, 180, 180) for _ in range(100)]
+    def test_alpha_determinism(self) -> None:
+        a = (date(2023, 1, 1), 100.0)
+        b = (date(2023, 4, 11), 130.0)
+        c = (date(2023, 7, 1), 110.0)
+        cur = (date(2023, 10, 9), 180.0)
+        values = [alpha(a, b, c, cur) for _ in range(100)]
         assert len(set(values)) == 1
 
 
@@ -304,9 +383,14 @@ class TestFScore:
 
 def test_all_functions_deterministic() -> None:
     """5 함수 모두 같은 입력 500회 → 모두 동일 (재현성 ±0 강제)."""
+    a_anchor = (date(2023, 1, 1), 100.0)
+    b_anchor = (date(2023, 4, 11), 130.0)
+    c_anchor = (date(2023, 7, 1), 110.0)
+    cur_anchor = (date(2023, 10, 9), 180.0)
+
     s_values = {s_score(3, 7, 8) for _ in range(500)}
     t_values = {t_score(4, 6, 5, 4, 1.7) for _ in range(500)}
-    alpha_values = {alpha(100, 130, 180, 180) for _ in range(500)}
+    alpha_values = {alpha(a_anchor, b_anchor, c_anchor, cur_anchor) for _ in range(500)}
     buy_values = {buy_score(6, 7, 5, 8, 6, 7, 5) for _ in range(500)}
     f_values = {f_score(7, 8, 4, 6) for _ in range(500)}
 

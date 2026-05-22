@@ -34,8 +34,8 @@ def test_schema_version_7_present(isolated_db: Database) -> None:
     rows = isolated_db.fetch_all("SELECT version FROM schema_version ORDER BY version")
     versions = [r["version"] for r in rows]
     assert 7 in versions
-    # 7 이 최신 — 더 큰 버전이 박혀 있으면 안 됨
-    assert max(versions) == 7
+    # v7 이후 신규 마이그레이션 (예: v8 WAVE-ALPHA-001) 도 호환.
+    assert max(versions) >= 7
 
 
 # ---------------------------------------------------------------------------
