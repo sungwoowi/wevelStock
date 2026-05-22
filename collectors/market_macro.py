@@ -14,10 +14,12 @@ market_state_analyzer 의 4축 (지수 위계 / 등락 추세 / breadth / Distri
 
 SLOT 보류:
 - S1: Distribution Day 임계 (현재 change_pct ≤ -0.2% + volume > prev) — production 검증 시 정정.
-- S4: KRX breadth bld 정확도 — connectors/krx/client.market_breadth 의 SLOT.
 - S5: KIS 지수 chart endpoint — connectors/kis/client.get_daily_chart 의 SLOT.
 
-본 collector 는 KIS 호출을 직접 하지 않음. chart_ohlcv 에 적재된 지수 일봉을 read 만 함.
+S4 (KRX breadth bld) = cycle 14.0 KIS volume_rank fallback 으로 봉합 (KRX 400 응답 시
+거래대금 상위 30 종목 등락 분포로 대용). breadth_source 메타데이터로 분석가에게 한계 노출.
+
+본 collector 는 KIS 호출을 직접 사용 (S4 fallback). chart_ohlcv 에 적재된 지수 일봉도 read.
 지수 적재는 별도 cron (`charts.refresh_all_tickers`) 의 ticker list 확장으로 처리.
 """
 from __future__ import annotations
@@ -31,6 +33,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from collectors.charts import load_ohlcv_from_db
+from connectors.kis import KISClient
 from connectors.krx.client import KRXClient
 from core.db import get_db
 from core.logging import get_logger
@@ -83,6 +86,7 @@ class MarketMacro:
     distribution_count_25d: int
     recent_distribution_days: list[dict[str, Any]] = field(default_factory=list)
     source: str = "computed"   # "db" | "computed" | "stale"
+    breadth_source: str | None = None  # "krx" | "kis_volrank_top30" | "unavailable" (SLOT S4 fallback)
 
 
 # ---------------------------------------------------------------------------
@@ -315,14 +319,59 @@ def upsert_market_macro(macro: MarketMacro) -> None:
 # ---------------------------------------------------------------------------
 
 
+async def _fetch_breadth_kis_fallback(market: str) -> dict[str, Any]:
+    """SLOT S4 fallback — KIS volume_rank top30 의 change_pct 분포로 breadth 대용.
+
+    KRX breadth bld 400 응답 시 사용. 거래대금 상위 30 종목만 본다는 한계 있음
+    (전체 시장 breadth 아님). breadth_source="kis_volrank_top30" 메타데이터로
+    분석가에게 한계 노출.
+    """
+    market_upper = market.upper()
+    scope = "kospi" if market_upper == "KOSPI" else "kosdaq"
+    try:
+        async with KISClient() as kis:
+            rows = await kis.volume_rank(limit=30, rank_type="amount", market_scope=scope)
+    except Exception as exc:
+        log.warning("breadth_kis_fallback_failed", market=market_upper, error=str(exc))
+        return {
+            "advancing": None,
+            "declining": None,
+            "unchanged": None,
+            "breadth_ratio": None,
+            "source": "unavailable",
+        }
+
+    advancing = sum(1 for r in rows if r.get("change_pct", 0) > 0)
+    declining = sum(1 for r in rows if r.get("change_pct", 0) < 0)
+    unchanged = sum(1 for r in rows if r.get("change_pct", 0) == 0)
+    denom = advancing + declining
+    ratio = round(advancing / denom, 4) if denom > 0 else 0.0
+    return {
+        "advancing": advancing,
+        "declining": declining,
+        "unchanged": unchanged,
+        "breadth_ratio": ratio,
+        "source": "kis_volrank_top30",
+    }
+
+
 async def _fetch_breadth(market: str) -> dict[str, Any]:
-    """KRX market_breadth helper wrap. 실패 시 빈 dict."""
+    """Breadth fetch chain: KRX bld → KIS volume_rank fallback (SLOT S4).
+
+    KRX 성공 시 전체 시장 breadth (정확). 실패 시 KIS 거래대금 상위 30 대용 (한계).
+    응답에 source 키 포함하여 호출자가 한계 식별 가능.
+    """
     try:
         async with KRXClient() as krx:
-            return await krx.market_breadth(market)
-    except Exception as exc:  # pragma: no cover — production 검증 시
-        log.warning("market_breadth_failed", market=market, error=str(exc))
-        return {}
+            result = await krx.market_breadth(market)
+        # KRX 응답이 0 카운트만 돌려주면 (bld 미해소 휴리스틱 실패) fallback.
+        if (result.get("advancing", 0) + result.get("declining", 0)) > 0:
+            return result
+        log.info("breadth_krx_empty_fallback_to_kis", market=market)
+    except Exception as exc:
+        log.info("breadth_krx_failed_fallback_to_kis", market=market, error=str(exc))
+
+    return await _fetch_breadth_kis_fallback(market)
 
 
 def _today_kst_str() -> str:
@@ -379,6 +428,7 @@ async def compute_market_macro(
         declining=breadth.get("declining") if breadth else None,
         unchanged=breadth.get("unchanged") if breadth else None,
         breadth_ratio=breadth.get("breadth_ratio") if breadth else None,
+        breadth_source=breadth.get("source") if breadth else "unavailable",
         is_distribution_day=dd["is_distribution_day"],
         change_pct=dd["change_pct"],
         volume_change_pct=dd["volume_change_pct"],
