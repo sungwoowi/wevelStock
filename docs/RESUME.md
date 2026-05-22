@@ -9,46 +9,48 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **`INFRA-SNAPSHOT-EXTEND-001` 구현 풀세트 + production smoke 실증 해소 ✨** (cycle 13, 2026-05-22). cycle 12 SPEC frozen 직후 4 sub-cycle 분할 진행 (13.1 DB+collectors → 13.2a snapshot 통합 → 13.2b cron+seed → 13.3 SLOT S5 정정). **MS3 production UX 차단점 풀세트 실증 해소** = market_state_analyzer `strong_bull` · 95% / flow_analyzer KOSPI 60일 수치 풀세트 / stock_picker 시나리오 분포 활성.
+**현재 위치**: **`WAVE-ALPHA-001` SPEC 5 라운드 면담 신설 ✨** (cycle 14 SPEC only, 2026-05-22). cycle 13 풀세트 (`bd1daaf`→`5bbfc92`) 직후 같은 날 두 번째 세션. RESUME Top 2 진입. `/spec-interview` skill ritual 4 회 누적 검증 (cycle 5/9/12/14). 사용자 결단 = 본 사이클 = SPEC frozen 만 (코드 변경 0), 구현 = cycle 14 sub-cycle 14.1/14.2/14.3 분할 (~1 세션).
 
-**cycle 13 4 sub-cycle 산출**:
-- **13.1** (`bd1daaf`) — DB v7 (market_macro_snapshot + supply_demand_history 2 테이블) + 3 collector (market_macro / sector_rs / supply_demand_history) + 2 connector 분기 (KIS index ticker / KRX market_breadth) + 18 test
-- **13.2a** (`41f62e8`) — collectors/snapshot.py 통합 (MarketSnapshot 4 신규 필드 + 3 fetcher 병렬 asyncio.gather) + render_snapshot_md 9~11 섹션 graceful skip + run_analyst metadata 4 키 + 14 test
-- **13.2b** (`a54f91c`) — server/schedulers/jobs/snapshot_macro.py 신규 cron (평일 18:05 KST) + register_infra_jobs 등록 + collectors/charts.py seed (지수 + 15 ETF) + justfile 2 레시피
-- **13.3** (`bf8140d`) — SLOT S5 정정 = KIS 지수 chart 별도 endpoint `inquire-daily-indexchartprice` + tr_id `FHKUP03500100` + 응답 키 `bstp_nmix_*` 분기 + change_rate 일괄 계산
+**5 라운드 결단 14 건 (영구 권위)**:
+- **R1 본질 5**: anchor 정의 = 1차 발산 시작 / 정점 / 되돌림 저점 = 2차 발산 시작 (사용자 **고유 파동분석 영역**, 박종훈 X) / 3 timeframe (daily/weekly/monthly) 동시 산출, 월봉 황제주 알림 = SLOT S2 / anchor 산출 = **2-Stage 하이브리드** (결정론 candidate + LLM Haiku 4.5 직관 + 3 단 캐싱 + manual override) / **백테스팅 본질** = alpha() cutoff_date 친화 설계, 본체 = SLOT S3 / 출력 = Layer 2 발행 + webapp 자연어 가이드 부록
+- **R2 공식 4**: 시간 정규화 `α = (ln(current/C)/days(C→current)) / (ln(B/A)/days(A→B))` / 5 단계 label (trend_broken / weak / modest / sweet / overheated) + timeframe 차등 임계 / 외삽 메타 2 (progress_to_b + duration_ratio) / 엣지 케이스 7 (E1~E7) + TIMEFRAME_LIMITS
+- **R3 canon 2**: 명제 ID 체계 = **WA/WF/WL/WE** (영역별 prefix, principle_guardian 21 명제 패턴 정합) / canon 분리 (본 SPEC = 1 장 21 명제, 풀세트 = SLOT S4 후속 SPEC `WAVE-ALPHA-CANON-001` 가칭)
+- **R4 persona 3**: verdict 매트릭스 (long: weekly+monthly / swing: daily / 중립 보수 OR) / holding_period 매핑 (monthly→장기 / weekly→중기 / daily→단기, multi 시 긴 timeframe 우선) / 환각 가드 2 중 → **3 중** (WA·WF·WL·WE cited + chart_data_md 출처 + anchor 출처 명시 신설)
+- **R5 테스트/SLOT/구현 3**: 테스트 풀세트 ~60 케이스 (정량 UT 56 + 통합 5) / SLOT 6 (S1 targets / S2 watch / S3 backtest / S4 canon-full / S5 anchor fine-tune / S6 LLM prompt) / 구현 순서 sub-cycle 분할 14.1/14.2/14.3 (cycle 13 패턴 재현)
 
-**Production smoke 실증**: KOSPI/KOSDAQ 각 1,250봉 적재 + refresh-snapshot-macro 양 시장 row → market_state_analyzer 본격 판정 `strong_bull` confidence 95% (cycle 11 unknown 0% → 진전 ✨) + Track A/B 진입 환경 친화 (cycle 11 차단 → 진전) + 실 수치 인용 (KOSPI 7,871.71 / ma20 slope +4.48% / ma60 slope +11.47%).
+**산출물**: `docs/specs/WAVE-ALPHA-001-wave-alpha.md` 신설 (~360 줄, frontmatter generates 5 + modifies 6 + depends_on 3 + contracts 1 `wave-alpha-v1`). 본문 § 11 (목적 / 배경 / 핵심 정의 11 sub-§ / 라운드 결단 14 / SLOT 6 / 구현 순서 sub-cycle 3 / 부록 A webapp 자연어 가이드 / 부록 B depends_on 의존).
 
-**테스트**: 422 → 465 passed (신규 32, 회귀 0). **SPEC 완료도**: generates 11/11, modifies 7/8 (compose.py implicit 정합).
+**검증**: SPEC frontmatter 단독 파싱 통과 (status: frozen) / 라운드 결단 14 ↔ SPEC § 1:1 정합 / 코드·테스트 변경 0 (SPEC frozen 단독, cycle 5/9/12 패턴 정합).
 
-**미해결 부채**: SLOT S4 (KRX breadth bld) — 후보 4종 400, manual devtools 추출 필요. graceful skip 으로 영향 작음.
+**미해결 부채**: SLOT S4 (KRX breadth bld) cycle 13 잔여 / α=null + verdict=inconclusive cycle 14 구현 후 해소 / SLOT S1·S2·S3·S4·S5·S6 후속 SPEC.
 
-**마지막 작업일**: 2026-05-22 (cycle 13 INFRA-SNAPSHOT-EXTEND-001 풀세트 + production smoke)
-**마지막 세션 로그**: [2026-05-22_infra-snapshot-extend-impl.md](c_worked/2026-05-22_infra-snapshot-extend-impl.md).
-**Git**: cycle 12 = `438a235`. cycle 13 = `bd1daaf`→`41f62e8`→`a54f91c`→`bf8140d`. 본 wrap-up commit + push 진행.
+**마지막 작업일**: 2026-05-22 (cycle 14 WAVE-ALPHA-001 SPEC frozen)
+**마지막 세션 로그**: [2026-05-22_wave-alpha-spec.md](c_worked/2026-05-22_wave-alpha-spec.md).
+**Git**: cycle 13 = `bd1daaf`→`41f62e8`→`a54f91c`→`bf8140d`→`5bbfc92` (wrap-up). cycle 14 = SPEC + wrap-up 묶음 commit 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — cycle 13 INFRA-SNAPSHOT-EXTEND 풀세트 후 production UX 자연 진입
+## 🎯 다음에 할 일 (Top 3) — cycle 14 WAVE-ALPHA-001 SPEC frozen 후 구현 풀세트 자연 진입
 
 우선순위 순. 마음에 드는 것 하나를 `/resume` 인터뷰에서 고르세요.
 
-### 1. production UX 본질 구현 (~3 세션) ✨ — MS3 차단점 해소 후 자연 진입
-- **왜**: cycle 13 의 핵심 산출 = 3 분석가 본격 판정 활성. 옛 Top 3 의 차단점 (snapshot 부재 상태 UX 무의미) 해소 ✨. 가장 큰 사용자 가치 = 자연어 채팅창에서 의미 있는 답변 가능 단계. `feedback_webapp_production_ux.md` 본격 사이클.
-- **범위**: 자연어 intent extractor (Haiku 4.5 분류 또는 결정론 키워드 룰) + Track Selector 자동 라우팅 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 토글 별도 페이지 보존. 30 시나리오 우주 (사용자 명시 5 + Claude 4차 25) 의 기본 라우팅.
-- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → Track A·B 권고 종합 + snapshot 풀세트 위에서 의미 있는 답변).
+### 1. WAVE-ALPHA-001 구현 풀세트 (sub-cycle 14.1/14.2/14.3, ~1 세션) ✨ — MS4 진입 베이스라인
+- **왜**: cycle 14 SPEC frozen 직후 자연 진입. cycle 5/9/12 의 "SPEC frozen → 구현 풀세트" 패턴 그대로 4 회 누적 재현. α 산출 활성 시 stock_analyst verdict=`confirmed_high_quality` / `confirmed_low_quality` 정식 발행 + target_prices 3 단 활성 + holding_period 매핑 (장기/중기/단기) → **MS4 (실 매매 시연) 베이스라인** 도달.
+- **범위**: cycle 13 4 sub-cycle 패턴 그대로 분할. **14.1** = canon `01-anchor-and-alpha-formula.md` (WA·WF·WL·WE 21 명제) + DB v8 마이그레이션 (manual_anchors 테이블 + llm_call_cache type=anchor_selection) + `collectors/scoring.py` alpha() 정식 (시간 정규화) + label() + interpret_alpha() (5 단계 sweet spot + timeframe 차등). **14.2** = `collectors/anchors.py` 신규 (extract_swing_candidates + select_anchors_via_llm Haiku 4.5 + 3 단 캐싱 + manual override + E6 fallback) + α 3 timeframe 통합 (`run_analyst.py` 또는 `collectors/snapshot.py` hook). **14.3** = `stock_analyst/persona.md` v3→v4 (§ 4 α 산출 / § 5 verdict 매트릭스 / § 6 holding_period / § 7 환각 가드 3 중) + manifest reads 갱신 + 테스트 ~60 (test_alpha 25 + test_anchors 30 + 통합 5) + smoke (삼성전자 + NVIDIA + KOSPI) + wrap-up.
+- **선행 의존**: `INFRA-CHART-DATA-001 v2` = chart_ohlcv 종목별 일봉 fetch 깊이 1년→5~10년 확장 (weekly/monthly resample). 14.1 또는 별 마이크로 commit.
+- **예상 산출**: stock_analyst α 3 timeframe (daily/weekly/monthly) + verdict=confirmed_* 풀세트 발행 + MS4 진입.
 
-### 2. `WAVE-ALPHA-001` SPEC 신설 (~1 세션) — α 공식 확정 + verdict=confirmed_* 도달
-- **왜**: 잔여 차단점 = α=null (anchor A/B/C 공식 미확정, SLOT S1). 산출 가능 시 stock_analyst verdict=confirmed_high_quality / confirmed_low_quality 정식 발행 (현재 inconclusive + confidence 50-70). target_prices 3 단도 동시 활성. snapshot extend 와 독립 진행 가능 (stock_analyst 단독).
-- **범위**: `/spec-interview` 5 라운드 → anchor 정의 (로그 차트 1차 발산 / 2차 발산 / 되돌림 저점) + `collectors/scoring.py` alpha() 정식 함수 + canon `knowledge/canon/stock-analysis/fractal_wave/` 보강 + persona α 산출 알고리즘 § 정정 + 테스트.
-- **예상 산출**: α 값 정상 발행 → verdict=confirmed_* → MS4 (실 매매 시연) 진입 베이스라인.
+### 2. production UX 본질 구현 (~3 세션) — webapp 자연어 채팅창
+- **왜**: cycle 13 MS3 차단점 해소 + cycle 14 stock_analyst 풀세트 활성 후 자연 진입. 가장 큰 사용자 가치 = 자연어 채팅창에서 의미 있는 답변. `feedback_webapp_production_ux.md` 본격 사이클. WAVE-ALPHA-001 SPEC 부록 A 의 자연어 변환 사전 활용 가능.
+- **범위**: 자연어 intent extractor (Haiku 4.5 분류 또는 결정론 키워드 룰) + Track Selector 자동 라우팅 (이미 있음) + 종합 답변 형식 (분석가 점수 + 전략가 권고 통합 markdown) + webapp 단일 채팅창 UI 재구성 + R&D 토글 별도 페이지 보존. 30 시나리오 우주 기본 라우팅.
+- **예상 산출**: 첫 자연어 호출 가능 ("삼성전자 진입할까?" → 자동 라우팅 → α + Track A·B 권고 종합 답변).
 
-### 3. **SLOT S4 (KRX breadth bld) 정정 + 후속 부채 묶음** (~0.3 세션 소규모) — production UX 또는 WAVE-ALPHA 와 묶기 가능
-- **왜**: cycle 13 잔여 발견 부채. market_macro breadth 축 활성 = market_state_analyzer 4축 풀세트. 단독으로는 작아 다음 사이클과 묶는 게 자연.
-- **범위**: KRX 데이터시스템 (data.krx.co.kr) "통계 > 주식 > 등락 종목수" 페이지 manual devtools 추출 → 정확한 bld 확보 → `connectors/krx/client.py` BLD_MARKET_BREADTH 교체 + market_breadth 응답 키 매핑 정정. 차단 시 KIS volume_rank fallback 검토.
+### 3. **SLOT S4 (KRX breadth bld) 정정 + 후속 부채 묶음** (~0.3 세션 소규모) — Top 1/2 와 묶기 권장
+- **왜**: cycle 13 잔여 발견 부채. market_macro breadth 축 활성 = market_state_analyzer 4축 풀세트. 단독으로는 작아 Top 1/2 와 묶는 게 자연.
+- **범위**: KRX 데이터시스템 (data.krx.co.kr) "통계 > 주식 > 등락 종목수" 페이지 manual devtools 추출 → bld 확보 → `connectors/krx/client.py` BLD_MARKET_BREADTH 교체. 차단 시 KIS volume_rank fallback.
 - **예상 산출**: market_state_analyzer 4축 풀세트 (위계 + 추세 + DD + **breadth** 완성).
 
-(추가 백로그: **`NEWS-SOURCE-001` SPEC 신설** (가칭, news_curator SLOT S2 해소 — Perplexity MCP + 유튜브 요약 + 시간축 라벨링 + 학습부 DB + UX/UI, 대규모 후속) / **`PERSONA-REFUSAL-CITED-RULE-001` SPEC 신설** (가칭, 거부 응답 cited v3.1 룰 9 분석가 표준 룰, 가벼운 SPEC) / **news_curator persona 슬림화** (prompt 32K → 17K 목표, NEWS-SOURCE-001 진행 시 동시) / **Layer 4 계좌관리자 1+ N** (M5, 계좌 4개 자산배분) / **Layer 5 회고분석가** (M4, `RETROSPECT-ANALYST-001` 본체, PROPOSAL 발행) / **GUIDANCE-ACCURACY-TRACKER-001 구현** (DB 마이그레이션 + recorder.py + tracker.py + kpi.py + `회고` 단축어) / **INFRA-US-MACRO-SNAPSHOT-001** (yfinance/FRED 미 매크로) / **INFRA-RELIABILITY-VALIDATOR-001** (Layer 2.5/3.5 Haiku 검증, M2) / **scoring.py s_score·buy_score·alpha 정식 가중치** (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png 어댑터 vision 활성화 / xlsx 어댑터 sheet 별 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
+(추가 백로그: **`WAVE-ALPHA-CANON-001`** (SLOT S4 풀세트 canon W5+ 사용자 자가 정리 + 양질도 10 점) / **`WAVE-ALPHA-WATCH-001`** (SLOT S2 월봉 황제주 watchlist + 알림 cron) / **`WAVE-ALPHA-BACKTEST-001`** (SLOT S3 백테스팅 본체, 사용자 본질 직관) / **`NEWS-SOURCE-001`** SPEC 신설 (news_curator SLOT S2 해소 — Perplexity MCP + 유튜브 + 시간축 + 학습부 DB + UX/UI) / **`PERSONA-REFUSAL-CITED-RULE-001`** SPEC 신설 (거부 응답 cited v3.1 룰 9 분석가 표준) / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, `RETROSPECT-ANALYST-001`) / GUIDANCE-ACCURACY-TRACKER-001 구현 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5 Haiku 검증, M2) / scoring.py s_score·buy_score 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression SPEC / Quality Eval SPEC / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3 PROPOSAL))
 
 ---
 
@@ -217,25 +219,14 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-21 cycle 12 — INFRA-SNAPSHOT-EXTEND-001 SPEC 5 라운드 면담)**
-- **SPEC frozen → 구현 풀세트 2 사이클 분할 패턴 = 3 회 연속 검증 ✨**: cycle 5 (INFRA-CHART-DATA-001) / cycle 9 (INFRA-FUNDAMENTAL-DATA-001) / cycle 12 (INFRA-SNAPSHOT-EXTEND-001) 모두 동일 패턴. ~0.5 세션 SPEC + ~2 세션 구현 분할. 사용자 검토 시간 확보 + 큰 commit 위험 최소. **3 회 누적 검증 = 영구 ritual 격상**. 미래 인프라 SPEC 신설 시 default 분할 패턴.
+**이번 세션에 굳힌 판단 (2026-05-22 cycle 14 — WAVE-ALPHA-001 SPEC 5 라운드 면담)**
+- **`/spec-interview` skill ritual 4 회 누적 검증 ✨ → 영구 ritual 확고화**: cycle 5 (INFRA-CHART-DATA-001) / cycle 9 (INFRA-FUNDAMENTAL-DATA-001) / cycle 12 (INFRA-SNAPSHOT-EXTEND-001) / cycle 14 (WAVE-ALPHA-001) 모두 동일 패턴 = ~0.5 세션 SPEC + ~1~2 세션 구현 분할 + AskUserQuestion 5 라운드 옵션 (Recommended first) + 결단 N 건 영구 권위 + frontmatter status: frozen. **4 회 누적 = 미래 모든 인프라 SPEC 신설 시 default 진입점**. SPEC 작성 자체가 사용자 시간 부담 최소 + 결단 명문화 + 큰 commit 위험 분산.
+- **사용자 고유 framework 영역 = canon 자가 정리 본질 (외부 권위 임의 인용 금지)**: 라운드 1 Q1-a 에서 사용자가 "프랙탈 + 로그 함수 해석은 본인의 고유 파동분석 영역" 으로 정정 (박종훈 강의 X). canon `knowledge/canon/<dept>/<custom-framework>/` 채움은 **사용자 자가 정리만**, 외부 자료 (강의·책) 의 임의 매핑 금지. 풀세트 자료는 후속 SPEC 분리 (`WAVE-ALPHA-CANON-001` 가칭). 명제 ID 체계 = **WA/WF/WL/WE 영역별 prefix** (principle_guardian C·D·R·OS 21 명제 패턴 정합). 미래 다른 사용자 고유 framework SPEC 작성 시 동일 패턴.
+- **백테스팅 친화 설계 = 새 인프라 SPEC 의 핵심 자질로 격상**: 라운드 1 Q1-d 사용자 본질 발견 = "미래 성과 보기 전에 과거 백테스팅이 본 SPEC 질문 다 해소". 본 SPEC alpha() 함수가 **cutoff_date 인자 + 결정론 + 캐싱** = 과거 시점 시뮬레이션 가능 = 사용자 framework 진화 + 시스템 발전 핵심 동력. 백테스팅 본체는 SLOT S3 분리 (`WAVE-ALPHA-BACKTEST-001` 가칭). 미래 모든 분석가 결정론 함수 (scoring.py / 가중치 등) 설계 시 cutoff_date 친화 default.
+
+**직전 세션 판단 (2026-05-21 cycle 12 — INFRA-SNAPSHOT-EXTEND-001 SPEC 5 라운드 면담)**
 - **contract 정식 명문화 = ad-hoc 의 SPEC 그라운딩 패턴**: `market-snapshot-md-v1` 의 본 SPEC 정의 = cycle 1~2 의 ad-hoc 구현 (`render_snapshot_md` 8 섹션) 의 SPEC 그라운딩. 새 SPEC 작성 시 기존 ad-hoc 자산이 있다면 `v1.0 = 현재 풀세트 + 신규 섹션 누적` 형식 권유. `compose.build_pipeline_prompt` 시그니처 변경 X 가 자연 (chart v2 / fundamental v2 와 같은 [N] 블록 신규 추가 패턴 대비, snapshot 은 기존 [3] 블록 확장만).
 - **briefing_parts 활용 본질 = read-only 보조 source 정합**: 본 SPEC 의 정규 DB (`supply_demand_history` 등) + briefing_parts 시계열 차분 = intraday 흐름 보조 (flow_analyzer 자금 유입 속도 0.2 축). retention 90일 한계로 영구 시계열은 별도 DB 가 본질. 단 정규 cron 외 보조 source 로 활용 가능 = 미래 인프라 SPEC 설계 시 "정규 DB + briefing_parts 차분" 이중 활용 패턴 정립.
-
-**직전 세션 판단 (2026-05-20 cycle 9 — INFRA-FUNDAMENTAL-DATA-001 SPEC 5 라운드 면담)**
-- **`/spec-interview` skill ritual = 첫 본격 적용**: cycle 5 의 INFRA-CHART-DATA-001 SPEC 면담은 비공식 진행이었으나 cycle 9 = `/spec-interview` skill 명시 발동 + AskUserQuestion 으로 R1~R5 옵션 제시 + 사용자 결정. 5 라운드 = 1 라운드당 2~3 옵션 + 권장 first option (Recommended). 사용자 시간 부담 최소. 미래 새 SPEC 신설 시 동일 ritual 우선.
-- **SPEC frozen → 구현 풀세트 2 사이클 분할 패턴 정합**: cycle 5 (INFRA-CHART-DATA-001 SPEC frozen, ad6ec07) → cycle 6 (구현 풀세트, 665796f) 패턴이 cycle 9 (INFRA-FUNDAMENTAL-DATA-001 SPEC frozen) → cycle 10 (구현 풀세트 예정) 으로 재현. **SPEC 만 사이클 = ~0.5 세션 / 구현 풀세트 = ~2 세션** 분리가 사용자 검토 시간 확보 + 큰 commit 위험 최소화. 미래 큰 SPEC 신설 시 동일 분할 권유.
-- **chart v3 정정 패턴 → fundamental v4 정정 1:1 미러**: stock_analyst persona 의 환각 가드 해제 패턴이 cycle 6 chart v3 (α·F1·F4 활성화) → cycle 10 fundamental v4 (F5·F2 활성화) 로 동일 트레이스. § Reasoning Doctrine F1~F5 정의 row + § Outputs 격자 [1] Quality Grid + manifest response_rules + reads_* 플래그 = 4 위치 일관 박음. 미래 인프라성 SPEC 의 persona 정정 시 동일 패턴 재사용.
-
-**직전 세션 판단 (2026-05-20 cycle 8 — claude_code provider HTTP 500 silent 진단)**
-- **빈 string fallback = type 명·repr 진단 가치**: `str(e)` 가 빈 string 인 케이스 (RuntimeError(""), NotImplementedError() 등) 에 `f"{type(e).__name__} (empty message)"` fallback 박으면 사용자/로그 모두 의미 있는 진단 가능. 4 위치 (backend·client·endpoint·SSE) 일관 적용 = 본 사이클 같은 silent 500 패턴 재발 시 즉시 type 명 노출. logger 에 `error_type` + `error_repr` 키 추가도 동일 본질.
-- **NotImplementedError = Selector loop subprocess 미지원 = `_can_spawn_subprocess()` 사전 체크 패턴 일관 적용**: cycle 6.5 silent 500 의 본질이 정확히 이거. `call_claude_code_stream` 은 이미 사전 체크 + sync 직행 패턴 있었으나 `call_claude_code` (non-stream) 만 누락 → cycle 8 정정으로 일관 회복. 미래 subprocess 류 backend 추가 시 동일 패턴 우선.
-- **RuntimeError("exited") 1회 retry = subprocess 일시 burst 흡수**: 200ms backoff 단순 retry. timeout / not installed / auth 같은 영구 실패는 retry X (즉시 break). 명시 provider 호출 (allow_fallback=False) 케이스에선 mock fallback 안 되니 retry 가 본질 안전망. 미래 다른 backend (gemini/anthropic) 도 transient 패턴 발견 시 동일 적용 가능.
-
-**직전 세션 판단 (2026-05-20 cycle 7 — ask_strategist httpx wrap + operational_safeguards SPEC 정정)**
-- **canon_categories 키 형식 `<dept>/<category>` = canon 파일 이동 없는 권위 이전의 본질**: `operational_safeguards` 권위 이전 시 canon 파일 자체 (`knowledge/canon/trading/operational_safeguards/`) 는 이동 불필요 — 키 안에 dept 정보가 박혀 있어 어느 분석가가 reads 하든 매핑 가능. `load_shared_canon` 카테고리 화이트리스트 매칭이 dept 디렉토리 prefix 로 path 검색 → 분석가 manifest 의 키 변경만으로 권위 이전 + RAG retrieve 대상 분리 동시 달성. 미래 cross-dept 권위 분리 시 동일 패턴.
-- **회장 핑퐁 [22] "묶음 commit" 권유 = git history 정합 + SPEC 단일 진실 동시 달성**: 단독 작은 정정 (Top 3 = SPEC 표 정정) 을 큰 사이클 (Top 2 = httpx wrap) 에 묶음. 단일 commit 으로 SPEC + 코드 + 테스트 정합 동시 달성. 분리 commit 보다 history 추적성 ↑ + reviewer 가 본질·정합 동시 검증 가능. 다음에도 작은 부채 = 큰 commit 에 묶음 권유 (단, 본질이 동일 도메인일 때만).
-- **cycle 3 임시 위임 명시 패턴의 위험 = 4 사이클 잔존**: cycle 3 에서 SPEC 매핑 표 정정 보류 + trader persona 에 권위 위임 명시 임시 박은 부채가 cycle 7 까지 잔존. **임시 위임은 즉시 SPEC 정정으로 마무리해야 함** (메모리 `feedback_track_discovered_debts.md` 정합). SPEC frontmatter ↔ canon frontmatter ↔ persona Knowledge Categories 3-way 정합 자동 검증 부재가 본질 — `validate.py` 보강 백로그.
 
 **직전 세션 판단 (2026-05-19 자료 0 시드 5 분석가 v2 — 5 subagent 병렬 dispatch 첫 적용)**
 - **`superpowers:dispatching-parallel-agents` 패턴 검증 ✨**: 5 subagent 동시 dispatch (1 message 안에 5 Agent tool calls), 각 subagent = `general-purpose` type + 본인 분석가 분량 prompt (~2-3 KB) 받아 2 파일 직접 write. 소요 ~5 분, 총 ~1,800 줄. 충돌 0 (각자 다른 디렉토리). **`feedback_persona_agent_speedup.md` 의 "12+ 세션 → ~4.5 세션 (3배 단축)" 패턴 검증 통과** — 본 세션 = 5명 1 사이클 = 이전 1명 6-12 시간 페이스 대비 ~60배 단축. 다음 사이클 (자료 있는 3명 + canon grep) 도 동일 패턴 적용 가능 (canon grep 충돌 X — 각자 다른 dept).
