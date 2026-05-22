@@ -45,6 +45,9 @@ from collectors.kr_indices import fetch_kr_indices
 from collectors.kr_leading_stocks import fetch_kr_leading_stocks
 from collectors.kr_sectors import fetch_kr_sectors
 from collectors.kr_supply_demand import fetch_kr_supply_demand
+from collectors.market_macro import MarketMacro, compute_market_macro
+from collectors.sector_rs import SectorRS, compute_sector_rs
+from collectors.supply_demand_history import get_supply_60d
 from collectors.us_markets import fetch_overnight
 from connectors.kis import KISClient
 from connectors.krx import KRXClient
@@ -78,6 +81,11 @@ class MarketSnapshot:
     source_map: dict[str, str] = field(default_factory=dict)  # "kr"|"us" → "db"|"fetch"
     db_run_ids: dict[str, str] = field(default_factory=dict)  # pipeline_id → run_id
     db_age_seconds: dict[str, float] = field(default_factory=dict)  # pipeline_id → age
+    # INFRA-SNAPSHOT-EXTEND-001 (cycle 13) — A·B·C 카테고리 신규 3 필드.
+    market_macro: dict[str, Any] = field(default_factory=dict)   # A: {"KOSPI": MarketMacro dict, "KOSDAQ": ...}
+    sector_rs: list[dict[str, Any]] = field(default_factory=list)  # B: [SectorRS dict, ...] 14 섹터
+    kr_supply_60d: dict[str, Any] = field(default_factory=dict)  # C: {"KOSPI": {...}, "KOSDAQ": {...}}
+    snapshot_extend_failures: list[str] = field(default_factory=list)  # 본 SPEC 신규 fetcher 실패만 (failures 와 별개)
 
 
 _LAST: MarketSnapshot | None = None
@@ -145,6 +153,43 @@ def us_threshold_seconds(now_kst: datetime) -> int:
     last_cron = _last_expected_us_cron(now_kst)
     delta = (now_kst - last_cron).total_seconds()
     return int(delta) + _CRON_GRACE_SECONDS
+
+
+# ---------------------------------------------------------------------------
+# INFRA-SNAPSHOT-EXTEND-001 dataclass → dict 직렬화 helper
+# ---------------------------------------------------------------------------
+
+
+def _macro_to_dict(m: MarketMacro) -> dict[str, Any]:
+    """MarketMacro dataclass → plain dict (snapshot.market_macro 저장용)."""
+    return {
+        "date": m.date,
+        "index_close": m.index_close,
+        "ma_36m": m.ma_36m, "ma_60m": m.ma_60m, "position": m.position,
+        "ma_20d": m.ma_20d, "ma_60d": m.ma_60d,
+        "ma20_slope_pct_5d": m.ma20_slope_pct_5d,
+        "ma60_slope_pct_20d": m.ma60_slope_pct_20d,
+        "trend": m.trend,
+        "advancing": m.advancing, "declining": m.declining,
+        "unchanged": m.unchanged, "breadth_ratio": m.breadth_ratio,
+        "is_distribution_day": m.is_distribution_day,
+        "change_pct": m.change_pct, "volume_change_pct": m.volume_change_pct,
+        "distribution_count_25d": m.distribution_count_25d,
+        "recent_distribution_days": m.recent_distribution_days,
+        "source": m.source,
+    }
+
+
+def _sector_rs_to_dict(r: SectorRS) -> dict[str, Any]:
+    """SectorRS dataclass → plain dict."""
+    return {
+        "sector": r.sector,
+        "etf_ticker": r.etf_ticker,
+        "rs_score": r.rs_score,
+        "return_60d": r.return_60d,
+        "kospi_return_60d": r.kospi_return_60d,
+        "rs_ratio": r.rs_ratio,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +392,48 @@ async def build_market_snapshot(
             bucket["kr_leading"] = {"error": "leading_stocks part missing in DB"}
             failures.append("kr_leading")
 
+    # INFRA-SNAPSHOT-EXTEND-001 신규 3 fetcher — A 시장매크로 / B 섹터 RS / C 5주체 60일.
+    # asyncio.gather 병렬 + return_exceptions 부분 발행. chart_ohlcv read 없을 시 자연 None.
+    extend_failures: list[str] = []
+    market_macro_dict: dict[str, Any] = {}
+    sector_rs_list: list[dict[str, Any]] = []
+    kr_supply_60d_dict: dict[str, Any] = {}
+    try:
+        macro_kospi_task = compute_market_macro("KOSPI")
+        macro_kosdaq_task = compute_market_macro("KOSDAQ")
+        sector_rs_task = compute_sector_rs()
+        supply_kospi_task = get_supply_60d("KOSPI")
+        supply_kosdaq_task = get_supply_60d("KOSDAQ")
+        extend_results = await asyncio.gather(
+            macro_kospi_task, macro_kosdaq_task, sector_rs_task,
+            supply_kospi_task, supply_kosdaq_task,
+            return_exceptions=True,
+        )
+        macro_kospi, macro_kosdaq, sector_rs_res, supply_kospi, supply_kosdaq = extend_results
+        if isinstance(macro_kospi, MarketMacro):
+            market_macro_dict["KOSPI"] = _macro_to_dict(macro_kospi)
+        else:
+            extend_failures.append("market_macro_kospi")
+        if isinstance(macro_kosdaq, MarketMacro):
+            market_macro_dict["KOSDAQ"] = _macro_to_dict(macro_kosdaq)
+        else:
+            extend_failures.append("market_macro_kosdaq")
+        if isinstance(sector_rs_res, list):
+            sector_rs_list = [_sector_rs_to_dict(r) for r in sector_rs_res]
+        else:
+            extend_failures.append("sector_rs")
+        if isinstance(supply_kospi, dict):
+            kr_supply_60d_dict["KOSPI"] = supply_kospi
+        else:
+            extend_failures.append("supply_60d_kospi")
+        if isinstance(supply_kosdaq, dict):
+            kr_supply_60d_dict["KOSDAQ"] = supply_kosdaq
+        else:
+            extend_failures.append("supply_60d_kosdaq")
+    except Exception as exc:  # pragma: no cover — 위 gather 가 잡지만 안전망
+        log.warning("snapshot_extend_unexpected", error=str(exc))
+        extend_failures.append("snapshot_extend_unexpected")
+
     elapsed = time.monotonic() - started
     source_map = {
         "kr": "db" if kr_from_db else "fetch",
@@ -366,6 +453,10 @@ async def build_market_snapshot(
         source_map=source_map,
         db_run_ids=db_run_ids,
         db_age_seconds=db_age_seconds,
+        market_macro=market_macro_dict,
+        sector_rs=sector_rs_list,
+        kr_supply_60d=kr_supply_60d_dict,
+        snapshot_extend_failures=extend_failures,
     )
     _LAST = snapshot
     _LAST_AT = now
@@ -644,8 +735,103 @@ def render_snapshot_md(snapshot: MarketSnapshot) -> str:
     else:
         lines.append(f"- [수집 실패 - {_err_msg(leading)}]")
 
+    # ----------------------------------------------------------------------
+    # INFRA-SNAPSHOT-EXTEND-001 — 9, 10, 11 신규 섹션 (A·B·C)
+    # 빈 데이터는 graceful skip (분석가가 무의미한 "수집 실패" 줄을 보지 않도록).
+    # snapshot_extend_failures 가 있으면 마지막에 라벨로만 노출.
+    # ----------------------------------------------------------------------
+    macro_dict = snapshot.market_macro if isinstance(snapshot.market_macro, dict) else {}
+    sector_rs = snapshot.sector_rs if isinstance(snapshot.sector_rs, list) else []
+    supply_60d = snapshot.kr_supply_60d if isinstance(snapshot.kr_supply_60d, dict) else {}
+    has_extend = bool(macro_dict or sector_rs or supply_60d)
+
+    # 9. 시장 매크로 통계
+    if macro_dict:
+        lines.append("")
+        lines.append("### 시장 매크로 통계 (지수 위계·등락 추세·breadth·Distribution Day)")
+        for market_key in ("KOSPI", "KOSDAQ"):
+            m = macro_dict.get(market_key)
+            if not isinstance(m, dict):
+                continue
+            lines.append(f"#### {market_key}")
+            lines.append(
+                f"- 지수 위계: {_num(m.get('index_close'))} "
+                f"(36월선 {_num(m.get('ma_36m'))} / 60월선 {_num(m.get('ma_60m'))}) "
+                f"— **{m.get('position', '?')}**"
+            )
+            lines.append(
+                f"- 등락 추세: ma20 기울기 {_pct(m.get('ma20_slope_pct_5d'))} (5일) / "
+                f"ma60 기울기 {_pct(m.get('ma60_slope_pct_20d'))} (20일) "
+                f"— **{m.get('trend', '?')}**"
+            )
+            adv = m.get("advancing")
+            dec = m.get("declining")
+            br = m.get("breadth_ratio")
+            if adv is not None and dec is not None:
+                lines.append(
+                    f"- Breadth: 상승 {adv} / 하락 {dec} / 보합 {m.get('unchanged', 0)} · "
+                    f"비율 {_num(br, decimals=3) if br is not None else '?'}"
+                )
+            dd_count = m.get("distribution_count_25d", 0)
+            dd_warn = " ⚠ kill switch 임계" if dd_count >= 4 else ""
+            lines.append(
+                f"- Distribution Day (25일): **{dd_count}**{dd_warn} "
+                f"(오늘 발동 {'예' if m.get('is_distribution_day') else '아니오'})"
+            )
+
+    # 10. 섹터 RS
+    if sector_rs:
+        lines.append("")
+        lines.append("### 섹터 RS (60일 excess return vs KOSPI, 0~10 점수)")
+        for r in sector_rs:
+            lines.append(
+                f"- {r.get('sector', '?')} ({r.get('etf_ticker', '?')}): "
+                f"**{_num(r.get('rs_score'), decimals=2)}** "
+                f"(60일 {_pct(r.get('return_60d'))} / KOSPI {_pct(r.get('kospi_return_60d'))} / "
+                f"excess {_pct(r.get('rs_ratio'))})"
+            )
+
+    # 11. 5주체 수급 60일 누적
+    if supply_60d:
+        lines.append("")
+        lines.append("### 5주체 수급 60일 누적 (백만원, 음수=순매도)")
+        for market_key in ("KOSPI", "KOSDAQ"):
+            s = supply_60d.get(market_key)
+            if not isinstance(s, dict):
+                continue
+            lines.append(
+                f"- {market_key} (실측 {s.get('actual_days', 0)}일): "
+                f"외인 {_won_m(s.get('foreign_net_60d'))} / "
+                f"기관 {_won_m(s.get('institution_net_60d'))} / "
+                f"개인 {_won_m(s.get('individual_net_60d'))} "
+                f"(금투 {_won_m(s.get('financial_inv_net_60d'))} / "
+                f"연기금 {_won_m(s.get('pension_net_60d'))}) "
+                f"— 부호 일치도 **{_num(s.get('agreement_score_60d'), decimals=1)}/10**"
+            )
+
+    # 본 분석가 사용 지침 (셋 중 하나라도 발행된 경우에만)
+    if has_extend:
+        lines.append("")
+        lines.append("### 본 분석가 사용 지침 (INFRA-SNAPSHOT-EXTEND-001)")
+        lines.append(
+            "- **market_state_analyzer**: 9 (지수 위계·추세·breadth·DD) 4축 종합 → 시장 체제 판정. "
+            "DD 4+ 시 kill switch 강제 발동."
+        )
+        lines.append(
+            "- **stock_picker**: 10 (섹터 RS) Top 3 = 후보 섹터 + buy_score L (Leader) 축 산출."
+        )
+        lines.append(
+            "- **flow_analyzer**: 11 (5주체 60일) 4축 합 (테마-주체 매칭 0.4 + 60일 모멘텀 0.3 + "
+            "자금 유입 속도 0.2 + 부호 일치도 0.1) = F-Score."
+        )
+
     if snapshot.failures:
         lines.append("")
         lines.append(f"_누락 collector: {', '.join(snapshot.failures)}_")
+
+    if snapshot.snapshot_extend_failures:
+        lines.append(
+            f"_누락 snapshot extend: {', '.join(snapshot.snapshot_extend_failures)}_"
+        )
 
     return "\n".join(lines)

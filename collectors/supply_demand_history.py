@@ -123,6 +123,26 @@ def upsert_supply_row(row: SupplyRow) -> None:
         )
 
 
+def get_supply_latest_age_days(market: str = "KOSPI") -> int | None:
+    """`supply_demand_history` 의 가장 최근 row date 와 오늘 KST 의 차 (일). 없으면 None.
+
+    run_analyst metadata `supply_60d_age_days` 계산용. 정상 ≤ 1.
+    """
+    db = get_db()
+    row = db.fetch_one(
+        "SELECT MAX(date) AS last_date FROM supply_demand_history WHERE market = ?",
+        (market.upper(),),
+    )
+    if not row or row["last_date"] is None:
+        return None
+    try:
+        last = datetime.strptime(row["last_date"], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    today = datetime.now(_KST).date()
+    return (today - last).days
+
+
 def load_supply_window(market: str, *, days: int = _SUPPLY_WINDOW_DAYS) -> list[SupplyRow]:
     """market 의 최근 days 거래일 supply 시계열 반환 (정순)."""
     db = get_db()

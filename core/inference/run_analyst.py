@@ -25,7 +25,8 @@ import yaml
 
 from collectors.charts import build_chart_data, render_chart_data_md
 from collectors.fundamentals import get_fundamentals, render_fundamental_data_md
-from collectors.snapshot import build_market_snapshot, render_snapshot_md
+from collectors.snapshot import MarketSnapshot, build_market_snapshot, render_snapshot_md
+from collectors.supply_demand_history import get_supply_latest_age_days
 from core.knowledge.compose import build_pipeline_prompt
 from core.llm.client import call_llm, call_llm_stream
 from core.logging import get_logger
@@ -34,6 +35,37 @@ log = get_logger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ANALYSTS_DIR = REPO_ROOT / "agents" / "analysts"
+
+
+def _snapshot_extend_metadata(snapshot: MarketSnapshot) -> dict[str, Any]:
+    """INFRA-SNAPSHOT-EXTEND-001 § 13 4 키 산출 (run_analyst metadata 노출).
+
+    - snapshot_extend_failures: snapshot 빌드 시 신규 fetcher 3 실패 라벨 list
+    - market_macro_source: KOSPI / KOSDAQ 두 시장 macro 의 우세 source ("db" | "computed" | "unknown")
+    - sector_rs_count: 정상 발행 섹터 수 (정상 14)
+    - supply_60d_age_days: KOSPI 기준 supply_demand_history latest row age (일, 정상 ≤ 1)
+    """
+    macro = snapshot.market_macro if isinstance(snapshot.market_macro, dict) else {}
+    sources = [m.get("source") for m in macro.values() if isinstance(m, dict)]
+    if not sources:
+        macro_source: str = "unknown"
+    elif all(s == sources[0] for s in sources):
+        macro_source = sources[0] or "unknown"
+    else:
+        macro_source = "mixed"
+
+    sector_rs = snapshot.sector_rs if isinstance(snapshot.sector_rs, list) else []
+    try:
+        supply_age = get_supply_latest_age_days("KOSPI")
+    except Exception:  # pragma: no cover — DB 없는 환경
+        supply_age = None
+
+    return {
+        "snapshot_extend_failures": list(snapshot.snapshot_extend_failures),
+        "market_macro_source": macro_source,
+        "sector_rs_count": len(sector_rs),
+        "supply_60d_age_days": supply_age,
+    }
 
 
 @dataclass(frozen=True)
@@ -499,6 +531,7 @@ async def run_analyst(
         "snapshot_failures": snapshot.failures,
         "snapshot_source_map": dict(snapshot.source_map),
         "snapshot_db_run_ids": dict(snapshot.db_run_ids),
+        **_snapshot_extend_metadata(snapshot),
         **chart_meta,
         **fundamental_meta,
     }
