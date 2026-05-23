@@ -1,0 +1,100 @@
+# PRODUCTION-UX-001 — 시나리오별 분석가 축약 매핑.
+#
+# 라우터가 시나리오 ID 별로 어떤 분석가를 호출할지 결정. track_a/track_b 의
+# reads_analysts 풀세트 대신 본 시나리오에 본질적으로 필요한 ~3-4명만 호출.
+#
+# 효과:
+#   - 호출 시간 ~25s → ~12s (분석가 6명 → 3-4명)
+#   - 비용 절반
+#   - 응답 품질 ↑ (불필요한 분석가 회피 응답 제거)
+#
+# Hot reload: watchdog 가 본 yaml 변경 시 reload_scenario_routing() 자동 호출.
+#
+# Override 우선순위:
+#   1. 시나리오 ID 매칭 → 본 yaml 의 analysts list 사용
+#   2. 매칭 X (시나리오 0/11) → track_id 의 reads_analysts 풀세트 fallback
+
+scenarios:
+  # 시나리오 1: 보유자 결정 (추매/홀딩/매도/손절)
+  # = 종목 본질 + 7계명 검증 + 수급 흐름. trader 불필요 (이미 보유 중이라 진입 타점 X).
+  1:
+    name: "보유자 결정"
+    analysts:
+      - stock_analyst        # α + verdict + holding_period
+      - principle_guardian   # 7계명 위반 위험
+      - flow_analyzer        # 외국인/기관 흐름
+
+  # 시나리오 2: 신규 진입 (얼마에 어떻게 사)
+  # = 종목 선정 + 본질 + 시장 환경 + 원칙 검증. trader 는 단기 R/R 평가용 옵션 포함.
+  2:
+    name: "신규 진입"
+    analysts:
+      - stock_picker         # S-Score + buy_score
+      - stock_analyst        # α + target_price 3단
+      - market_state_analyzer # 시장 환경 (진입 환경)
+      - principle_guardian   # 진입 원칙 검증
+      - flow_analyzer        # 외국인/기관 흐름
+
+  # 시나리오 3: 시장 판단 — 시장상태분석가 단독
+  3:
+    name: "시장 판단"
+    analysts:
+      - market_state_analyzer
+
+  # 시나리오 4: 섹터 선택 (Top 3)
+  4:
+    name: "섹터 선택"
+    analysts:
+      - stock_picker          # 섹터 RS Top
+      - market_state_analyzer # 시장 폭 + 시장 체제
+
+  # 시나리오 5: 주도주 진입 (언제 얼마)
+  5:
+    name: "주도주 진입"
+    analysts:
+      - stock_picker          # S-Score + 주도주 자격
+      - stock_analyst         # α + 진입 타점
+      - market_state_analyzer # 시장 환경
+      - flow_analyzer         # 자금 흐름
+      - trader                # T-Score (단기 진입 타점)
+
+  # 시나리오 6: 매도 시그널 (상승 후 분할)
+  6:
+    name: "매도 시그널"
+    analysts:
+      - stock_analyst        # α verdict 변화 + 목표가 도달 여부
+      - flow_analyzer        # 외국인 매도 전환
+      - principle_guardian   # 매도 원칙
+
+  # 시나리오 7: 손절 발동 (선 이탈)
+  # 시급 — principle_guardian + market_state_analyzer 핵심.
+  7:
+    name: "손절 발동"
+    analysts:
+      - principle_guardian   # OS4 손절선 정합
+      - market_state_analyzer # 시장 위기 여부
+
+  # 시나리오 8: 추매 시그널 (눌림 2차)
+  8:
+    name: "추매 시그널"
+    analysts:
+      - stock_analyst        # α 가속 회복 여부
+      - flow_analyzer        # 수급 재진입
+      - principle_guardian   # 7계명 (#2 단일 종목 15%)
+
+  # 시나리오 9: 시장 위기
+  9:
+    name: "시장 위기"
+    analysts:
+      - market_state_analyzer # kill switch
+      - principle_guardian    # 7계명 #1 총 비중 80%
+
+  # 시나리오 10: 계좌 안심 (매일 아침)
+  # = 보유 종목 점검 — 풀세트 필요 (다수 종목 대상).
+  10:
+    name: "계좌 안심"
+    analysts:
+      - stock_analyst
+      - flow_analyzer
+      - market_state_analyzer
+      - principle_guardian

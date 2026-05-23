@@ -14,7 +14,21 @@ import pytest
 os.environ.setdefault("TESTING", "1")
 
 from core.intent.classifier import IntentClassification
-from core.intent.router import RouteResponse, route_intent
+from core.intent.router import (
+    RouteResponse,
+    _build_subtask_prompt,
+    _resolve_analyst_ids_for_scenario,
+    reload_subtasks_and_routing,
+    route_intent,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reload_subtasks_each():
+    """yaml hot-reload 안전 — 매 테스트마다 캐시 클리어."""
+    reload_subtasks_and_routing()
+    yield
+    reload_subtasks_and_routing()
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +260,125 @@ class TestPendingMs5:
         assert len(stub_analyst) == 0
         assert result.agent_responses[0]["kind"] == "pending_ms5"
         assert "MS5" in result.agent_responses[0]["text"]
+
+
+class TestSubtaskDecomposition:
+    """sub-task prompt 가 사용자 발화 forward 대신 분야별 prompt 로 변환되는지 검증."""
+
+    def test_subtask_prompt_substitutes_ticker(self) -> None:
+        prompt = _build_subtask_prompt(
+            "stock_analyst",
+            ticker="005930",
+            ticker_display="삼성전자",
+            original_input="삼성전자 살까?",
+            scenario_id=2,
+        )
+        # ticker / display 치환 확인
+        assert "005930" in prompt
+        assert "삼성전자" in prompt
+        # 영역 명시
+        assert "종목분석가" in prompt or "stock_analyst" in prompt
+        # 회피 차단 룰 (common_directives)
+        assert "회피" in prompt or "산출" in prompt
+
+    def test_subtask_prompt_includes_scenario_name(self) -> None:
+        prompt = _build_subtask_prompt(
+            "principle_guardian",
+            ticker="005930",
+            ticker_display="삼성전자",
+            original_input="삼성전자 살까?",
+            scenario_id=2,
+        )
+        # 시나리오 2 = "신규 진입"
+        assert "신규 진입" in prompt
+
+    def test_subtask_prompt_falls_back_when_no_template(self) -> None:
+        """알 수 없는 분석가 id → fallback = original_input 그대로."""
+        prompt = _build_subtask_prompt(
+            "nonexistent_analyst",
+            ticker=None,
+            ticker_display=None,
+            original_input="raw user input",
+            scenario_id=2,
+        )
+        assert prompt == "raw user input"
+
+    def test_stub_analyst_receives_subtask_not_original(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        """라우터가 분석가에 던지는 messages 의 마지막 user content = sub-task prompt."""
+        c = _make_classification(
+            scenario_id=2, agent_route="track_a", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "삼성전자 살까?"}]))
+        assert len(stub_analyst) >= 1
+        for call in stub_analyst:
+            last_msg = call["messages"][-1]
+            assert last_msg["role"] == "user"
+            # 사용자 원본 발화 그대로 forward 가 아니라 sub-task prompt 인지
+            content = last_msg["content"]
+            # sub-task prompt 가 본 영역 명시 (예: "주도주" / "수급" / "α" / "종목" 등) 포함
+            assert len(content) > len("삼성전자 살까?") + 50, (
+                f"sub-task prompt 가 너무 짧음 (forward 의심): {content[:200]}"
+            )
+
+
+class TestScenarioRouting:
+    """시나리오별 분석가 축약 매핑 검증."""
+
+    def test_scenario_1_uses_3_analysts(self, stub_strategist, stub_analyst) -> None:
+        """시나리오 1 (보유 결정) = stock_analyst + principle_guardian + flow_analyzer 3명."""
+        c = _make_classification(
+            scenario_id=1, agent_route="track_a", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "삼성전자 들고 있어"}]))
+        # 축약 매핑이 적용되어 3명만 호출
+        called = {call["analyst_id"] for call in stub_analyst}
+        assert called == {"stock_analyst", "principle_guardian", "flow_analyzer"}
+
+    def test_scenario_2_uses_5_analysts(self, stub_strategist, stub_analyst) -> None:
+        """시나리오 2 (신규 진입) = 5명."""
+        c = _make_classification(
+            scenario_id=2, agent_route="track_a", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "삼성전자 살까?"}]))
+        called = {call["analyst_id"] for call in stub_analyst}
+        # config 매핑 = stock_picker + stock_analyst + market_state_analyzer +
+        # principle_guardian + flow_analyzer
+        assert "stock_picker" in called
+        assert "stock_analyst" in called
+        assert "market_state_analyzer" in called
+        assert "principle_guardian" in called
+        assert "flow_analyzer" in called
+
+    def test_scenario_7_uses_2_analysts_only(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        """시나리오 7 (손절) = principle_guardian + market_state_analyzer 2명."""
+        c = _make_classification(
+            scenario_id=7, agent_route="track_a", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "손절선 깼다"}]))
+        called = {call["analyst_id"] for call in stub_analyst}
+        assert called == {"principle_guardian", "market_state_analyzer"}
+
+    def test_unknown_scenario_falls_back_to_reads_analysts(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        """scenario_id=999 (매핑 없음) → track_a reads_analysts 풀세트 fallback."""
+        c = _make_classification(
+            scenario_id=999, agent_route="track_a", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
+        # track_a reads_analysts = 6명
+        assert len(stub_analyst) == 6
+
+    def test_resolve_analyst_ids_helper(self) -> None:
+        # 직접 helper 호출 검증
+        ids1 = _resolve_analyst_ids_for_scenario(1, ["track_a"])
+        assert set(ids1) == {"stock_analyst", "principle_guardian", "flow_analyzer"}
+        ids_fallback = _resolve_analyst_ids_for_scenario(999, ["track_a"])
+        assert len(ids_fallback) == 6
 
 
 class TestErrorHandling:

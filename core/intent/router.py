@@ -14,7 +14,10 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from core.inference.run_analyst import (
     AnalystNotFoundError,
@@ -33,6 +36,105 @@ from core.strategist.run_strategist import (
 )
 
 log = get_logger(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ANALYST_SUBTASKS_PATH = REPO_ROOT / "config" / "analyst_subtasks.yaml"
+SCENARIO_ROUTING_PATH = REPO_ROOT / "config" / "scenario_analyst_routing.yaml"
+
+_ANALYST_SUBTASKS_CACHE: dict | None = None
+_SCENARIO_ROUTING_CACHE: dict | None = None
+
+
+def _load_analyst_subtasks() -> dict:
+    """analyst_subtasks.yaml lazy 로드. 캐시."""
+    global _ANALYST_SUBTASKS_CACHE
+    if _ANALYST_SUBTASKS_CACHE is None:
+        if not ANALYST_SUBTASKS_PATH.exists():
+            log.warning("analyst_subtasks_missing", path=str(ANALYST_SUBTASKS_PATH))
+            _ANALYST_SUBTASKS_CACHE = {"common_directives": "", "analysts": {}}
+        else:
+            try:
+                _ANALYST_SUBTASKS_CACHE = (
+                    yaml.safe_load(ANALYST_SUBTASKS_PATH.read_text(encoding="utf-8")) or {}
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("analyst_subtasks_load_failed", error=str(e))
+                _ANALYST_SUBTASKS_CACHE = {"common_directives": "", "analysts": {}}
+    return _ANALYST_SUBTASKS_CACHE
+
+
+def _load_scenario_routing() -> dict:
+    """scenario_analyst_routing.yaml lazy 로드. 캐시."""
+    global _SCENARIO_ROUTING_CACHE
+    if _SCENARIO_ROUTING_CACHE is None:
+        if not SCENARIO_ROUTING_PATH.exists():
+            log.warning("scenario_routing_missing", path=str(SCENARIO_ROUTING_PATH))
+            _SCENARIO_ROUTING_CACHE = {"scenarios": {}}
+        else:
+            try:
+                _SCENARIO_ROUTING_CACHE = (
+                    yaml.safe_load(SCENARIO_ROUTING_PATH.read_text(encoding="utf-8")) or {}
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("scenario_routing_load_failed", error=str(e))
+                _SCENARIO_ROUTING_CACHE = {"scenarios": {}}
+    return _SCENARIO_ROUTING_CACHE
+
+
+def reload_subtasks_and_routing() -> None:
+    """테스트/hot reload — 두 캐시 모두 클리어."""
+    global _ANALYST_SUBTASKS_CACHE, _SCENARIO_ROUTING_CACHE
+    _ANALYST_SUBTASKS_CACHE = None
+    _SCENARIO_ROUTING_CACHE = None
+
+
+def _resolve_analyst_ids_for_scenario(
+    scenario_id: int, track_ids: list[str]
+) -> list[str]:
+    """시나리오 ID 별 축약 매핑 우선, 없으면 track_ids 의 reads_analysts 합집합 fallback."""
+    routing = _load_scenario_routing()
+    sc_map = (routing.get("scenarios") or {}).get(scenario_id)
+    if sc_map:
+        analysts_list = sc_map.get("analysts") or []
+        if analysts_list:
+            return list(analysts_list)
+    # fallback = track reads_analysts 합집합 (PROD-UX-1 기존 패턴)
+    aid_set: set[str] = set()
+    for tid in track_ids:
+        try:
+            spec = load_strategist_spec(tid)
+            aid_set.update(spec.reads_analysts)
+        except StrategistNotFoundError:
+            continue
+    return sorted(aid_set)
+
+
+def _build_subtask_prompt(
+    analyst_id: str,
+    *,
+    ticker: str | None,
+    ticker_display: str | None,
+    original_input: str,
+    scenario_id: int,
+) -> str:
+    """분석가 별 sub-task prompt 생성. template 에 placeholder 치환."""
+    data = _load_analyst_subtasks()
+    template = (data.get("analysts") or {}).get(analyst_id)
+    common = data.get("common_directives", "")
+    scenario_routing = _load_scenario_routing()
+    sc_meta = (scenario_routing.get("scenarios") or {}).get(scenario_id, {})
+    scenario_name = sc_meta.get("name", f"scenario_{scenario_id}")
+
+    if not template:
+        # fallback — 본 분석가 sub-task 없으면 원본 발화 그대로 (legacy 호환)
+        return original_input
+
+    return template.format(
+        ticker=ticker or "global",
+        ticker_display=ticker_display or "",
+        original_input=original_input,
+        scenario_name=scenario_name,
+    ) + ("\n" + common if common else "")
 
 
 @dataclass
@@ -171,39 +273,62 @@ async def _call_analyst_safe(
 async def _prefetch_analysts_for_tracks(
     track_ids: list[str],
     *,
-    ticker: str | None,
+    classification: IntentClassification,
     messages: list[dict],
     provider: str | None,
 ) -> list[dict[str, Any]]:
-    """옵션 A — 전략가들의 reads_analysts 합집합 → 동시 호출.
+    """옵션 A + Sub-task decomposition + 시나리오별 축약.
+
+    PRODUCTION-UX 사이클 3 (사용자 회피 진단 정합):
+      - 사용자 발화 forward 가 아니라 분석가별 **sub-task prompt** 로 분해
+      - 시나리오 ID 별 **축약 매핑** (config/scenario_analyst_routing.yaml)
+        — 시나리오 2 (신규 진입) 시 6명 → 5명 등 본질 영역만
 
     prism-insight 의 Orchestrator pass-through + wevelStock 의 asyncio.gather 결합.
     DB write 우회 — 본 production-chat 흐름 내 일관성만 보장.
 
     Args:
         track_ids: ["track_a"] 또는 ["track_a", "track_b"] (both)
-        ticker: 종목 6자리 또는 None (global)
+        classification: IntentClassification 풀세트 (scenario_id, ticker 등)
 
     Returns:
-        list of {"id": analyst_id, "text": str, "metadata": dict, "error": str | None}.
+        list of {"id": analyst_id, "text": str, "metadata": dict, "error": str | None,
+                 "subtask_prompt": str (디버깅용)}.
         분석가 호출 실패 시 error 필드만 채워서 반환 (raise X).
     """
-    analyst_ids_set: set[str] = set()
-    for tid in track_ids:
-        try:
-            spec = load_strategist_spec(tid)
-            analyst_ids_set.update(spec.reads_analysts)
-        except StrategistNotFoundError as e:
-            log.warning("router_prefetch_strategist_missing", strategist=tid, error=str(e))
-            continue
-    if not analyst_ids_set:
+    ordered = _resolve_analyst_ids_for_scenario(
+        classification.scenario_id, track_ids
+    )
+    if not ordered:
         return []
 
-    ordered = sorted(analyst_ids_set)
-    tasks = [
-        _call_analyst_safe(aid, messages, target_ticker=ticker, provider=provider)
-        for aid in ordered
-    ]
+    # 각 분석가에 별도 sub-task prompt 던짐 — 사용자 발화 forward X.
+    # messages 의 마지막 user 메시지를 sub-task prompt 로 치환 (멀티턴 prior 는 보존).
+    tasks = []
+    subtask_prompts: list[str] = []
+    for aid in ordered:
+        prompt = _build_subtask_prompt(
+            aid,
+            ticker=classification.ticker,
+            ticker_display=classification.ticker_display,
+            original_input=classification.raw_input,
+            scenario_id=classification.scenario_id,
+        )
+        subtask_prompts.append(prompt)
+        # messages 의 마지막 user 메시지 prompt 로 치환
+        if messages and messages[-1].get("role") == "user":
+            subtask_messages = messages[:-1] + [{"role": "user", "content": prompt}]
+        else:
+            subtask_messages = list(messages) + [{"role": "user", "content": prompt}]
+        tasks.append(
+            _call_analyst_safe(
+                aid,
+                subtask_messages,
+                target_ticker=classification.ticker,
+                provider=provider,
+            )
+        )
+
     results = await asyncio.gather(*tasks, return_exceptions=False)
     return [
         {
@@ -211,8 +336,9 @@ async def _prefetch_analysts_for_tracks(
             "text": r.get("text", ""),
             "metadata": r.get("metadata", {}),
             "error": r.get("error"),
+            "subtask_prompt": subtask_prompts[i],
         }
-        for aid, r in zip(ordered, results)
+        for i, (aid, r) in enumerate(zip(ordered, results))
     ]
 
 
@@ -301,9 +427,12 @@ async def route_intent(
     if route in ("track_a", "track_b", "both"):
         target = ticker or "global"
         track_ids = ["track_a", "track_b"] if route == "both" else [route]
-        # 옵션 A: 분석가들을 먼저 동시 호출 → 전략가 prompt 에 raw 직접 주입.
+        # 옵션 A + sub-task decomposition + 시나리오별 축약
         prefetched = await _prefetch_analysts_for_tracks(
-            track_ids, ticker=ticker, messages=messages, provider=provider
+            track_ids,
+            classification=classification,
+            messages=messages,
+            provider=provider,
         )
         # prefetch 응답을 agent_responses 에 먼저 동봉 (UI 근거 토글용 raw 자료).
         for entry in prefetched:
@@ -554,10 +683,13 @@ async def route_intent_stream(
     if route in ("track_a", "track_b", "both"):
         target = ticker or "global"
         track_ids = ["track_a", "track_b"] if route == "both" else [route]
-        # 옵션 A: prefetch 단계 — 사용자 가시화 (각 분석가 진행 표시)
+        # 옵션 A + sub-task + 축약 — 사용자 가시화 (각 분석가 진행 표시)
         yield {"type": "prefetch_start", "track_ids": track_ids}
         prefetched = await _prefetch_analysts_for_tracks(
-            track_ids, ticker=ticker, messages=messages, provider=provider
+            track_ids,
+            classification=classification,
+            messages=messages,
+            provider=provider,
         )
         for entry in prefetched:
             yield {
