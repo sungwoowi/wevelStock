@@ -9,13 +9,20 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **`PRODUCTION-UX-001` SPEC 신설 완료 ✨** (2026-05-23, 같은 날 세 번째 세션, commit 진행). 직전 세션 머티턴 조사 (7 freeze 항목 도출) → 본 세션 **5 라운드 면담 + SPEC 본문 ~400줄 작성**. cycle 14.3 (WAVE-ALPHA 풀세트, MS4 베이스라인 도달, `e2ee94b` + `2cdfaf3`) 직후 자연 진입. **다음 세션 = PROD-UX-1 구현** (Intent Classifier + Routing + 기본 채팅, ~1 세션, 시연 = 시나리오 1~5).
+**현재 위치**: **`PRODUCTION-UX-001` PROD-UX-1+2 풀세트 구현 + 사이클 3 (분석가 회피 진단 해소) 완료 ✨** (2026-05-23, 같은 날 4번째 세션, 4 commit push). 사용자 자율 권한 위임 후 한 호흡에 SPEC frozen → PROD-UX-1 → PROD-UX-2 → 시연 → 진단 → 사이클 3 모두 진행. **다음 세션 = 사용자 보완점 제보 대응** (시연 후 발견 N건 항목별 핀포인트 정정).
 
-**본 세션 산출**:
-- **`docs/specs/PRODUCTION-UX-001-natural-language-chat.md` 신규 작성** (~400줄, status=approved). frontmatter (generates 15 / modifies 2 / depends_on 4 / contracts 2 = intent-classification-v1 + production-chat-v1) + 본문 § 8 (목적 / 배경 / 7 freeze 결단 / 30 시나리오 매핑 / 아키텍처 / sub-cycle 3 / 테스트 / SLOT 5 + 인수)
-- **5 라운드 면담 결단 9건 (7 freeze + 2 추가)**: R1 시나리오 v1=1~11 freeze + webapp 보존 + SLOT S6 Intent JSON parser 만 / R2 Stage 2 = Gemini Flash-lite (FAST) + fallback chain + manual fallback 임계 0.6 + cache TTL 30일 / R3 시나리오 2·5 default=both + 시나리오 10=보유 종합 + 시나리오 11=pending_ms5 / R4 포맷 LLM 1콜 추가 + label_dictionary.yaml 외부 사전 + 근거 토글=raw 풀세트 / R5 sub-cycle 3 분할 + PROD-UX-1 시연=시나리오 1~5 + 인수=객관 골든 ≥85% + 사용자 발화 만족도. 추가 = LLM 3계층 적용 범위 D 점진 / 근거 토글 LLM 추가 호출 X
-- **validate.py 통과** (PRODUCTION-UX-001 관련 에러 0건). WAVE-ALPHA-001 의 `status: frozen` enum 위반 별도 부채.
-- **사용자 본질 명료화 패턴** = 모호 옵션 답변 ("이게 무슨 말?") → 쉬운 풀이 + 표 + 본질 frame → 같은 옵션 재선택. R2-Q2 (fallback 임계) + R2-Q3 (cache TTL) 양쪽 활용. 캐싱 대상 = "시대 흐름 vs 시황 vs 표현 분류" 사용자 통찰로 30일 TTL 안전 확신.
+**본 세션 산출 (4 commit)**:
+- **`eec126a`** chore: WAVE-ALPHA-001 status enum cleanup (`frozen` → `implemented`)
+- **`af1568c`** PROD-UX-1 = Intent Classifier + Routing + 기본 채팅. `core/intent/{classifier, cache, router, system_prompt.md}` + `config/scenario_keywords.yaml` + `core/llm/tiers.py` + LLMTiers/LLMAreas schema + `server/api/production_chat.py` + `webapp/src/app/production-chat/page.tsx` + 45 골든 + 12 router 테스트
+- **`d30cafd`** PROD-UX-2 = 옵션 A 협동 (prefetch + raw 직접 주입) + `core/intent/formatter.py` (FAST tier 1콜 자연어 1~3줄 압축) + `config/label_dictionary.yaml` (14종 시드) + `webapp/.../{EvidenceToggle, IntentFallback}.tsx` + SSE `type=formatted` 이벤트 + 8 formatter 테스트
+- **`6de001c`** 사이클 3 = sub-task decomposition (`config/analyst_subtasks.yaml`) + 시나리오별 분석가 축약 (`config/scenario_analyst_routing.yaml`) + router `_resolve_analyst_ids_for_scenario` + `_build_subtask_prompt` + 9 신규 테스트
+- **검증**: pytest **542 → 590** (+48, 회귀 0). validate.py 0 errors. webapp tsc 0 errors.
+
+**이번 세션에 굳힌 판단 (영구 권위)**:
+- **분석가 분리 + sub-task decomposition 정합**: prism-insight 의 Orchestrator pass-through + wevelStock 의 asyncio.gather 병렬 = 한 단계 우월. 사용자 의문 "LLM 하나 + 작은 페르소나가 나았으려나?" 에 답 = 아니다. canon RAG 분리·깊이 보존 + 라우터가 분야별 sub-task 분해. 향후 모든 multi-agent orchestration default.
+- **데이터 인프라 빈공간 권위 진단**: 점수 산출 함수 (scoring.py f_score/s_score/buy_score/t_score) 는 잠겨있으나 **input collector 가 부재**. prompt + 위계만으론 "unknown 명시 + 부분 분석" 까지만. **별도 SPEC `INFRA-SCORE-INPUTS-001` 신설 필요** (~5 세션, 본 사이클 scope 밖).
+- **사용자 자율 권한 강화 명시**: "소스코드 수정 권한 묻지 말고 다 완성" → memory `feedback_session_autonomy_signals.md` 정합. 본질·architecture 결정만 묻기.
+- **시나리오별 분석가 축약 결단**: 시나리오 1 = 3명 / 2 = 5명 / 7 = 2명 등. trader 분석가는 시나리오 5 (주도주) 에서만 호출. 호출 시간 ~25s → ~12s, 비용 절반.
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -39,34 +46,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / **SLOT S6 (LLM Stage 2 Gemini JSON 파싱 결함) = PRODUCTION-UX-001 Intent 파서 강건화로 본질 동일 해소** / 기존 영역 (anchors.py + 분석가 9 + 전략가) LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001` 신규 후속 SPEC** (~0.5 세션 microcycle).
+**미해결 부채**: **데이터 인프라 빈공간** = F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재 (`INFRA-SCORE-INPUTS-001` 별도 SPEC, ~5 세션) / 사용자 보완점 제보 (시연 발견 N건) / SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / 기존 영역 LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001`** (~0.5 세션 microcycle).
 
-**마지막 작업일**: 2026-05-23 (PRODUCTION-UX-001 SPEC 5 라운드 면담 + 본문 ~400줄 신규 작성, 같은 날 세 번째 세션)
-**마지막 세션 로그**: [2026-05-23_production-ux-spec-interview-3.md](c_worked/2026-05-23_production-ux-spec-interview-3.md). 직전 = [2026-05-23_production-ux-research-2.md](c_worked/2026-05-23_production-ux-research-2.md).
-**Git**: cycle 14 SPEC = `dd4782f`. cycle 14.0 = `98cbf32`. cycle 14.1 = `a536428`. cycle 14.2 = `7c60944`. cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. wrap-up production UX 머티턴 = `c10eb62`. **본 wrap-up commit + push 진행**.
+**마지막 작업일**: 2026-05-23 (PROD-UX-1+2 풀세트 + 사이클 3 sub-task decomposition, 같은 날 4번째 세션)
+**마지막 세션 로그**: [2026-05-23_production-ux-prod1-prod2-impl-4.md](c_worked/2026-05-23_production-ux-prod1-prod2-impl-4.md). 직전 = [2026-05-23_production-ux-spec-interview-3.md](c_worked/2026-05-23_production-ux-spec-interview-3.md).
+**Git**: cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. WAVE-ALPHA enum cleanup = `eec126a`. **PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 사이클 3 sub-task = `6de001c`**. wrap-up 4번째 commit 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — PROD-UX-1 구현 즉시 진입
+## 🎯 다음에 할 일 (Top 3) — 사용자 보완점 제보 대응 우선
 
-우선순위 순. SPEC frozen 완료 → 구현 sub-cycle 3 분할 진입.
+우선순위 순. PROD-UX-1+2 풀세트 완성 + 사이클 3 진단 해소 직후. 사용자가 다음 세션 보완점 N건 제보 예정.
 
-### 1. PROD-UX-1 구현 (~1 세션) ✨ — Intent Classifier + Routing + 기본 채팅
-- **왜**: PRODUCTION-UX-001 SPEC frozen 직후 최소 시연 단위. "삼성전자 살까" → track_a 호출 → raw 응답 표시. 인프라 80% 완성 (track_selector + run_strategist + SSE) → 신설 2 모듈만 (Intent + 라우트).
-- **시연 마일스톤**: 시나리오 1~5 (보유/진입/시장/섹터/주도주, 사용자 명시 본질) 동작.
-- **산출물**: `core/intent/{classifier.py 250 / cache.py 80 / router.py 180 / system_prompt.md 100}` + `config/scenario_keywords.yaml 200` + `server/api/production_chat.py 150` + `webapp/src/app/production-chat/page.tsx 200` + `tests/intent/test_classifier_golden.py` (45건 = 5 시나리오 × 9건)
-- **테스트 기준**: 45건 골든 eval ≥ 85% 정확도, Stage 1 hit ≥ 40%, cache 2회차 ≥ 95%
-- **LLM 정책**: Intent Stage 2 default = Gemini Flash-lite (FAST 계층, 무료 티어 1500회/일) + fallback chain (Flash-lite → Haiku 4.5 → mock) + JSON parser 강건화
+### 1. 사용자 보완점 제보 대응 (다음 세션 시작 후 인터뷰) ✨
+- **왜**: 사용자 명시 "보완점 이 많이 보이는데 이건 다른 세션에서 제보". 사이클 3 sub-task + 축약 적용 후 실 시연에서 발견된 추가 회피·환각·부자연 케이스 정리 → 핀포인트 정정.
+- **범위**: 사용자 발견 N 건 항목별. 각 분석가 manifest response_rules 또는 `config/analyst_subtasks.yaml` 정정 + 일부 회귀 테스트 골든 케이스 추가.
+- **방식**: 세션 초 사용자 인터뷰 → 항목별 우선순위 → 핀포인트 정정 commit 단위
+- **예상 산출**: `config/analyst_subtasks.yaml` 정정 + 일부 분석가 manifest response_rules 강화 + 테스트 골든 케이스 추가
 
-### 2. PROD-UX-2 구현 (~1 세션, PROD-UX-1 후) — 시나리오 6~10 + 포맷터 + manual fallback
-- **왜**: 시나리오 6~10 (자동 푸시 영역) 확장 + 자연어 1~3줄 압축 (코드 라벨 자연어 변환). 사용자 가치 본질 = "결론 짧음 + 근거도 쉬워야".
-- **산출물**: `core/intent/formatter.py 200` + `config/label_dictionary.yaml 80` + 시나리오 6~10 keyword + router 확장 + `webapp/.../IntentFallback.tsx 150` + `tests/intent/test_30_scenarios_e2e.py 300` + `tests/intent/test_formatter.py 120`
-- **테스트 기준**: 90건 골든 ≥ 85%, formatter 응답 grep 0건 (코드 라벨 12종 모두), 결론·근거 ≤3줄 assertion
+### 2. INFRA-SCORE-INPUTS-001 SPEC 신설 (~5 세션 별도 사이클)
+- **왜**: 데이터 인프라 빈공간 본질 해소. F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재로 점수 실 발행 불가. 분석가들이 "unknown 명시 + 부분 분석" 까지만 가능.
+- **범위**: `/spec-interview INFRA-SCORE-INPUTS-001` 5 라운드 면담 → SPEC frozen → 영역별 1 collector 씩 점진 구현 (테마-주체 매칭 / 수급망 일치도 / CAN SLIM 7축 / 실시간 호가)
+- **예상 산출**: `docs/specs/INFRA-SCORE-INPUTS-001-score-inputs.md` + `collectors/{flow_inputs, picker_inputs, fundamentals_qoq, trader_inputs}.py` × 5 세션 분산
 
-### 3. PROD-UX-3 구현 + 사용자 인수 (~1 세션) — 근거 토글 + 폴리싱
-- **왜**: production UX 인수 완성형. raw 분석가 응답 토글 노출 (R&D 수준 투명성) + streaming + 에러 자연어화 + 발화 로그.
-- **산출물**: `webapp/.../EvidenceToggle.tsx 120` + streaming 갱신 + `errorMessages.ts 80` + `observability.py 150` (일일 발화 리포트) + `test_user_acceptance.py 200`
-- **인수 기준**: 사용자 본인 일상 발화 5~10건 만족도 검증 + 90건 골든 회귀 유지
+### 3. LLM-TIER-MIGRATION-001 SPEC 신설 (~0.5 세션 microcycle)
+- **왜**: anchors.py Stage 2 + 분석가 9 + 전략가 영역별 LLM 3계층 점진 마이그레이션. PROD-UX-1 적용 범위 D 점진 결단의 후속.
+- **범위**: 영역별 1 PR 점진 (`anchors_stage2: balanced → fast` 등) + 회귀 검증
+- **예상 산출**: SPEC + 영역별 commit 4~5건
 
 (추가 백로그: **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
