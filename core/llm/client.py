@@ -238,6 +238,7 @@ async def call_llm(
     temperature: float | None = None,
     json_schema: dict | None = None,
     provider: str | None = None,
+    mock_fallback_allowed: bool = True,
 ) -> dict:
     """Call the configured LLM with optional cache lookup.
 
@@ -250,6 +251,11 @@ async def call_llm(
                   backend — errors propagate (no auto-fallback). For tone-compare
                   flows where the caller explicitly chose a backend.
                   When None: use cfg.provider with primary→fallback→mock chain.
+        mock_fallback_allowed: When False, suppresses the silent mock fallback
+            that normally activates when `cfg.mock_if_no_key=True` and all real
+            providers fail. Set to False on user-facing paths (production-chat)
+            so that errors propagate to the caller instead of returning a fake
+            response. Default True preserves legacy dev/CI behaviour.
 
     Returns:
         dict with content, tokens_in, tokens_out, model, cost_usd, raw.
@@ -266,7 +272,7 @@ async def call_llm(
         resolved_provider = provider
         allow_fallback = False
     else:
-        resolved_provider = _resolve_provider(cfg)
+        resolved_provider = _resolve_provider(cfg, mock_fallback_allowed=mock_fallback_allowed)
         allow_fallback = True
 
     # Cache lookup — skip in mock mode, and reject stored mock responses even when
@@ -287,6 +293,7 @@ async def call_llm(
         temperature=temperature,
         json_schema=json_schema,
         allow_fallback=allow_fallback,
+        mock_fallback_allowed=mock_fallback_allowed,
     )
 
     # Persist only genuine (non-mock) responses so the cache stays meaningful.
@@ -302,14 +309,14 @@ async def call_llm(
     return resp
 
 
-def _resolve_provider(cfg) -> str:
+def _resolve_provider(cfg, *, mock_fallback_allowed: bool = True) -> str:
     """Pick which backend to hit.
 
     - provider=mock                   → mock
     - provider=claude_code            → claude_code
     - provider=gemini + GOOGLE_AI_API_KEY → gemini
     - provider=anthropic + API key    → anthropic
-    - *         + no key              → mock (if mock_if_no_key) else error
+    - *         + no key              → mock (if mock_if_no_key and mock_fallback_allowed) else error
     """
     provider = getattr(cfg, "provider", "anthropic")
     if provider == "mock":
@@ -319,14 +326,14 @@ def _resolve_provider(cfg) -> str:
     if provider == "gemini":
         if env("GOOGLE_AI_API_KEY"):
             return "gemini"
-        if cfg.mock_if_no_key:
+        if cfg.mock_if_no_key and mock_fallback_allowed:
             log.info("llm_mock_fallback", reason="no_google_api_key")
             return "mock"
         raise RuntimeError("provider=gemini requires GOOGLE_AI_API_KEY")
     # anthropic
     if env("ANTHROPIC_API_KEY"):
         return "anthropic"
-    if cfg.mock_if_no_key:
+    if cfg.mock_if_no_key and mock_fallback_allowed:
         log.info("llm_mock_fallback", reason="no_api_key")
         return "mock"
     raise RuntimeError("provider=anthropic requires ANTHROPIC_API_KEY or mock_if_no_key=True")
@@ -343,6 +350,7 @@ async def _dispatch_provider(
     temperature: float,
     json_schema: dict | None = None,
     allow_fallback: bool = True,
+    mock_fallback_allowed: bool = True,
 ) -> dict:
     """Dispatch to a backend.
 
@@ -351,6 +359,10 @@ async def _dispatch_provider(
                            default/auto provider resolution.
     allow_fallback=False → caller chose this backend explicitly; errors
                            propagate without silent provider switch.
+    mock_fallback_allowed=False → suppresses the final mock_if_no_key fallback
+                                  even when allow_fallback=True. Used on
+                                  user-facing paths so mock responses never
+                                  surface as if they were real.
     """
     if provider == "mock":
         return _mock_response(system, messages, model)
@@ -399,7 +411,7 @@ async def _dispatch_provider(
             error_type=type(e).__name__,
             error_repr=repr(e),
         )
-        if allow_fallback and cfg.mock_if_no_key:
+        if allow_fallback and cfg.mock_if_no_key and mock_fallback_allowed:
             resp = _mock_response(system, messages, model)
             resp["raw"]["error"] = str(e) or repr(e)
             return resp
@@ -451,7 +463,7 @@ async def _dispatch_provider(
                     gemini_error=str(gemini_error),
                     claude_error=str(claude_error),
                 )
-                if cfg.mock_if_no_key:
+                if cfg.mock_if_no_key and mock_fallback_allowed:
                     resp = _mock_response(system, messages, model)
                     resp["raw"]["error"] = str(gemini_error)
                     resp["raw"]["fallback_error"] = str(claude_error)
@@ -463,7 +475,7 @@ async def _dispatch_provider(
         return await _call_anthropic_real(system, messages, model, max_tokens, temperature)
     except Exception as e:  # noqa: BLE001
         log.error("llm_call_failed", provider="anthropic", error=str(e))
-        if allow_fallback and cfg.mock_if_no_key:
+        if allow_fallback and cfg.mock_if_no_key and mock_fallback_allowed:
             resp = _mock_response(system, messages, model)
             resp["raw"]["error"] = str(e)
             return resp
@@ -617,6 +629,7 @@ async def call_llm_stream(
     max_tokens: int | None = None,
     temperature: float | None = None,
     provider: str | None = None,
+    mock_fallback_allowed: bool = True,
 ) -> AsyncIterator[dict]:
     """LLM 호출 + 토큰 스트림. provider 분기 + 첫 청크 전 fallback chain.
 
@@ -627,6 +640,9 @@ async def call_llm_stream(
         - cache layer 미적용 (streaming + 멱등성은 후속 백로그)
         - fallback: 첫 청크 받기 전 실패 = 다음 provider, 첫 청크 후 실패 = error event
         - provider 명시 시 fallback X (해당 backend 만 시도, 에러 propagate)
+        - mock_fallback_allowed=False → 모든 real provider 실패 시 mock stream 으로
+          떨어지지 않고 명시 error event + done 으로 종료. production-chat 사용자
+          경로에서 mock 응답이 사용자에게 노출되지 않도록.
     """
     cfg = get_config().llm
     model = model or cfg.anthropic.model or cfg.primary
@@ -637,7 +653,7 @@ async def call_llm_stream(
         resolved_provider = provider
         allow_fallback = False
     else:
-        resolved_provider = _resolve_provider(cfg)
+        resolved_provider = _resolve_provider(cfg, mock_fallback_allowed=mock_fallback_allowed)
         allow_fallback = True
 
     # provider chain — auto 모드 시 gemini → claude_code → mock
@@ -673,7 +689,7 @@ async def call_llm_stream(
             continue
 
     # 모든 provider 실패 → mock 또는 error
-    if cfg.mock_if_no_key:
+    if cfg.mock_if_no_key and mock_fallback_allowed:
         async for event in _stream_mock(system, messages, model):
             if event.get("type") == "metadata":
                 event["raw"] = dict(event.get("raw") or {})

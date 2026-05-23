@@ -50,31 +50,54 @@ export function EvidenceToggle({ responses }: { responses: AgentResponse[] }) {
       </button>
       {open && (
         <div className="border-t border-neutral-800 p-3 space-y-3 text-sm">
-          {responses.map((r, i) => (
-            <div key={i} className="border border-neutral-800 rounded p-2 bg-neutral-950">
-              <div className="flex items-baseline justify-between gap-2 mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-wider text-neutral-500">
-                    {kindLabel(r.kind)}
-                  </span>
-                  <span className="font-mono text-xs text-emerald-300">
-                    {r.agent_id}
-                  </span>
+          {responses.map((r, i) => {
+            const isMock = Boolean(r.metadata?.is_mock);
+            const upstreamError = r.metadata?.upstream_error;
+            const isDegraded = Boolean(r.error || isMock || upstreamError);
+            return (
+              <div
+                key={i}
+                className={
+                  "border rounded p-2 " +
+                  (isDegraded
+                    ? "border-red-900 bg-red-950/30"
+                    : "border-neutral-800 bg-neutral-950")
+                }
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-wider text-neutral-500">
+                      {kindLabel(r.kind)}
+                    </span>
+                    <span className="font-mono text-xs text-emerald-300">
+                      {r.agent_id}
+                    </span>
+                    {isMock && (
+                      <span className="text-[10px] font-bold text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded">
+                        ⚠ MOCK 응답
+                      </span>
+                    )}
+                  </div>
+                  {r.metadata?.model && (
+                    <span className="text-[11px] text-neutral-500 font-mono">
+                      {String(r.metadata.model)}
+                    </span>
+                  )}
                 </div>
-                {r.metadata?.model && (
-                  <span className="text-[11px] text-neutral-500 font-mono">
-                    {String(r.metadata.model)}
-                  </span>
+                {r.error && (
+                  <div className="text-xs text-red-400 mb-1">호출 실패: {r.error}</div>
                 )}
+                {!r.error && upstreamError && (
+                  <div className="text-xs text-red-400 mb-1">
+                    LLM 응답 누락: {String(upstreamError)}
+                  </div>
+                )}
+                <pre className="whitespace-pre-wrap break-words text-xs text-neutral-300 font-mono">
+                  {r.text || (isDegraded ? "" : "(빈 응답)")}
+                </pre>
               </div>
-              {r.error && (
-                <div className="text-xs text-red-400 mb-1">에러: {r.error}</div>
-              )}
-              <pre className="whitespace-pre-wrap break-words text-xs text-neutral-300 font-mono">
-                {r.text || (r.error ? "" : "(빈 응답)")}
-              </pre>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

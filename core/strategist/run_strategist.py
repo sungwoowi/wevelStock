@@ -303,6 +303,7 @@ async def run_strategist(
     include_memory: bool = True,
     provider: str | None = None,
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
+    mock_fallback_allowed: bool = True,
 ) -> StrategistResponse:
     """단일 전략가 호출. 멀티턴 messages 배열 그대로 수용.
 
@@ -389,6 +390,7 @@ async def run_strategist(
         max_tokens=max_tokens or spec.max_tokens,
         temperature=temperature if temperature is not None else spec.temperature,
         provider=provider,
+        mock_fallback_allowed=mock_fallback_allowed,
     )
     latency_s = time.monotonic() - started
 
@@ -466,6 +468,7 @@ async def run_strategist_stream(
     include_memory: bool = True,
     provider: str | None = None,
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
+    mock_fallback_allowed: bool = True,
 ):
     """run_strategist 의 streaming 변종. text_delta + 종료 시 metadata.
 
@@ -545,6 +548,7 @@ async def run_strategist_stream(
         max_tokens=max_tokens or spec.max_tokens,
         temperature=temperature if temperature is not None else spec.temperature,
         provider=provider,
+        mock_fallback_allowed=mock_fallback_allowed,
     ):
         etype = event.get("type")
         if etype == "text_delta":

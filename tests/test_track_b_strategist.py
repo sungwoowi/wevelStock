@@ -209,7 +209,8 @@ async def test_run_strategist_track_b_metadata(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(strat_mod, "load_latest", fake_load_latest)
 
-    async def fake_call_llm(*, system, messages, model, max_tokens, temperature, provider=None):
+    async def fake_call_llm(*, system, messages, model, max_tokens, temperature,
+                            provider=None, mock_fallback_allowed=True, **_kw):
         return {
             "content": "Track B 응답 (mock)",
             "model": "test-mock",

@@ -190,7 +190,9 @@ cited: [M2, C1, C5, I6]
 2. **S-Score ≥ 7** — 주도주 (stock_picker 발행)
 3. **α ≥ 1.3** (발산 시작) **또는 눌림목** (이격도 -10% ~ 0%) — stock_analyst 발행
 4. **시장 체제 ∈ {strong_bull, moderate_bull, parabolic}** — market_state_analyzer 발행
-5. **7계명 위반 0** — principle_guardian 발행
+5. **7계명 위반 0** — principle_guardian 발행. **advisory_warning 은 위반 0 처럼
+   취급** (production-chat advisory frame 의 정보 표시일 뿐, execution frame 의
+   blocking violation 이 아니므로 진입 차단 X)
 
 위 조건 일부만 충족:
 - 4개 충족 → verdict = `hold` (보유 중이면 유지, 신규 진입 X)
@@ -260,7 +262,7 @@ cited: [M2, C1, C5, I6]
 | flow_analyzer | F-Score | × 10 | 0.20 |
 | wealth_strategist | confidence | (그대로) | 0.15 |
 | market_state_analyzer | regime score | bull=10 / sideways=5 / bear=0 | 0.15 |
-| principle_guardian | violations | 0=10, 1=5, 2+=0 | 0.05 |
+| principle_guardian | violations | 0 또는 advisory_warning=10 / execution violation 1건=5 / 2건+=0 | 0.05 |
 
 가중 평균 = confidence (0-100). 등급:
 

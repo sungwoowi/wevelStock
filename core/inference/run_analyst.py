@@ -476,6 +476,7 @@ async def run_analyst(
     include_memory: bool = True,
     provider: str | None = None,
     target_ticker: str | None = None,
+    mock_fallback_allowed: bool = True,
 ) -> AnalystResponse:
     """단일 분석가 호출. 멀티턴 messages 배열 그대로 수용.
 
@@ -488,6 +489,9 @@ async def run_analyst(
         provider: "gemini" | "claude_code" | "anthropic" | "mock" 명시 시 그
                   backend 강제 호출 (자동 폴백 X — 에러 propagate). None 이면
                   config.llm.provider + 자동 폴백 체인. 톤 비교용.
+        mock_fallback_allowed: False 시 real provider 전부 실패하면 mock 응답으로
+                  떨어지지 않고 RuntimeError 전파. production-chat 사용자 경로
+                  (silent mock 노출 금지) 에서 False. dev/CI 는 default True.
 
     Returns:
         AnalystResponse(text, metadata)
@@ -538,6 +542,7 @@ async def run_analyst(
         max_tokens=max_tokens or spec.max_tokens,
         temperature=temperature if temperature is not None else spec.temperature,
         provider=provider,
+        mock_fallback_allowed=mock_fallback_allowed,
     )
     latency_s = time.monotonic() - started
 
@@ -612,6 +617,7 @@ async def run_analyst_stream(
     include_memory: bool = True,
     provider: str | None = None,
     target_ticker: str | None = None,
+    mock_fallback_allowed: bool = True,
 ):
     """run_analyst 의 streaming 변종. text_delta 이벤트 흘림 + 종료 시 metadata.
 
@@ -675,6 +681,7 @@ async def run_analyst_stream(
         max_tokens=max_tokens or spec.max_tokens,
         temperature=temperature if temperature is not None else spec.temperature,
         provider=provider,
+        mock_fallback_allowed=mock_fallback_allowed,
     ):
         etype = event.get("type")
         if etype == "text_delta":

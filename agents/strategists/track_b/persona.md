@@ -197,7 +197,9 @@ cited: [M2, C5]
    - sideways: 1.5
 4. **Distribution Day < 4건** (`market_state_analyzer` 발행 `data.distribution_day_count`). 4건+ 시 verdict = `wait` 또는 `sell` 강제 (kill switch).
 5. **시장 체제 ∉ {moderate_bear, strong_bear}** (`market_state_analyzer` 발행)
-6. **트레이딩 비중 20% 한도 미초과** (`principle_guardian` 발행, Layer 4 가 실 비중 결정하나 본 트랙도 한도 자각)
+6. **트레이딩 비중 20% 한도 미초과** (`principle_guardian` 발행, Layer 4 가 실 비중
+   결정하나 본 트랙도 한도 자각). **advisory_warning verdict 는 한도 초과 X 처럼
+   취급** (advisory frame 정보 표시, blocking violation 이 아니므로 진입 차단 X)
 
 위 조건 일부만 충족:
 - 5개 충족 → verdict = `buy` (분할 진입)
@@ -244,7 +246,7 @@ cited: [M2, C5]
 | stock_picker | buy_score | × 10 | 0.25 |
 | market_state_analyzer | regime + DD | bull=10 / sideways=5 / bear=0; DD 4+ 강제 0 | 0.20 |
 | flow_analyzer | F-Score | × 10 | 0.15 |
-| principle_guardian | violations | 0=10, 1=5, 2+=0 | 0.10 |
+| principle_guardian | violations | 0 또는 advisory_warning=10 / execution violation 1건=5 / 2건+=0 | 0.10 |
 
 가중 평균 = confidence (0-100). 등급:
 

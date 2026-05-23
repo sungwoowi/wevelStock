@@ -84,13 +84,43 @@ class TestComposeUserMessage:
         assert len(msg) < 5000 + 1000
 
     def test_compose_handles_error_entries(self) -> None:
+        """error 가 있는 entry 는 본문에서 제외되고 '응답 누락' 섹션에 ID만 표시.
+
+        과거 양식은 본문에 error 메시지를 박았으나, mock fallback 차단 + 환각
+        억제 본질에 따라 LLM 입력에서 완전히 제외.
+        """
         msg = _compose_user_message(
             user_input="?",
             analyst_outputs=[{"id": "a1", "error": "boom"}],
             strategist_outputs=[{"agent_id": "track_a", "error": "boom"}],
         )
-        assert "호출 실패" in msg
-        assert "boom" in msg
+        assert "응답 누락" in msg
+        assert "a1" in msg
+        assert "track_a" in msg
+        # 에러 본문은 노출 안 함
+        assert "boom" not in msg
+
+    def test_compose_excludes_mock_entries(self) -> None:
+        """metadata.is_mock=True 또는 upstream_error 가 있는 entry 는 입력에서 제외."""
+        msg = _compose_user_message(
+            user_input="?",
+            analyst_outputs=[
+                {"id": "real", "text": "정상 응답", "metadata": {}},
+                {"id": "mocked", "text": "가짜 응답", "metadata": {"is_mock": True}},
+                {"id": "errored", "text": "에러 응답", "metadata": {"upstream_error": "boom"}},
+            ],
+            strategist_outputs=[],
+        )
+        # 정상 응답만 본문 포함
+        assert "real" in msg
+        assert "정상 응답" in msg
+        # mock/error 본문은 제외
+        assert "가짜 응답" not in msg
+        assert "에러 응답" not in msg
+        # 누락 섹션에는 ID 표시
+        assert "응답 누락" in msg
+        assert "mocked" in msg
+        assert "errored" in msg
 
 
 class TestFormatAnswerFallback:
@@ -133,10 +163,11 @@ class TestFormatAnswerFallback:
             raise RuntimeError("llm boom")
 
         monkeypatch.setattr("core.intent.formatter.call_llm", _raises)
+        # 빈 입력은 LLM 호출 자체를 skip 하니 실 응답 1건 이상 주입.
         result = asyncio.run(
             format_answer(
                 user_input="x",
-                analyst_outputs=[],
+                analyst_outputs=[{"id": "a1", "text": "정상 raw"}],
                 strategist_outputs=[],
             )
         )
@@ -144,6 +175,41 @@ class TestFormatAnswerFallback:
         assert "응답 정리에 실패" in result.text or "raw" in result.text.lower()
         assert result.upstream_error is not None
         assert "llm boom" in result.upstream_error
+
+    def test_format_answer_skips_llm_when_all_responses_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """모든 분석가/전략가 응답이 mock/error/빈 응답 = LLM 호출 자체 skip + 안내 return.
+
+        mock fallback 차단 본질: 자연어 답변에 가짜 narrative 가 섞이는 것 차단.
+        """
+        called = {"count": 0}
+
+        async def _stub_llm(*args: Any, **kwargs: Any) -> dict:
+            called["count"] += 1
+            return {"content": "should not be called", "tokens_in": 0, "tokens_out": 0,
+                    "model": "x", "cost_usd": 0.0, "raw": {}}
+
+        monkeypatch.setattr("core.intent.formatter.call_llm", _stub_llm)
+        result = asyncio.run(
+            format_answer(
+                user_input="삼성전자 살까?",
+                analyst_outputs=[
+                    {"id": "a1", "error": "boom"},
+                    {"id": "a2", "metadata": {"is_mock": True}, "text": "fake"},
+                    {"id": "a3", "text": ""},
+                ],
+                strategist_outputs=[
+                    {"agent_id": "track_a", "metadata": {"upstream_error": "rate_limit"}, "text": "fake"},
+                ],
+            )
+        )
+        # LLM 호출 안 됨
+        assert called["count"] == 0
+        # 명시 안내 + upstream_error 라벨
+        assert "응답을 받지 못했습니다" in result.text or "잠시 후 다시 시도" in result.text
+        assert result.upstream_error == "all_upstream_responses_missing"
+        assert result.is_mock is False
 
 
 class TestCodeLabelGrep:

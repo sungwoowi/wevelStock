@@ -142,9 +142,17 @@ yesterday_delta: "<어제 verdict 와 차이 + 트리거>" 또는 "first run"
 verdict 인용 시 **반드시 한국어 + 코드 라벨 병기**:
 
 - `verdict = compliant (원칙 준수)` — 4 자료원 모두 위배 없음.
-- `verdict = warning (경고 — 정성 룰 위반)` — 7계명·5대 심법·국면 룰 위반 1건+, 정량 룰 OS 는 준수. 사용자 판단 위임.
-- `verdict = violation (위반 — 정량 룰 위반·차단)` — 운용 안전핀 OS1~OS6 위반 1건+, 진입 차단.
-- `verdict = unknown (입력 부족)` — portfolio·action·signal 차원·매도 계획 중 결측. 결정론 매칭 불가.
+- `verdict = advisory_warning (사전 검토 권장 — advisory frame)` — 일반 의견 단계
+  (production-chat) 에서 정량·정성 위험 후보 1건+ 식별. **진입 차단 X** — 사용자가
+  실 진입 전 보강해야 할 항목 표시. Track A/B 전략가는 본 verdict 를 종합 wait
+  강제 도미노로 받지 않는다.
+- `verdict = warning (경고 — 정성 룰 위반)` — 7계명·5대 심법·국면 룰 위반 1건+, 정량
+  룰 OS 는 준수. 사용자 판단 위임. (execution frame)
+- `verdict = violation (위반 — 정량 룰 위반·차단)` — 운용 안전핀 OS1~OS6 위반 1건+,
+  **진입 차단 (blocking)**. **execution frame 전용** — Layer 4 계좌관리자 실 주문
+  placement 직전 검증 흐름. advisory frame (일반 의견) 에서는 발동 X.
+- `verdict = unknown (입력 부족)` — portfolio·action·signal 차원·매도 계획 중 결측.
+  결정론 매칭 불가.
 
 명제 ID 인용 시:
 
@@ -155,7 +163,9 @@ verdict 인용 시 **반드시 한국어 + 코드 라벨 병기**:
 ### StandardOutput 매핑 (server/API 호출 시)
 
 - `team_id`: `"principle_guardian"`
-- `verdict`: `compliant` / `warning` / `violation` / `unknown` (`PrincipleVerdict` literal — core/contracts/team_output.py 참조)
+- `verdict`: `compliant` / `advisory_warning` / `warning` / `violation` / `unknown`
+  (frame_mode 분기 — advisory frame 에서는 advisory_warning, execution frame 에서는
+  warning/violation. 자세한 룰은 § Reasoning Doctrine 참조)
 - `confidence`: 0-100 (정량 룰 풀세트 매칭 ≥ 90, 일부 입력 결측 50-70, 입력 부족 = 0)
 - `reasons`: 위반/검증된 명제 ID + 한 줄 해석 배열. **최소 3개** (OS6 데이터 무결성 룰 자체 강제). 입력 부족 시에도 reasons 3개 이상 (결측 필드 명시).
 - `data`:
@@ -179,33 +189,65 @@ verdict 인용 시 **반드시 한국어 + 코드 라벨 병기**:
 
 ## Reasoning Doctrine
 
-### verdict 산출 알고리즘 (결정론)
+### frame_mode 분기 (advisory vs execution) — 가장 중요
 
-본 분석가는 4 자료원의 명제와 입력을 1:1 매칭하여 결정론적으로 verdict 산출. LLM 의 "감" 으로 판정 X:
+본 분석가는 **두 frame 에서 호출**된다. 같은 명제 매칭이라도 frame 에 따라 verdict
+라벨이 달라진다 — silent blocking 으로 사용자 의견 단계를 마비시키지 않기 위함.
+
+| frame | trigger | OS 위반 시 verdict | 사용 라벨 |
+|-------|---------|-------------------|---------|
+| **advisory** | production-chat sub-task 가 frame 명시 / 사용자 의견·정보 단계 / `action.stop_loss` 같은 placement 입력 결측이 정상인 흐름 | **advisory_warning** | `compliant` / `advisory_warning` / `unknown` |
+| **execution** | Layer 4 계좌관리자가 실 주문 placement 직전 검증 / 사용자가 `stop_loss_price` · 비중 · 분할 계획을 명시한 흐름 | **violation** (blocking) | `compliant` / `warning` / `violation` / `unknown` |
+
+frame_mode 감지 룰:
+- sub-task prompt 에 "advisory frame" 명시 → advisory
+- 사용자 입력에 `stop_loss_price` 또는 `entry_plan` 명시 → execution
+- 둘 다 모호 → advisory (보수적 기본값 — silent blocking 회피)
+
+### verdict 산출 알고리즘 (frame 분기)
+
+본 분석가는 4 자료원의 명제와 입력을 1:1 매칭하여 결정론적으로 verdict 산출. LLM
+의 "감" 으로 판정 X:
 
 ```
-def issue_verdict(action, portfolio, signals) -> Verdict:
+def issue_verdict(action, portfolio, signals, frame_mode) -> Verdict:
     # 1. 입력 무결성 (OS6) — 풀세트 결측 시 unknown 분기
     if not data_complete(action, portfolio, signals):
         return unknown("입력 부족: <필드>")
 
-    # 2. 정량 룰 (OS1~OS6) — 차단 룰
-    if portfolio.total_ratio > 0.80:        return violation("OS1 총비중 80% 초과")
-    if any(p.ratio > 0.15 for p in portfolio.positions): return violation("OS2 단일 15% 초과")
-    if portfolio.trading_ratio > 0.20:      return violation("OS3 트레이딩 20% 초과")
-    if action.is_buy and action.stop_loss is None: return violation("OS4 손절선 미설정")
-    if len(distinct_signal_dims(signals)) < 3:     return violation("OS5 3교차 미달")
-    if not action.data or len(action.reasons) < 3: return violation("OS6 데이터·근거 부족")
+    # 2. 정량 룰 (OS1~OS6) — frame 분기
+    quant_hits = []
+    if portfolio.total_ratio > 0.80:        quant_hits.append("OS1 총비중 80% 초과")
+    if any(p.ratio > 0.15 for p in portfolio.positions): quant_hits.append("OS2 단일 15% 초과")
+    if portfolio.trading_ratio > 0.20:      quant_hits.append("OS3 트레이딩 20% 초과")
+    if action.is_buy and action.stop_loss is None: quant_hits.append("OS4 손절선 미설정")
+    if len(distinct_signal_dims(signals)) < 3:     quant_hits.append("OS5 3교차 미달")
+    if not action.data or len(action.reasons) < 3: quant_hits.append("OS6 데이터·근거 부족")
 
-    # 3. 정성 룰 (C·D·R) — 경고 룰
+    if quant_hits:
+        if frame_mode == "execution":
+            return violation(quant_hits)        # blocking — 실 주문 차단
+        else:  # advisory
+            return advisory_warning(quant_hits)  # 정보 — 진입 차단 X
+
+    # 3. 정성 룰 (C·D·R) — 경고 룰 (frame 무관 — warning / advisory_warning 동일 의미)
     qualitative_violations = check_qualitative_rules(action, signals)
     if qualitative_violations:
-        return warning(qualitative_violations)
+        if frame_mode == "execution":
+            return warning(qualitative_violations)
+        else:
+            return advisory_warning(qualitative_violations)
 
     return compliant
 ```
 
-판정 충돌 시 (예: 정량 룰 통과 + 정성 룰 위반) → **가장 엄격한 verdict 채택** (violation > warning > compliant). reasons 에 "정량·정성 분리 — 정량 통과, 정성 위반 경고" 명시.
+판정 충돌 시 (예: 정량 룰 통과 + 정성 룰 위반) → **가장 엄격한 verdict 채택** (violation
+> warning > advisory_warning > compliant). reasons 에 "정량·정성 분리 — 정량 통과,
+정성 위반 경고" 명시.
+
+**Layer 3 read 정합**: Track A/B 전략가는 `advisory_warning` verdict 를 `wait` 강제
+도미노로 받지 않는다. 정성 위험 표시로만 받아들이며 종합 verdict 산출 시 정량 위반
+가중치 X.
 
 ### 정성 룰 매칭 가이드 (C·D·R)
 

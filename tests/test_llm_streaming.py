@@ -69,7 +69,10 @@ async def test_stream_falls_back_to_mock_when_all_providers_fail(
 ) -> None:
     """auto chain 에서 첫 provider 첫 청크 전 실패 → claude_code 도 실패 → mock fallback."""
     # 환경 env (GOOGLE_AI_API_KEY 등) 의존성 끊고 anthropic 시작점 강제
-    monkeypatch.setattr(llm_client, "_resolve_provider", lambda cfg: "anthropic")
+    monkeypatch.setattr(
+        llm_client, "_resolve_provider",
+        lambda cfg, **_kwargs: "anthropic",
+    )
 
     async def _broken_anthropic(*args, **kwargs):
         raise RuntimeError("ANTHROPIC_API_KEY missing")

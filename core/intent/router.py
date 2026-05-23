@@ -186,6 +186,7 @@ async def _call_strategist_safe(
             target=target,
             provider=provider,
             prefetched_analyst_outputs=prefetched_analyst_outputs,
+            mock_fallback_allowed=False,
         )
         return {
             "kind": "strategist",
@@ -235,6 +236,7 @@ async def _call_analyst_safe(
             messages,
             target_ticker=target_ticker,
             provider=provider,
+            mock_fallback_allowed=False,
         )
         return {
             "kind": "analyst",
@@ -364,6 +366,7 @@ async def _call_refuse_or_guide(
             max_tokens=400,
             temperature=0.5,
             provider=provider_resolved if provider_resolved != "mock" else None,
+            mock_fallback_allowed=False,
         )
         return {
             "kind": "refuse_or_guide",
@@ -529,6 +532,7 @@ async def _stream_strategist_safe(
             target=target,
             provider=provider,
             prefetched_analyst_outputs=prefetched_analyst_outputs,
+            mock_fallback_allowed=False,
         ):
             etype = event.get("type")
             if etype == "text_delta":
@@ -576,7 +580,8 @@ async def _stream_analyst_safe(
     """run_analyst_stream wrap — agent 라벨 prefix."""
     try:
         async for event in run_analyst_stream(
-            analyst_id, messages, target_ticker=target_ticker, provider=provider
+            analyst_id, messages, target_ticker=target_ticker, provider=provider,
+            mock_fallback_allowed=False,
         ):
             etype = event.get("type")
             if etype == "text_delta":
@@ -634,6 +639,7 @@ async def _stream_refuse_or_guide(
             max_tokens=400,
             temperature=0.5,
             provider=provider_resolved if provider_resolved != "mock" else None,
+            mock_fallback_allowed=False,
         ):
             etype = event.get("type")
             if etype == "text_delta":

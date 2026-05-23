@@ -119,29 +119,52 @@ class FormatterResult:
     upstream_error: str | None = None
 
 
+def _is_mock_entry(entry: dict[str, Any]) -> bool:
+    """raw 응답이 mock fallback 또는 LLM 호출 실패 결과인지 판정.
+
+    mock 또는 upstream 실패한 응답을 formatter 입력으로 흘리면 자연어 답변에
+    가짜 narrative 가 섞일 위험. 입력에서 제외 + 사용자에게 누락 명시.
+    """
+    md = entry.get("metadata") or {}
+    if md.get("is_mock"):
+        return True
+    if md.get("upstream_error"):
+        return True
+    return False
+
+
 def _compose_user_message(
     user_input: str,
     analyst_outputs: list[dict[str, Any]],
     strategist_outputs: list[dict[str, Any]],
 ) -> str:
-    """formatter 호출용 user prompt — 사용자 발화 + raw 응답 풀세트."""
+    """formatter 호출용 user prompt — 사용자 발화 + raw 응답 풀세트.
+
+    is_mock/upstream_error/호출 실패/빈 응답 은 본문에서 제외하고 끝에 누락
+    목록만 한 줄로 명시. 자연어 답변에 mock narrative 가 섞이는 것 방지.
+    """
     lines: list[str] = []
     lines.append(f"## 사용자 발화\n{user_input}\n")
+
+    failed_analysts: list[str] = []
+    failed_strategists: list[str] = []
+
     if analyst_outputs:
         lines.append("## 분석가 raw 응답 (prefetch 동시 호출)")
         for entry in analyst_outputs:
             aid = entry.get("id") or entry.get("agent_id", "?")
             text = (entry.get("text") or "").strip()
             err = entry.get("error")
-            if err:
-                lines.append(f"\n### {aid}\n**호출 실패** — {err}.")
-            elif not text:
-                lines.append(f"\n### {aid}\n**빈 응답**")
-            else:
-                # 각 분석가 응답 길이 제한 — formatter prompt 폭발 방지
-                if len(text) > 2000:
-                    text = text[:2000] + "\n... (truncated)"
-                lines.append(f"\n### {aid}\n{text}")
+            if err or _is_mock_entry(entry):
+                failed_analysts.append(str(aid))
+                continue
+            if not text:
+                failed_analysts.append(str(aid))
+                continue
+            # 각 분석가 응답 길이 제한 — formatter prompt 폭발 방지
+            if len(text) > 2000:
+                text = text[:2000] + "\n... (truncated)"
+            lines.append(f"\n### {aid}\n{text}")
         lines.append("")
     if strategist_outputs:
         lines.append("## 전략가 raw 응답 (권고 본문)")
@@ -149,15 +172,28 @@ def _compose_user_message(
             sid = entry.get("agent_id", "?")
             text = (entry.get("text") or "").strip()
             err = entry.get("error")
-            if err:
-                lines.append(f"\n### {sid}\n**호출 실패** — {err}.")
-            elif not text:
-                lines.append(f"\n### {sid}\n**빈 응답**")
-            else:
-                if len(text) > 4000:
-                    text = text[:4000] + "\n... (truncated)"
-                lines.append(f"\n### {sid}\n{text}")
+            if err or _is_mock_entry(entry):
+                failed_strategists.append(str(sid))
+                continue
+            if not text:
+                failed_strategists.append(str(sid))
+                continue
+            if len(text) > 4000:
+                text = text[:4000] + "\n... (truncated)"
+            lines.append(f"\n### {sid}\n{text}")
         lines.append("")
+
+    if failed_analysts or failed_strategists:
+        lines.append("## 응답 누락 (LLM 호출 실패 또는 mock fallback)")
+        if failed_analysts:
+            lines.append(f"- 분석가 누락: {', '.join(failed_analysts)}")
+        if failed_strategists:
+            lines.append(f"- 전략가 누락: {', '.join(failed_strategists)}")
+        lines.append(
+            "위 영역은 본 답변에서 제외해주세요. 정보 부족 시 결론에서 '일부 분석 누락 — 잠시 후 재시도 권장' 으로 안내."
+        )
+        lines.append("")
+
     lines.append("위 raw 응답들을 종합하여 사용자 발화에 답변하는 자연어 1~3줄 결론 + 근거 3요소 양식으로 정리해주세요.")
     return "\n".join(lines)
 
@@ -185,12 +221,45 @@ async def format_answer(
     if provider:
         provider_resolved = provider
 
+    # 모든 분석가/전략가 응답이 mock/error/빈 응답이면 LLM 호출 자체를 skip.
+    # 자연어 답변에 가짜 narrative 가 섞이는 것 차단.
+    started = time.monotonic()
+
+    def _has_real(entries: list[dict[str, Any]]) -> bool:
+        for e in entries:
+            if e.get("error"):
+                continue
+            if _is_mock_entry(e):
+                continue
+            if (e.get("text") or "").strip():
+                return True
+        return False
+
+    if not _has_real(analyst_outputs) and not _has_real(strategist_outputs):
+        log.warning(
+            "formatter_all_responses_missing",
+            analyst_count=len(analyst_outputs),
+            strategist_count=len(strategist_outputs),
+        )
+        return FormatterResult(
+            text=(
+                "분석가/전략가 응답을 받지 못했습니다 (LLM 호출 실패 또는 mock fallback). "
+                "잠시 후 다시 시도해주세요."
+            ),
+            model=model,
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=0.0,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            is_mock=False,
+            upstream_error="all_upstream_responses_missing",
+        )
+
     system_blocks: list[dict] = [
         {"type": "text", "text": _FORMATTER_SYSTEM},
         {"type": "text", "text": _build_label_block()},
     ]
     user_msg = _compose_user_message(user_input, analyst_outputs, strategist_outputs)
-    started = time.monotonic()
     try:
         resp = await call_llm(
             system=system_blocks,
@@ -199,6 +268,7 @@ async def format_answer(
             max_tokens=800,
             temperature=0.3,
             provider=provider_resolved if provider_resolved != "mock" else None,
+            mock_fallback_allowed=False,
         )
     except Exception as e:  # noqa: BLE001
         log.error(

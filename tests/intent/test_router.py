@@ -247,6 +247,47 @@ class TestRefuseOrGuide:
         assert "stub" in result.agent_responses[0]["text"]
 
 
+class TestMockFallbackForwarded:
+    """router 의 wrap 함수들이 mock_fallback_allowed=False 를 항상 forward 하는지.
+
+    production-chat 사용자 경로 = silent mock 노출 차단. wrap 함수가 이 flag 를
+    forward 안 하면 silent fallback 이 재발한다.
+    """
+
+    def test_track_a_forwards_mock_fallback_disabled(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        c = _make_classification(agent_route="track_a", ticker="005930")
+        asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
+        # 전략가 호출 kwargs 에 mock_fallback_allowed=False
+        assert stub_strategist[0].get("mock_fallback_allowed") is False
+        # 분석가 prefetch 호출 kwargs 에도 동일
+        for call in stub_analyst:
+            assert call.get("mock_fallback_allowed") is False
+
+    def test_both_forwards_mock_fallback_disabled(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        c = _make_classification(agent_route="both", ticker="005930")
+        asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
+        for call in stub_strategist:
+            assert call.get("mock_fallback_allowed") is False
+        for call in stub_analyst:
+            assert call.get("mock_fallback_allowed") is False
+
+    def test_analyst_direct_forwards_mock_fallback_disabled(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        c = _make_classification(
+            scenario_id=3,
+            agent_route="analyst_direct",
+            analyst_ids=["market_state_analyzer"],
+            ticker=None,
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
+        assert stub_analyst[0].get("mock_fallback_allowed") is False
+
+
 class TestPendingMs5:
     def test_pending_ms5_returns_static_message(
         self, stub_strategist, stub_analyst

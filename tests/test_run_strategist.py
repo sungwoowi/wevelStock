@@ -288,12 +288,14 @@ async def test_run_strategist_happy_path(
     monkeypatch.setattr(strat_mod, "load_latest", fake_load_latest)
 
     # call_llm mock
-    async def fake_call_llm(*, system, messages, model, max_tokens, temperature, provider=None):
+    async def fake_call_llm(*, system, messages, model, max_tokens, temperature,
+                            provider=None, mock_fallback_allowed=True, **_kw):
         captured_call["system_blocks"] = system
         captured_call["messages"] = messages
         captured_call["model"] = model
         captured_call["max_tokens"] = max_tokens
         captured_call["temperature"] = temperature
+        captured_call["mock_fallback_allowed"] = mock_fallback_allowed
         return {
             "content": "권고 응답 본문 (mock)",
             "model": "test-model-mock",
