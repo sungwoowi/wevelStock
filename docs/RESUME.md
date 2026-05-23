@@ -9,13 +9,13 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **production UX SPEC 진입 머티턴 조사 + LLM 3계층 정책 신설 ✨** (2026-05-23 후속 세션). cycle 14.3 (WAVE-ALPHA 풀세트 완료, MS4 베이스라인 도달, commit `e2ee94b` + wrap-up `2cdfaf3`) 직후 자연 진입. 본 세션 = **머티턴 인터뷰 모드** (코드 0, plan 파일 7차 갱신) — 조사 3 explore + Plan agent 1 + 사용자 합의 8건. **다음 세션 = `/spec-interview PRODUCTION-UX-001` 5라운드 7 결정 freeze**.
+**현재 위치**: **`PRODUCTION-UX-001` SPEC 신설 완료 ✨** (2026-05-23, 같은 날 세 번째 세션, commit 진행). 직전 세션 머티턴 조사 (7 freeze 항목 도출) → 본 세션 **5 라운드 면담 + SPEC 본문 ~400줄 작성**. cycle 14.3 (WAVE-ALPHA 풀세트, MS4 베이스라인 도달, `e2ee94b` + `2cdfaf3`) 직후 자연 진입. **다음 세션 = PROD-UX-1 구현** (Intent Classifier + Routing + 기본 채팅, ~1 세션, 시연 = 시나리오 1~5).
 
-**본 세션 산출** (commit wrap-up 진행 예정):
-- **`C:\Users\HOME\.claude\plans\jazzy-roaming-snail.md`** = 신규 plan 파일 7차 점진 갱신 (조사 결과 + Intent 분류 3안 비교표 + sub-cycle 3 분할 + LLM 3계층 정책 + 7 결정 freeze 항목)
-- **사용자 합의 8건**: (1) Top 1 production UX / (2) 머티턴 인터뷰 / (3) 기존 webapp 데모 보존 + 신규 채팅창 0 부터 / (4) Intent 분류 = C 하이브리드 (anchors.py 패턴 mirror) / (5) 다음 세션 SPEC 인터뷰 5라운드 / (6) **LLM 3계층 정책 신설 (FAST/BALANCED/DEEP)** / (7) 적용 범위 = D 점진 (신규 영역만 즉시, 기존 영역은 후속 SPEC) / (8) SLOT S6 = 본 SPEC Intent 파서 강건화로 동일 해소
-- **LLM 모델 3계층 매핑**: FAST = Gemini Flash-lite / Haiku 4.5 (Intent 분류·JSON 추출·자연어 변환) / BALANCED = Gemini Flash / Sonnet 4.6 (분석가·전략가 본문) / DEEP = Gemini Pro / Opus 4.7 (회고분석가 M4·메타 추론). config `llm.tiers` + `llm.areas` 스키마 신설 (외부 설정, 코드 수정 없이 갈아끼움).
-- **인프라 80% 완성 확인**: `track_selector.select_tracks` / `run_strategist*` / `/api/strategists/{id}/chat*` SSE / `resolve_ticker` (30 종목) / `core/llm/client.py` provider-agnostic (mock/claude_code/gemini/anthropic + fallback chain) 모두 작동. **신설 필요 = Intent Classifier + 종합 답변 포맷터 + 신규 라우트 `webapp/src/app/production-chat/page.tsx` 2 영역만**.
+**본 세션 산출**:
+- **`docs/specs/PRODUCTION-UX-001-natural-language-chat.md` 신규 작성** (~400줄, status=approved). frontmatter (generates 15 / modifies 2 / depends_on 4 / contracts 2 = intent-classification-v1 + production-chat-v1) + 본문 § 8 (목적 / 배경 / 7 freeze 결단 / 30 시나리오 매핑 / 아키텍처 / sub-cycle 3 / 테스트 / SLOT 5 + 인수)
+- **5 라운드 면담 결단 9건 (7 freeze + 2 추가)**: R1 시나리오 v1=1~11 freeze + webapp 보존 + SLOT S6 Intent JSON parser 만 / R2 Stage 2 = Gemini Flash-lite (FAST) + fallback chain + manual fallback 임계 0.6 + cache TTL 30일 / R3 시나리오 2·5 default=both + 시나리오 10=보유 종합 + 시나리오 11=pending_ms5 / R4 포맷 LLM 1콜 추가 + label_dictionary.yaml 외부 사전 + 근거 토글=raw 풀세트 / R5 sub-cycle 3 분할 + PROD-UX-1 시연=시나리오 1~5 + 인수=객관 골든 ≥85% + 사용자 발화 만족도. 추가 = LLM 3계층 적용 범위 D 점진 / 근거 토글 LLM 추가 호출 X
+- **validate.py 통과** (PRODUCTION-UX-001 관련 에러 0건). WAVE-ALPHA-001 의 `status: frozen` enum 위반 별도 부채.
+- **사용자 본질 명료화 패턴** = 모호 옵션 답변 ("이게 무슨 말?") → 쉬운 풀이 + 표 + 본질 frame → 같은 옵션 재선택. R2-Q2 (fallback 임계) + R2-Q3 (cache TTL) 양쪽 활용. 캐싱 대상 = "시대 흐름 vs 시황 vs 표현 분류" 사용자 통찰로 30일 TTL 안전 확신.
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -41,31 +41,32 @@
 
 **미해결 부채**: SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / **SLOT S6 (LLM Stage 2 Gemini JSON 파싱 결함) = PRODUCTION-UX-001 Intent 파서 강건화로 본질 동일 해소** / 기존 영역 (anchors.py + 분석가 9 + 전략가) LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001` 신규 후속 SPEC** (~0.5 세션 microcycle).
 
-**마지막 작업일**: 2026-05-23 (production UX 머티턴 조사 + LLM 3계층 정책 신설 — 코드 0, plan 파일 7차 갱신, 사용자 합의 8건)
-**마지막 세션 로그**: [2026-05-23_production-ux-research-2.md](c_worked/2026-05-23_production-ux-research-2.md). 직전 = [2026-05-23_wave-alpha-impl-14-2-14-3.md](c_worked/2026-05-23_wave-alpha-impl-14-2-14-3.md).
-**Git**: cycle 14 SPEC = `dd4782f`. cycle 14.0 = `98cbf32`. cycle 14.1 = `a536428`. cycle 14.2 = `7c60944`. cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. **본 세션 wrap-up commit 진행 예정**.
+**마지막 작업일**: 2026-05-23 (PRODUCTION-UX-001 SPEC 5 라운드 면담 + 본문 ~400줄 신규 작성, 같은 날 세 번째 세션)
+**마지막 세션 로그**: [2026-05-23_production-ux-spec-interview-3.md](c_worked/2026-05-23_production-ux-spec-interview-3.md). 직전 = [2026-05-23_production-ux-research-2.md](c_worked/2026-05-23_production-ux-research-2.md).
+**Git**: cycle 14 SPEC = `dd4782f`. cycle 14.0 = `98cbf32`. cycle 14.1 = `a536428`. cycle 14.2 = `7c60944`. cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. wrap-up production UX 머티턴 = `c10eb62`. **본 wrap-up commit + push 진행**.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — production UX SPEC 인터뷰 즉시 진입
+## 🎯 다음에 할 일 (Top 3) — PROD-UX-1 구현 즉시 진입
 
-우선순위 순. 본 세션 합의 후 다음 진입은 Top 1 SPEC 인터뷰 5라운드.
+우선순위 순. SPEC frozen 완료 → 구현 sub-cycle 3 분할 진입.
 
-### 1. PRODUCTION-UX-001 SPEC 인터뷰 5라운드 (~1 세션) ✨ — 7 결정 freeze
-- **왜**: 본 세션 머티턴 조사 완료 → 큰 설계 결정 7개 확정 필요. SPEC frozen 후 PROD-UX-1·2·3 구현 진입 시 재설계 위험 최소화 (CLAUDE.md 원칙 2 정합).
-- **freeze 대상 7 결정**: (1) 30 시나리오 ↔ agent_route 매핑 권위 / (2) 종합 답변 포맷 contract (raw 압축 방식, 포맷 LLM 1콜 추가 여부) / (3) manual fallback trigger 임계 (confidence < ?) / (4) 코드 라벨 사전 권위 (S-Score/α/F-Score 한국어명) / (5) production-chat vs 기존 webapp 분리 경계 (데모 deprecate/보존) / (6) 30 시나리오 우주 v1 freeze 범위 / (7) Intent Classifier LLM provider/model 정책 (FAST 계층 적용 + fallback chain + JSON 파서 강건화 = SLOT S6 본질 해소)
-- **참조**: plan 파일 `C:\Users\HOME\.claude\plans\jazzy-roaming-snail.md` + 메모리 (`feedback_webapp_production_ux` / `feedback_production_answer_brevity` / `feedback_llm_intuition_distribution`) + WAVE-ALPHA SPEC 5라운드 양식 mirror
-- **예상 산출**: `docs/specs/PRODUCTION-UX-001-natural-language-chat.md` frozen + sub-cycle 3 분할 안 확정
+### 1. PROD-UX-1 구현 (~1 세션) ✨ — Intent Classifier + Routing + 기본 채팅
+- **왜**: PRODUCTION-UX-001 SPEC frozen 직후 최소 시연 단위. "삼성전자 살까" → track_a 호출 → raw 응답 표시. 인프라 80% 완성 (track_selector + run_strategist + SSE) → 신설 2 모듈만 (Intent + 라우트).
+- **시연 마일스톤**: 시나리오 1~5 (보유/진입/시장/섹터/주도주, 사용자 명시 본질) 동작.
+- **산출물**: `core/intent/{classifier.py 250 / cache.py 80 / router.py 180 / system_prompt.md 100}` + `config/scenario_keywords.yaml 200` + `server/api/production_chat.py 150` + `webapp/src/app/production-chat/page.tsx 200` + `tests/intent/test_classifier_golden.py` (45건 = 5 시나리오 × 9건)
+- **테스트 기준**: 45건 골든 eval ≥ 85% 정확도, Stage 1 hit ≥ 40%, cache 2회차 ≥ 95%
+- **LLM 정책**: Intent Stage 2 default = Gemini Flash-lite (FAST 계층, 무료 티어 1500회/일) + fallback chain (Flash-lite → Haiku 4.5 → mock) + JSON parser 강건화
 
-### 2. PROD-UX-1 구현 (~1 세션, SPEC frozen 후) — Intent Classifier + 기본 채팅
-- **왜**: SPEC 7 결정 박은 직후 최소 시연 단위. "삼성전자 살까" → track_a 호출 → raw 응답 표시. 인프라 80% 완성 (track_selector + run_strategist + SSE) → 신설 2 모듈만.
-- **산출물**: `core/intent/{classifier.py 250 / cache.py 80 / router.py 180 / system_prompt.md 100}` + `config/scenario_keywords.yaml 200` + `POST /api/chat/production 150` + `webapp/src/app/production-chat/page.tsx 200` + `tests/intent/test_classifier_golden.py 250` (90건 골든 eval ≥ 85% 정확도, Stage 1 hit ≥ 40%, cache 2회차 ≥ 95%)
-- **Intent C 하이브리드 default LLM = Gemini Flash-lite** (FAST 계층, 무료 티어 1,500회/일) + fallback chain (Flash-lite → Haiku 4.5 → mock)
+### 2. PROD-UX-2 구현 (~1 세션, PROD-UX-1 후) — 시나리오 6~10 + 포맷터 + manual fallback
+- **왜**: 시나리오 6~10 (자동 푸시 영역) 확장 + 자연어 1~3줄 압축 (코드 라벨 자연어 변환). 사용자 가치 본질 = "결론 짧음 + 근거도 쉬워야".
+- **산출물**: `core/intent/formatter.py 200` + `config/label_dictionary.yaml 80` + 시나리오 6~10 keyword + router 확장 + `webapp/.../IntentFallback.tsx 150` + `tests/intent/test_30_scenarios_e2e.py 300` + `tests/intent/test_formatter.py 120`
+- **테스트 기준**: 90건 골든 ≥ 85%, formatter 응답 grep 0건 (코드 라벨 12종 모두), 결론·근거 ≤3줄 assertion
 
-### 3. LLM-TIER-MIGRATION-001 SPEC 신설 + 점진 마이그레이션 (~0.5 세션 microcycle/영역)
-- **왜**: 본 세션 LLM 3계층 정책 (FAST/BALANCED/DEEP, Gemini-Anthropic 1:1 mirror) 신설 → 신규 영역만 즉시 적용 (적용 범위 D 합의). **기존 영역** (anchors.py Stage 2 / 분석가 9 / 전략가 / 회고분석가 M4) = 영역별 1 PR 단위 교체 + 회귀 검증.
-- **anchors.py Stage 2 우선** = SLOT S6 (Gemini JSON 파싱 결함) 와 한꺼번에 해소 가능. Flash → Flash-lite 강등 + parser 강건화 + prompt 튜닝
-- **예상 산출**: 영역별 config 갱신 + 회귀 테스트 통과 + 비용 측정 리포트 (전 시스템 LLM 비용 가시화)
+### 3. PROD-UX-3 구현 + 사용자 인수 (~1 세션) — 근거 토글 + 폴리싱
+- **왜**: production UX 인수 완성형. raw 분석가 응답 토글 노출 (R&D 수준 투명성) + streaming + 에러 자연어화 + 발화 로그.
+- **산출물**: `webapp/.../EvidenceToggle.tsx 120` + streaming 갱신 + `errorMessages.ts 80` + `observability.py 150` (일일 발화 리포트) + `test_user_acceptance.py 200`
+- **인수 기준**: 사용자 본인 일상 발화 5~10건 만족도 검증 + 90건 골든 회귀 유지
 
 (추가 백로그: **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
@@ -239,10 +240,20 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-05-22 cycle 14.0 + 14.1 — WAVE-ALPHA 구현)**
+**이번 세션에 굳힌 판단 (2026-05-23 PRODUCTION-UX-001 SPEC 5라운드 면담 + 본문 작성)**
+- **`/spec-interview` skill ritual 5 회 누적 ✨ → 영구 ritual 확고화**: cycle 5 (chart) / cycle 9 (fundamental) / cycle 12 (snapshot-extend) / cycle 14 (wave-alpha) / 본 cycle (production-ux) 모두 동일 패턴 = ~0.5~1 세션 SPEC + ~1~3 세션 구현 분할 + AskUserQuestion 5 라운드 옵션 (추천 first) + 결단 N 건 영구 권위 + frontmatter status. 본 cycle 은 skill 자체 호출이 ARGUMENTS 처리 이슈로 중단되어 **채팅형 직접 면담으로 진행** = skill 변형 가능. 미래 모든 인프라/제품 SPEC 신설 시 default 진입점.
+- **사용자 본질 명료화 패턴**: 모호한 옵션 답변 ("이게 무슨 말?" / "캐싱이 뭐 캐싱?") 받으면 **쉬운 풀이 + 표 + 본질 frame** 제시 → 같은 옵션 재선택으로 결단 확정. R2-Q2/Q3 양쪽 활용. 사용자 시간 부담 최소 + 결단 확실성 강화. **본 패턴 = `feedback_concise_summary_first.md` 정신의 인터뷰 적용**. 미래 모든 면담에서 사용자 모호 답변 시 같은 frame.
+- **캐싱 대상 frame 정립 (사용자 통찰)** = "시대 흐름 vs 시황 vs 표현 분류" 3 범주. Intent cache = 표현 매핑만 (시황·시대 X) → 30일 TTL 안전. 미래 cache TTL 결정 시 동일 frame 적용 가능 (분석가 답변·시세는 매번 실시간, RAG 청크는 reference 변경 시까지, 표현 분류는 30일).
+- **SPEC frontmatter status enum 부채** = `frozen` 은 validate.py 위반 (`draft / approved / implementing / implemented / verified` 만 valid). WAVE-ALPHA-001 / SNAPSHOT-EXTEND-001 / CHART-DATA-001 / FUNDAMENTAL-DATA-001 / RUNTIME-EFFICIENCY-001 등 cycle 5~14 의 frozen SPEC 모두 일괄 정정 필요 = 작은 cleanup 백로그. 본 SPEC 은 `approved` 사용.
+
+**직전 세션 판단 (2026-05-23 production UX 머티턴 조사 + LLM 3계층 정책 신설)**
+- **머티턴 인터뷰 모드 ritual 검증** = 큰 SPEC 진입 전 본질 확인 ritual. 조사 (Explore 3) + 비교 (Plan agent 1) + 합의 (AskUserQuestion 점진 N 회) 패턴. 코드 0 세션의 가치 = 다음 세션 SPEC 인터뷰 즉시 진입 가능 + 7 결정 freeze 항목 사전 도출 = 면담 5 라운드 시간 단축. 미래 인프라/제품 SPEC 신설 시 큰 결정 5+ 항목 있으면 동일 ritual.
+- **LLM 모델 3계층 정책 = 전 시스템 표준**: FAST=Flash-lite/Haiku 4.5 (Intent·JSON·자연어 변환) / BALANCED=Flash/Sonnet 4.6 (분석가·전략가 본문) / DEEP=Pro/Opus 4.7 (회고·메타). config `llm.tiers` + `llm.areas` 외부 설정 (코드 영역 → tier 라벨 → provider/model 분기). 미래 cycle 14 anchors.py + 분석가 9 + 전략가 + 회고분석가 M4 모두 동일 매핑 분리 마이그레이션. 비용/품질 trade-off 모델 교체 즉시 검증.
+- **적용 범위 D 점진 패턴** = 신규 영역 즉시 + 기존 영역 후속 SPEC microcycle. 회귀 검증 분리로 광범위 회귀 위험 최소화. anchors.py 38 케이스 + 분석가 9 페르소나 smoke + 전략가 통합 동시 검증 회피. `LLM-TIER-MIGRATION-001` 후속 SPEC 영역별 1 PR 단위.
+
+**직전 세션 판단 (2026-05-22 cycle 14.0 + 14.1 — WAVE-ALPHA 구현)**
 - **sub-cycle 분할 ritual 5 회 누적 ✨ → 영구 ritual 격상**: cycle 5 (chart impl) / cycle 9 (fundamental spec) / cycle 12 (snapshot extend spec) / cycle 14 (wave-alpha spec) / 본 cycle (wave-alpha impl 14.0+14.1) 모두 "SPEC frozen → 작은 commit 분할" 동일 패턴. SPEC frozen 단독 commit + sub-cycle 별 commit (canon → DB → 핵심 함수 → anchors → persona → 테스트) = 큰 commit 위험 분산 + 검증 가능 단위. 미래 모든 인프라 SPEC 구현 시 default 진입점.
 - **scoring.alpha() breaking change 영향 최소화 패턴**: 새 시그니처 `(float×4)` → `(Anchor=tuple[date,float]×4)` 교체 시 호출처 = `tests/test_scoring.py` 만 (코드). 다른 호출처 (persona.md / manifest.yaml / SPEC) = 문서 인용만, breaking X. 14.1 안에서 즉시 test 정정 + persona/manifest 는 14.3 별 세션. **자율 결정**: backward-compat hack (alpha_legacy rename / float|tuple overload) 회피, CLAUDE.md "no backwards-compatibility hacks" 정합.
-- **DB v8 마이그레이션 패턴 (기존 정합)** = `core/db/schema.sql` 통합 CREATE TABLE IF NOT EXISTS (새 DB 자동 적용) + `core/db/migrations/v8_wave_alpha.sql` reference (기존 DB 의 ALTER TABLE 은 manual 적용 또는 사용자 DB reset). `_ensure_schema` runner 가 자동 마이그레이션 X = 사용자 dev DB 단독 운용 전제. 별 마이그레이션 runner 도입은 큰 변경, 본 sub-cycle scope 초과.
 
 **직전 세션 판단 (2026-05-22 cycle 14 — WAVE-ALPHA-001 SPEC 5 라운드 면담)**
 - **`/spec-interview` skill ritual 4 회 누적 검증 ✨ → 영구 ritual 확고화**: cycle 5 (INFRA-CHART-DATA-001) / cycle 9 (INFRA-FUNDAMENTAL-DATA-001) / cycle 12 (INFRA-SNAPSHOT-EXTEND-001) / cycle 14 (WAVE-ALPHA-001) 모두 동일 패턴 = ~0.5 세션 SPEC + ~1~2 세션 구현 분할 + AskUserQuestion 5 라운드 옵션 (Recommended first) + 결단 N 건 영구 권위 + frontmatter status: frozen. **4 회 누적 = 미래 모든 인프라 SPEC 신설 시 default 진입점**. SPEC 작성 자체가 사용자 시간 부담 최소 + 결단 명문화 + 큰 commit 위험 분산.
