@@ -9,7 +9,7 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **사용자 보완점 제보 #1 + #2 fix 완료 ✨** (2026-05-23, 같은 날 5번째 세션). track_b MOCK silent fallback 차단 (`mock_fallback_allowed` flag 도입, 6 backend·1 webapp·5 test) + principle_guardian advisory/execution frame 분리 (sub-task·persona·manifest·Track A/B persona 정합). **다음 세션 = INFRA-SCORE-INPUTS-001 SPEC 인터뷰** (사용자 Q1·Q3 본질 해소, `flow_inputs.py` 우선).
+**현재 위치**: **아키텍처 본질 재평가 사이클 (6번째 세션, 2026-05-23) — 가능성 탐색 메모 + prism 실 응답 분석 완료 ✨**. 사용자가 9 분석가 multi-agent 본질 의문 제기 + prism-insight 005930 실 응답 2건 가져옴 ("환각 있지만 내용 풍부, 위 수준 정도가 되면 좋겠다"). claude-code 가 객관 평가 메모 작성 + prism 응답 5 패턴 추출 → **추천 정정 = 옵션 2 (하이브리드) 직진** (옵션 3 으로는 5-layer chain 부분 도달만). **다음 세션 = chat Claude Opus 핑퐁 → 옵션 확정 → `feature/hybrid-executive-poc` 브랜치 + 최소 PoC** (prism 005930 응답과 1:1 비교가 검증 기준).
 
 **본 세션 산출 (1 코드 commit + 1 wrap-up commit)**:
 - **#1 track_b MOCK silent fallback 차단** = `core/llm/client.py` (`mock_fallback_allowed` flag 4함수) + `core/inference/run_analyst.py` + `core/strategist/run_strategist.py` + `core/intent/router.py` (production-chat 6 wrap 모두 False 강제) + `core/intent/formatter.py` (mock/error 응답 본문 제외 + 모두 누락 시 LLM skip) + `webapp/.../EvidenceToggle.tsx` (⚠ MOCK 라벨 + 빨간 border) + 11 신규 테스트 (mock_fallback_gate 6 + router TestMockFallbackForwarded 3 + formatter excludes_mock 2) + 회귀 fix 3 (stub kwargs 수용)
@@ -46,31 +46,35 @@
 
 **미해결 부채**: **데이터 인프라 빈공간** = F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재 (`INFRA-SCORE-INPUTS-001` 별도 SPEC, ~5 세션) / production UX 부분 답변 정직성 (한 축 null 시 도미노 wait, 별 ~1 세션) / 서버 재시작 본 fix 반영 (PID 33600 사용자 console 책임) / SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / 기존 영역 LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001`** (~0.5 세션 microcycle) / gemini transient failure root cause (retry/sequential, 별 영역).
 
-**마지막 작업일**: 2026-05-23 (track_b MOCK silent fallback 차단 + principle_guardian frame 분리, 같은 날 5번째 세션)
-**마지막 세션 로그**: [2026-05-23_mock-fallback-block-and-principle-frame-split-5.md](c_worked/2026-05-23_mock-fallback-block-and-principle-frame-split-5.md). 직전 = [2026-05-23_production-ux-prod1-prod2-impl-4.md](c_worked/2026-05-23_production-ux-prod1-prod2-impl-4.md).
-**Git**: PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 사이클 3 sub-task = `6de001c`. wrap-up 4번째 = `9d2bfee`. **본 세션 = mock fallback gate + principle frame split (1 commit) + wrap-up 5번째 commit 진행**.
+**마지막 작업일**: 2026-05-23 (아키텍처 본질 재평가 메모 작성, 같은 날 6번째 세션)
+**마지막 세션 로그**: [2026-05-23_architecture-evaluation-cycle-6.md](c_worked/2026-05-23_architecture-evaluation-cycle-6.md). 직전 5번째 = [2026-05-23_mock-fallback-block-and-principle-frame-split-5.md](c_worked/2026-05-23_mock-fallback-block-and-principle-frame-split-5.md).
+**산출**: `idea_memo/2026-05-23-architecture-evaluation-by-claude-code.md` (3 옵션 trade-off + prism `/evaluate` 실 패턴 확인 + 추천 + chat Opus 핑퐁 질문 5건). 코드 변경 0. RESUME Top 3 재배치.
+**Git**: PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 5번째 코드 = `5d332f2`. 5번째 wrap-up = `6a48263`. **본 6번째 세션 = idea_memo + RESUME + wrap-up commit 진행**.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 사용자 보완점 본질 fix 사이클
+## 🎯 다음에 할 일 (Top 3) — 아키텍처 본질 재평가 사이클
 
-우선순위 순. 본 세션 #1+#2 fix 직후. 사용자 제보 Q1·Q3 본질 = 데이터 인프라 빈공간 해소가 다음 단계.
+우선순위 순. 사용자 본질 의문 (9 분석가 multi-agent 의 가능성 재평가) 직후. **PoC 는 별도 feature 브랜치** (사용자 명시).
 
-### 1. INFRA-SCORE-INPUTS-001 SPEC 인터뷰 + Phase 1 (`flow_inputs.py`) ✨
-- **왜**: 사용자 Q1(수급) + Q3(실적) 본질 해소. F-Score / S-Score / buy_score / T-Score 의 input collector 부재 → 분석가 응답 "unknown" 다발 → 전략가 verdict wait 도미노. 본 세션 #2 의 frame 분리는 wait 도미노의 한 path 만 해소, 본질은 input 채우기.
-- **범위**: `/spec-interview INFRA-SCORE-INPUTS-001` 5 라운드 면담 → SPEC frozen → Phase 1 = `collectors/flow_inputs.py` (테마-주체 매칭 + 자금 속도, F-Score 4축 핵심) 구현. 메모리 `project_score_inputs_gap.md` 우선순위 1위.
-- **방식**: SPEC 인터뷰 → Phase 1 구현 (~1.5 세션) → Phase 2 (`picker_inputs.py` + `fundamentals_qoq.py`) 별 사이클 → Phase 3 (`trader_inputs.py`) 마지막
-- **예상 산출**: `docs/specs/INFRA-SCORE-INPUTS-001-score-inputs.md` + `collectors/flow_inputs.py` + flow_analyzer manifest 정합
+### 1. chat Claude Opus 핑퐁 → 아키텍처 옵션 결단 ⭐
+- **왜**: 본 세션 6번째 산출 = `idea_memo/2026-05-23-architecture-evaluation-by-claude-code.md` (3 옵션 trade-off + 추천 = 옵션 3 단계적 접근). chat Opus 가 v3.0 설계서 (16 페르소나) 와의 충돌 검증 + 미해결 질문 5건 응답
+- **방식**: 사용자가 메모를 chat Claude Opus 에 전달 → 핑퐁 응답 받음 → 다음 세션 시작 시 옵션 확정 (옵션 1·2·3 또는 v3.0 부분 적용)
+- **사용자 모델 제약**: Opus API 키 없음. PoC 의 임원 LLM = **Gemini 2.5 Pro / Flash** (메모리 `feedback_llm_tier_strategy`)
+- **예상 산출**: chat Opus 응답 → 다음 세션 wrap-up 에서 결단 메모
 
-### 2. production UX 부분 답변 정직성 (~1 세션)
-- **왜**: 한 축 null 시 도미노 wait. 사용자 Q4 본질 해결 = 부분이라도 산출 가능한 축은 즉시 답변 + missing data ETA 표시. chat AI 보다 못한 인상의 본질 해소.
-- **범위**: Track A/B persona 의 종합 verdict 산출 doctrine 에 "1축 null → 다른 4축 부분 결론" 룰 명시 + `core/intent/formatter.py` 자연어 압축 시 "현재 측정 가능 / 측정 불가 + ETA" 명시 강제 + LLM 직관 분포 활용 (memory `feedback_llm_intuition_distribution`)
-- **예상 산출**: Track A/B persona 부분 결론 룰 + formatter system prompt 보강 + 테스트 5+
+### 2. PoC SPEC 신설 + 브랜치 생성 (옵션 결단 직후) ✨
+- **왜**: 사용자 명시 "이 다음에 하이브리드 poc를 해보고 싶은데 아마도 이건 별도 feature 브랜치 따서 Poc 해봐야할 것 같아". main 안전성 보호 + PoC 격리
+- **흐름**: `git checkout -b feature/hybrid-executive-poc` → SPEC 신설 (`docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001-hybrid-executive-llm.md`, PoC scope 만 명시) → 최소 PoC 구현 (임원 페르소나 1개 + Track A 만 + 005930 smoke + **prism 응답 5 패턴 시연**)
+- **검증 기준**: prism 005930 응답과 1:1 비교 (사용자 평가 "위 수준 이상" 받으면 옵션 2 확정). 5 패턴 = 5-layer chain / 시나리오 3 / 솔직 톤 / 상황별 가중치 통합 / 컨텍스트 이어짐
+- **결정 시점**: PoC 결과 → main 머지 (성공) or 폐기·learnings 메모 (실패)
+- **모델 제약**: Opus API 키 없음 → 임원 LLM = Gemini Pro / 9 분석가 = Gemini Flash
+- **예상 산출**: feature 브랜치 + SPEC + 임원 페르소나 1개 + smoke 결과 (prism 1:1 비교 표)
 
-### 3. LLM-TIER-MIGRATION-001 SPEC microcycle (~0.5 세션)
-- **왜**: anchors.py Stage 2 + 분석가 9 + 전략가 영역별 LLM 3계층 점진 마이그레이션. PROD-UX-1 적용 범위 D 점진 결단의 후속. cost 절감 + 응답 속도 ↑.
-- **범위**: 영역별 1 PR 점진 (`anchors_stage2: balanced → fast` 등) + 회귀 검증
-- **예상 산출**: SPEC + 영역별 commit 4~5건
+### 3. (PoC 결과 따라) INFRA-SCORE-INPUTS-001 또는 production UX 부분 답변 재평가 ⏸️
+- **왜**: 옵션 2/3 결단 시 9 분석가 페르소나 변경 → INFRA-SCORE-INPUTS-001 의 분석가 input 수요가 달라질 수 있음. 옵션 결단 전 SPEC 진입은 비효율
+- **재평가 시점**: PoC main 머지 후 또는 폐기 결단 후
+- **현재 상태**: 백로그 보류
 
 (추가 백로그: **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
