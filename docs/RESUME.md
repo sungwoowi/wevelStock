@@ -9,20 +9,18 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **`PRODUCTION-UX-001` PROD-UX-1+2 풀세트 구현 + 사이클 3 (분석가 회피 진단 해소) 완료 ✨** (2026-05-23, 같은 날 4번째 세션, 4 commit push). 사용자 자율 권한 위임 후 한 호흡에 SPEC frozen → PROD-UX-1 → PROD-UX-2 → 시연 → 진단 → 사이클 3 모두 진행. **다음 세션 = 사용자 보완점 제보 대응** (시연 후 발견 N건 항목별 핀포인트 정정).
+**현재 위치**: **사용자 보완점 제보 #1 + #2 fix 완료 ✨** (2026-05-23, 같은 날 5번째 세션). track_b MOCK silent fallback 차단 (`mock_fallback_allowed` flag 도입, 6 backend·1 webapp·5 test) + principle_guardian advisory/execution frame 분리 (sub-task·persona·manifest·Track A/B persona 정합). **다음 세션 = INFRA-SCORE-INPUTS-001 SPEC 인터뷰** (사용자 Q1·Q3 본질 해소, `flow_inputs.py` 우선).
 
-**본 세션 산출 (4 commit)**:
-- **`eec126a`** chore: WAVE-ALPHA-001 status enum cleanup (`frozen` → `implemented`)
-- **`af1568c`** PROD-UX-1 = Intent Classifier + Routing + 기본 채팅. `core/intent/{classifier, cache, router, system_prompt.md}` + `config/scenario_keywords.yaml` + `core/llm/tiers.py` + LLMTiers/LLMAreas schema + `server/api/production_chat.py` + `webapp/src/app/production-chat/page.tsx` + 45 골든 + 12 router 테스트
-- **`d30cafd`** PROD-UX-2 = 옵션 A 협동 (prefetch + raw 직접 주입) + `core/intent/formatter.py` (FAST tier 1콜 자연어 1~3줄 압축) + `config/label_dictionary.yaml` (14종 시드) + `webapp/.../{EvidenceToggle, IntentFallback}.tsx` + SSE `type=formatted` 이벤트 + 8 formatter 테스트
-- **`6de001c`** 사이클 3 = sub-task decomposition (`config/analyst_subtasks.yaml`) + 시나리오별 분석가 축약 (`config/scenario_analyst_routing.yaml`) + router `_resolve_analyst_ids_for_scenario` + `_build_subtask_prompt` + 9 신규 테스트
-- **검증**: pytest **542 → 590** (+48, 회귀 0). validate.py 0 errors. webapp tsc 0 errors.
+**본 세션 산출 (1 코드 commit + 1 wrap-up commit)**:
+- **#1 track_b MOCK silent fallback 차단** = `core/llm/client.py` (`mock_fallback_allowed` flag 4함수) + `core/inference/run_analyst.py` + `core/strategist/run_strategist.py` + `core/intent/router.py` (production-chat 6 wrap 모두 False 강제) + `core/intent/formatter.py` (mock/error 응답 본문 제외 + 모두 누락 시 LLM skip) + `webapp/.../EvidenceToggle.tsx` (⚠ MOCK 라벨 + 빨간 border) + 11 신규 테스트 (mock_fallback_gate 6 + router TestMockFallbackForwarded 3 + formatter excludes_mock 2) + 회귀 fix 3 (stub kwargs 수용)
+- **#2 principle_guardian frame 분리 (advisory vs execution)** = `config/analyst_subtasks.yaml` (advisory frame 명시 + advisory_warning 강제 + violation 금지) + `agents/analysts/principle_guardian/{persona.md, manifest.yaml}` (frame_mode 분기 표 + issue_verdict 알고리즘 frame 분기 + 한국어 verdict 표) + `agents/strategists/track_{a,b}/persona.md` (진입 조건 + 가중치 표 advisory_warning 처리) + 9 신규 테스트 (frame split assertion)
+- **검증**: pytest **590 → 610** (+20, 회귀 0). validate.py 0 errors. webapp tsc 0 errors.
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **분석가 분리 + sub-task decomposition 정합**: prism-insight 의 Orchestrator pass-through + wevelStock 의 asyncio.gather 병렬 = 한 단계 우월. 사용자 의문 "LLM 하나 + 작은 페르소나가 나았으려나?" 에 답 = 아니다. canon RAG 분리·깊이 보존 + 라우터가 분야별 sub-task 분해. 향후 모든 multi-agent orchestration default.
-- **데이터 인프라 빈공간 권위 진단**: 점수 산출 함수 (scoring.py f_score/s_score/buy_score/t_score) 는 잠겨있으나 **input collector 가 부재**. prompt + 위계만으론 "unknown 명시 + 부분 분석" 까지만. **별도 SPEC `INFRA-SCORE-INPUTS-001` 신설 필요** (~5 세션, 본 사이클 scope 밖).
-- **사용자 자율 권한 강화 명시**: "소스코드 수정 권한 묻지 말고 다 완성" → memory `feedback_session_autonomy_signals.md` 정합. 본질·architecture 결정만 묻기.
-- **시나리오별 분석가 축약 결단**: 시나리오 1 = 3명 / 2 = 5명 / 7 = 2명 등. trader 분석가는 시나리오 5 (주도주) 에서만 호출. 호출 시간 ~25s → ~12s, 비용 절반.
+- **production 사용자 경로 = silent mock fallback 절대 금지**: `mock_fallback_allowed=True` (기본) 은 dev/CI 용, production-chat 흐름은 False 강제. real provider 실패 시 RuntimeError → router error 필드 → UI 빨간 표시. mock 응답이 사용자 자연어 답변에 섞이는 사고 차단.
+- **principle_guardian frame_mode 분리 (advisory vs execution)**: 사용자 일반 의견 단계 (production-chat) = advisory frame → OS 위반 식별돼도 `advisory_warning` (blocking X). 실 주문 placement (Layer 4 계좌관리자) = execution frame → blocking `violation`. Track A/B persona 의 진입 조건·가중치 표가 advisory_warning 을 위반 0 처럼 취급해 wait 강제 도미노 차단.
+- **사용자 보완점 4건 진단 권위**: Q1(수급) + Q3(실적) = INFRA-SCORE-INPUTS-001 별 사이클 / Q2(원칙수호자) = 본 세션 #2 fix / Q4(chat AI 비교) = 정량 입력 부재 + 부분 답변 불가 도미노 (#3 INFRA + 별 production UX 부분 답변 정직성 작업).
+- **silent mock fallback 진단**: gemini transient failure → claude_code fallback (Windows known issue) → mock fallback chain 의 발현. 본 fix 는 path 차단만 — gemini 안정성 자체는 별 영역 (retry/sequential).
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -46,31 +44,31 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: **데이터 인프라 빈공간** = F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재 (`INFRA-SCORE-INPUTS-001` 별도 SPEC, ~5 세션) / 사용자 보완점 제보 (시연 발견 N건) / SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / 기존 영역 LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001`** (~0.5 세션 microcycle).
+**미해결 부채**: **데이터 인프라 빈공간** = F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재 (`INFRA-SCORE-INPUTS-001` 별도 SPEC, ~5 세션) / production UX 부분 답변 정직성 (한 축 null 시 도미노 wait, 별 ~1 세션) / 서버 재시작 본 fix 반영 (PID 33600 사용자 console 책임) / SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / 기존 영역 LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001`** (~0.5 세션 microcycle) / gemini transient failure root cause (retry/sequential, 별 영역).
 
-**마지막 작업일**: 2026-05-23 (PROD-UX-1+2 풀세트 + 사이클 3 sub-task decomposition, 같은 날 4번째 세션)
-**마지막 세션 로그**: [2026-05-23_production-ux-prod1-prod2-impl-4.md](c_worked/2026-05-23_production-ux-prod1-prod2-impl-4.md). 직전 = [2026-05-23_production-ux-spec-interview-3.md](c_worked/2026-05-23_production-ux-spec-interview-3.md).
-**Git**: cycle 14.3 = `e2ee94b`. wrap-up 14.3 = `2cdfaf3`. WAVE-ALPHA enum cleanup = `eec126a`. **PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 사이클 3 sub-task = `6de001c`**. wrap-up 4번째 commit 진행.
+**마지막 작업일**: 2026-05-23 (track_b MOCK silent fallback 차단 + principle_guardian frame 분리, 같은 날 5번째 세션)
+**마지막 세션 로그**: [2026-05-23_mock-fallback-block-and-principle-frame-split-5.md](c_worked/2026-05-23_mock-fallback-block-and-principle-frame-split-5.md). 직전 = [2026-05-23_production-ux-prod1-prod2-impl-4.md](c_worked/2026-05-23_production-ux-prod1-prod2-impl-4.md).
+**Git**: PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 사이클 3 sub-task = `6de001c`. wrap-up 4번째 = `9d2bfee`. **본 세션 = mock fallback gate + principle frame split (1 commit) + wrap-up 5번째 commit 진행**.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 사용자 보완점 제보 대응 우선
+## 🎯 다음에 할 일 (Top 3) — 사용자 보완점 본질 fix 사이클
 
-우선순위 순. PROD-UX-1+2 풀세트 완성 + 사이클 3 진단 해소 직후. 사용자가 다음 세션 보완점 N건 제보 예정.
+우선순위 순. 본 세션 #1+#2 fix 직후. 사용자 제보 Q1·Q3 본질 = 데이터 인프라 빈공간 해소가 다음 단계.
 
-### 1. 사용자 보완점 제보 대응 (다음 세션 시작 후 인터뷰) ✨
-- **왜**: 사용자 명시 "보완점 이 많이 보이는데 이건 다른 세션에서 제보". 사이클 3 sub-task + 축약 적용 후 실 시연에서 발견된 추가 회피·환각·부자연 케이스 정리 → 핀포인트 정정.
-- **범위**: 사용자 발견 N 건 항목별. 각 분석가 manifest response_rules 또는 `config/analyst_subtasks.yaml` 정정 + 일부 회귀 테스트 골든 케이스 추가.
-- **방식**: 세션 초 사용자 인터뷰 → 항목별 우선순위 → 핀포인트 정정 commit 단위
-- **예상 산출**: `config/analyst_subtasks.yaml` 정정 + 일부 분석가 manifest response_rules 강화 + 테스트 골든 케이스 추가
+### 1. INFRA-SCORE-INPUTS-001 SPEC 인터뷰 + Phase 1 (`flow_inputs.py`) ✨
+- **왜**: 사용자 Q1(수급) + Q3(실적) 본질 해소. F-Score / S-Score / buy_score / T-Score 의 input collector 부재 → 분석가 응답 "unknown" 다발 → 전략가 verdict wait 도미노. 본 세션 #2 의 frame 분리는 wait 도미노의 한 path 만 해소, 본질은 input 채우기.
+- **범위**: `/spec-interview INFRA-SCORE-INPUTS-001` 5 라운드 면담 → SPEC frozen → Phase 1 = `collectors/flow_inputs.py` (테마-주체 매칭 + 자금 속도, F-Score 4축 핵심) 구현. 메모리 `project_score_inputs_gap.md` 우선순위 1위.
+- **방식**: SPEC 인터뷰 → Phase 1 구현 (~1.5 세션) → Phase 2 (`picker_inputs.py` + `fundamentals_qoq.py`) 별 사이클 → Phase 3 (`trader_inputs.py`) 마지막
+- **예상 산출**: `docs/specs/INFRA-SCORE-INPUTS-001-score-inputs.md` + `collectors/flow_inputs.py` + flow_analyzer manifest 정합
 
-### 2. INFRA-SCORE-INPUTS-001 SPEC 신설 (~5 세션 별도 사이클)
-- **왜**: 데이터 인프라 빈공간 본질 해소. F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재로 점수 실 발행 불가. 분석가들이 "unknown 명시 + 부분 분석" 까지만 가능.
-- **범위**: `/spec-interview INFRA-SCORE-INPUTS-001` 5 라운드 면담 → SPEC frozen → 영역별 1 collector 씩 점진 구현 (테마-주체 매칭 / 수급망 일치도 / CAN SLIM 7축 / 실시간 호가)
-- **예상 산출**: `docs/specs/INFRA-SCORE-INPUTS-001-score-inputs.md` + `collectors/{flow_inputs, picker_inputs, fundamentals_qoq, trader_inputs}.py` × 5 세션 분산
+### 2. production UX 부분 답변 정직성 (~1 세션)
+- **왜**: 한 축 null 시 도미노 wait. 사용자 Q4 본질 해결 = 부분이라도 산출 가능한 축은 즉시 답변 + missing data ETA 표시. chat AI 보다 못한 인상의 본질 해소.
+- **범위**: Track A/B persona 의 종합 verdict 산출 doctrine 에 "1축 null → 다른 4축 부분 결론" 룰 명시 + `core/intent/formatter.py` 자연어 압축 시 "현재 측정 가능 / 측정 불가 + ETA" 명시 강제 + LLM 직관 분포 활용 (memory `feedback_llm_intuition_distribution`)
+- **예상 산출**: Track A/B persona 부분 결론 룰 + formatter system prompt 보강 + 테스트 5+
 
-### 3. LLM-TIER-MIGRATION-001 SPEC 신설 (~0.5 세션 microcycle)
-- **왜**: anchors.py Stage 2 + 분석가 9 + 전략가 영역별 LLM 3계층 점진 마이그레이션. PROD-UX-1 적용 범위 D 점진 결단의 후속.
+### 3. LLM-TIER-MIGRATION-001 SPEC microcycle (~0.5 세션)
+- **왜**: anchors.py Stage 2 + 분석가 9 + 전략가 영역별 LLM 3계층 점진 마이그레이션. PROD-UX-1 적용 범위 D 점진 결단의 후속. cost 절감 + 응답 속도 ↑.
 - **범위**: 영역별 1 PR 점진 (`anchors_stage2: balanced → fast` 등) + 회귀 검증
 - **예상 산출**: SPEC + 영역별 commit 4~5건
 
