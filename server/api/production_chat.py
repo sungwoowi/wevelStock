@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from core.intent import (
     classify_intent,
+    format_answer,
     route_intent,
     route_intent_stream,
 )
@@ -44,12 +45,25 @@ class ProductionChatRequest(BaseModel):
     provider: ProviderName | None = None
     skip_cache: bool = False  # 테스트/디버깅용
     skip_stage2: bool = False  # Stage 1 만 검증 (테스트용)
-    manual_override: dict[str, Any] | None = None  # IntentFallback (PROD-UX-2 후속)
+    manual_override: dict[str, Any] | None = None  # IntentFallback drop-down 결과
+    skip_formatter: bool = False  # raw 만 반환 (PROD-UX-1 호환 모드)
+
+
+class FormattedAnswer(BaseModel):
+    text: str
+    model: str
+    tokens_in: int
+    tokens_out: int
+    cost_usd: float
+    latency_ms: int
+    is_mock: bool
+    upstream_error: str | None = None
 
 
 class ProductionChatResponse(BaseModel):
     classification: dict[str, Any]
     agent_responses: list[dict[str, Any]]
+    formatted: FormattedAnswer | None = None
     error: str | None = None
     latency_ms: int
 
@@ -101,9 +115,40 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
     route_resp = await route_intent(
         classification, messages_dicts, provider=payload.provider
     )
+
+    formatted: FormattedAnswer | None = None
+    if not payload.skip_formatter:
+        analyst_outputs = [
+            r for r in route_resp.agent_responses if r.get("kind") in ("analyst", "analyst_prefetch")
+        ]
+        strategist_outputs = [
+            r for r in route_resp.agent_responses
+            if r.get("kind") in ("strategist", "refuse_or_guide", "pending_ms5")
+        ]
+        try:
+            fmt = await format_answer(
+                user_input=last_user,
+                analyst_outputs=analyst_outputs,
+                strategist_outputs=strategist_outputs,
+                provider=payload.provider,
+            )
+            formatted = FormattedAnswer(
+                text=fmt.text,
+                model=fmt.model,
+                tokens_in=fmt.tokens_in,
+                tokens_out=fmt.tokens_out,
+                cost_usd=fmt.cost_usd,
+                latency_ms=fmt.latency_ms,
+                is_mock=fmt.is_mock,
+                upstream_error=fmt.upstream_error,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.error("formatter_dispatch_failed", error=str(e))
+
     return ProductionChatResponse(
         classification=route_resp.classification,
         agent_responses=route_resp.agent_responses,
+        formatted=formatted,
         error=route_resp.error,
         latency_ms=route_resp.latency_ms,
     )
@@ -153,11 +198,89 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
                     provider=payload.provider,
                 )
 
+            # agent stream 들 흐리며 raw text 누적 (formatter 입력용)
+            analyst_buffer: dict[str, dict[str, Any]] = {}
+            strategist_buffer: dict[str, dict[str, Any]] = {}
+
             async for event in route_intent_stream(
                 classification, messages_dicts, provider=payload.provider
             ):
+                etype = event.get("type")
+                if etype == "analyst_prefetch":
+                    aid = event.get("agent") or "?"
+                    analyst_buffer[aid] = {
+                        "id": aid,
+                        "text": event.get("text", ""),
+                        "metadata": event.get("metadata", {}),
+                        "error": event.get("error"),
+                    }
+                elif etype == "agent_start":
+                    aid = event.get("agent") or "?"
+                    kind = event.get("kind") or ""
+                    if kind == "strategist":
+                        strategist_buffer.setdefault(aid, {"agent_id": aid, "text": "", "metadata": {}})
+                    elif kind == "analyst":
+                        analyst_buffer.setdefault(aid, {"id": aid, "text": "", "metadata": {}})
+                    elif kind in ("refuse_or_guide", "pending_ms5"):
+                        strategist_buffer.setdefault(aid, {"agent_id": aid, "text": "", "metadata": {}})
+                elif etype == "text_delta":
+                    aid = event.get("agent") or "?"
+                    if aid in strategist_buffer:
+                        strategist_buffer[aid]["text"] += event.get("text", "")
+                    elif aid in analyst_buffer:
+                        analyst_buffer[aid]["text"] += event.get("text", "")
+                elif etype == "agent_metadata":
+                    aid = event.get("agent") or "?"
+                    if aid in strategist_buffer:
+                        strategist_buffer[aid]["metadata"].update(
+                            {k: v for k, v in event.items() if k not in ("type", "agent")}
+                        )
+                    elif aid in analyst_buffer:
+                        analyst_buffer[aid]["metadata"].update(
+                            {k: v for k, v in event.items() if k not in ("type", "agent")}
+                        )
+                elif etype == "agent_error":
+                    aid = event.get("agent") or "?"
+                    if aid in strategist_buffer:
+                        strategist_buffer[aid]["error"] = event.get("message")
+                    elif aid in analyst_buffer:
+                        analyst_buffer[aid]["error"] = event.get("message")
+
                 line = "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 yield line.encode("utf-8")
+
+            # 모든 agent stream 종료 후 formatter 호출 (SSE 마지막 event 로 추가)
+            if not payload.skip_formatter:
+                try:
+                    fmt = await format_answer(
+                        user_input=last_user,
+                        analyst_outputs=list(analyst_buffer.values()),
+                        strategist_outputs=list(strategist_buffer.values()),
+                        provider=payload.provider,
+                    )
+                    fmt_event = {
+                        "type": "formatted",
+                        "text": fmt.text,
+                        "model": fmt.model,
+                        "tokens_in": fmt.tokens_in,
+                        "tokens_out": fmt.tokens_out,
+                        "cost_usd": fmt.cost_usd,
+                        "latency_ms": fmt.latency_ms,
+                        "is_mock": fmt.is_mock,
+                        "upstream_error": fmt.upstream_error,
+                    }
+                    yield (
+                        "data: " + json.dumps(fmt_event, ensure_ascii=False) + "\n\n"
+                    ).encode("utf-8")
+                except Exception as e:  # noqa: BLE001
+                    log.error("formatter_stream_dispatch_failed", error=str(e))
+                    err_event = {
+                        "type": "formatted_error",
+                        "message": str(e),
+                    }
+                    yield (
+                        "data: " + json.dumps(err_event, ensure_ascii=False) + "\n\n"
+                    ).encode("utf-8")
         except Exception as e:  # noqa: BLE001
             log.error(
                 "production_chat_stream_failed",

@@ -1,0 +1,234 @@
+"""Answer formatter — PRODUCTION-UX-001 § R4 결단.
+
+분석가/전략가 raw 응답 (cited + 격자 + 코드 라벨 풍부) → FAST tier (Flash-lite)
+LLM 1콜 → **1~3줄 결론 + 1~3줄 근거 (수급/차트/실적 3요소)** 자연어 응답.
+
+핵심 본질 (memory `feedback_production_answer_brevity`):
+  - 코드 라벨 (S-Score / α / F-Score 등) 본문 노출 0건 — label_dictionary.yaml 사전
+  - 결론·근거 각 ≤ 3줄
+  - 사용자 발화 (예: "삼성전자 살까?") 에 직접 답변하는 톤
+  - 분석가 prefetch raw 와 전략가 응답 모두 종합
+"""
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from core.llm.client import call_llm
+from core.llm.tiers import resolve_model_for_area
+from core.logging import get_logger
+
+log = get_logger(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LABEL_DICTIONARY_PATH = REPO_ROOT / "config" / "label_dictionary.yaml"
+
+_LABEL_DICT_CACHE: dict | None = None
+
+
+def _load_label_dictionary() -> dict:
+    global _LABEL_DICT_CACHE
+    if _LABEL_DICT_CACHE is None:
+        if not LABEL_DICTIONARY_PATH.exists():
+            log.warning("label_dictionary_missing", path=str(LABEL_DICTIONARY_PATH))
+            _LABEL_DICT_CACHE = {"labels": {}, "evidence_categories": {}}
+        else:
+            try:
+                _LABEL_DICT_CACHE = (
+                    yaml.safe_load(LABEL_DICTIONARY_PATH.read_text(encoding="utf-8")) or {}
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("label_dictionary_load_failed", error=str(e))
+                _LABEL_DICT_CACHE = {"labels": {}, "evidence_categories": {}}
+    return _LABEL_DICT_CACHE
+
+
+def reload_label_dictionary() -> None:
+    """테스트/hot reload — 캐시 클리어."""
+    global _LABEL_DICT_CACHE
+    _LABEL_DICT_CACHE = None
+
+
+def _build_label_block() -> str:
+    """label_dictionary → system prompt 의 사전 블록."""
+    d = _load_label_dictionary()
+    labels = d.get("labels") or {}
+    cats = d.get("evidence_categories") or {}
+    lines = [
+        "## 코드 라벨 자연어 변환 사전 (절대 본문에 코드 라벨 노출 금지)",
+        "",
+    ]
+    for code, mapping in labels.items():
+        natural = (mapping or {}).get("natural", code) if isinstance(mapping, dict) else str(mapping)
+        lines.append(f"- `{code}` → \"{natural}\"")
+    lines.append("")
+    lines.append("## 근거 3요소 (raw 에서 추출해 자연어로 풀이)")
+    for cat, hint in cats.items():
+        lines.append(f"- **{cat}**: {hint}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Formatter system prompt
+# ---------------------------------------------------------------------------
+
+_FORMATTER_SYSTEM = """당신은 wevelStock 의 자연어 답변 압축기입니다. 분석가/전략가들의 raw 응답
+(cited + 격자 + 코드 라벨 풍부) 을 받아 사용자 발화에 직접 답변하는 짧은 자연어로 변환합니다.
+
+## 출력 양식 (엄격)
+
+```
+[1~3줄 자연어 결론]
+
+근거:
+- [수급] 1줄 자연어 (외국인/기관 흐름, 시장 폭)
+- [차트] 1줄 자연어 (추세, 가속도, 이동평균선)
+- [실적] 1줄 자연어 (EPS/매출/F-Score 등 펀더멘털)
+```
+
+## 절대 규칙
+
+1. **코드 라벨 본문 노출 금지** — `S-Score`, `α`, `F-Score`, `T-Score`, `buy_score`, `regime`,
+   `verdict`, `cited`, `confidence`, `RS`, `breadth`, `divergence`, `Distribution Day`, `분배일`
+   같은 문자열을 절대 본문에 노출하지 말 것. 위 변환 사전의 자연어로 대체.
+2. **결론 ≤ 3줄, 근거 각 ≤ 1줄** — 사용자가 길게 읽지 않고 즉시 결정 가능.
+3. **명령조 X, 친근체** — "~합니다 / ~예요" 톤. 격식체 + 반말 혼용 금지.
+4. **3요소 모두 채우기** — raw 에 정보 부족하면 "정보 부족" 명시. 환각 금지.
+5. **사용자 발화에 직접 답변** — "삼성전자 살까?" → "지금은 보류 권고예요" 식. 양식 YAML 그대로 노출 X.
+6. **분석가 prefetch + 전략가 응답 종합** — 한쪽만 인용하지 말고 둘 다 통합.
+
+## 입력 형식
+
+사용자 발화 + 분석가 N명 raw + 전략가 M명 raw → 한 응답.
+"""
+
+
+@dataclass
+class FormatterResult:
+    text: str
+    model: str
+    tokens_in: int
+    tokens_out: int
+    cost_usd: float
+    latency_ms: int
+    is_mock: bool
+    upstream_error: str | None = None
+
+
+def _compose_user_message(
+    user_input: str,
+    analyst_outputs: list[dict[str, Any]],
+    strategist_outputs: list[dict[str, Any]],
+) -> str:
+    """formatter 호출용 user prompt — 사용자 발화 + raw 응답 풀세트."""
+    lines: list[str] = []
+    lines.append(f"## 사용자 발화\n{user_input}\n")
+    if analyst_outputs:
+        lines.append("## 분석가 raw 응답 (prefetch 동시 호출)")
+        for entry in analyst_outputs:
+            aid = entry.get("id") or entry.get("agent_id", "?")
+            text = (entry.get("text") or "").strip()
+            err = entry.get("error")
+            if err:
+                lines.append(f"\n### {aid}\n**호출 실패** — {err}.")
+            elif not text:
+                lines.append(f"\n### {aid}\n**빈 응답**")
+            else:
+                # 각 분석가 응답 길이 제한 — formatter prompt 폭발 방지
+                if len(text) > 2000:
+                    text = text[:2000] + "\n... (truncated)"
+                lines.append(f"\n### {aid}\n{text}")
+        lines.append("")
+    if strategist_outputs:
+        lines.append("## 전략가 raw 응답 (권고 본문)")
+        for entry in strategist_outputs:
+            sid = entry.get("agent_id", "?")
+            text = (entry.get("text") or "").strip()
+            err = entry.get("error")
+            if err:
+                lines.append(f"\n### {sid}\n**호출 실패** — {err}.")
+            elif not text:
+                lines.append(f"\n### {sid}\n**빈 응답**")
+            else:
+                if len(text) > 4000:
+                    text = text[:4000] + "\n... (truncated)"
+                lines.append(f"\n### {sid}\n{text}")
+        lines.append("")
+    lines.append("위 raw 응답들을 종합하여 사용자 발화에 답변하는 자연어 1~3줄 결론 + 근거 3요소 양식으로 정리해주세요.")
+    return "\n".join(lines)
+
+
+async def format_answer(
+    user_input: str,
+    analyst_outputs: list[dict[str, Any]],
+    strategist_outputs: list[dict[str, Any]],
+    *,
+    provider: str | None = None,
+) -> FormatterResult:
+    """분석가 + 전략가 raw → 자연어 1~3줄 결론 + 근거 3요소.
+
+    Args:
+        user_input: 사용자 발화 (분류기에 들어간 원문).
+        analyst_outputs: prefetch 분석가 list (각 dict = {id, text, metadata, error}).
+        strategist_outputs: 전략가 list (각 dict = {agent_id, text, metadata, error}).
+        provider: 명시 backend (None = config + auto fallback).
+
+    Returns:
+        FormatterResult(text, model, tokens_in/out, cost, latency_ms, is_mock).
+        실패 시 text = 짧은 안내 + upstream_error 채움.
+    """
+    provider_resolved, model = resolve_model_for_area("answer_formatter")
+    if provider:
+        provider_resolved = provider
+
+    system_blocks: list[dict] = [
+        {"type": "text", "text": _FORMATTER_SYSTEM},
+        {"type": "text", "text": _build_label_block()},
+    ]
+    user_msg = _compose_user_message(user_input, analyst_outputs, strategist_outputs)
+    started = time.monotonic()
+    try:
+        resp = await call_llm(
+            system=system_blocks,
+            messages=[{"role": "user", "content": user_msg}],
+            model=model,
+            max_tokens=800,
+            temperature=0.3,
+            provider=provider_resolved if provider_resolved != "mock" else None,
+        )
+    except Exception as e:  # noqa: BLE001
+        log.error(
+            "formatter_call_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return FormatterResult(
+            text=(
+                "응답 정리에 실패했습니다. raw 응답을 직접 확인해주세요. "
+                f"(오류: {type(e).__name__})"
+            ),
+            model=model,
+            tokens_in=0,
+            tokens_out=0,
+            cost_usd=0.0,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            is_mock=False,
+            upstream_error=str(e),
+        )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    raw = resp.get("raw") or {}
+    is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
+    return FormatterResult(
+        text=resp.get("content", ""),
+        model=resp.get("model", model),
+        tokens_in=int(resp.get("tokens_in", 0)),
+        tokens_out=int(resp.get("tokens_out", 0)),
+        cost_usd=float(resp.get("cost_usd", 0.0)),
+        latency_ms=latency_ms,
+        is_mock=is_mock,
+        upstream_error=raw.get("error"),
+    )

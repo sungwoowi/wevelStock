@@ -117,18 +117,27 @@ def stub_llm_call(monkeypatch: pytest.MonkeyPatch):
 
 
 class TestSingleTrack:
-    def test_track_a_calls_run_strategist_once(self, stub_strategist, stub_analyst) -> None:
+    """옵션 A 적용 — track_a 호출 시 prefetch 분석가 N명 + 전략가 1."""
+
+    def test_track_a_calls_strategist_with_prefetch(self, stub_strategist, stub_analyst) -> None:
         c = _make_classification(agent_route="track_a", ticker="005930")
         result = asyncio.run(
             route_intent(c, [{"role": "user", "content": "삼성전자 어때"}])
         )
+        # 전략가 1번 호출
         assert len(stub_strategist) == 1
         assert stub_strategist[0]["strategist_id"] == "track_a"
         assert stub_strategist[0]["target"] == "005930"
-        assert len(stub_analyst) == 0
-        assert len(result.agent_responses) == 1
-        assert result.agent_responses[0]["kind"] == "strategist"
-        assert result.agent_responses[0]["agent_id"] == "track_a"
+        # 분석가 prefetch — track_a 의 reads_analysts (manifest 정의) 만큼 동시 호출
+        assert len(stub_analyst) >= 1
+        # 전략가에 prefetched_analyst_outputs 가 전달됨
+        prefetched = stub_strategist[0].get("prefetched_analyst_outputs")
+        assert prefetched is not None
+        assert len(prefetched) == len(stub_analyst)
+        # agent_responses 에 analyst_prefetch + strategist 양쪽 포함
+        kinds = [r["kind"] for r in result.agent_responses]
+        assert "strategist" in kinds
+        assert kinds.count("analyst_prefetch") == len(stub_analyst)
 
     def test_track_b_calls_strategist_track_b(self, stub_strategist, stub_analyst) -> None:
         c = _make_classification(agent_route="track_b", ticker="000660")
@@ -149,7 +158,15 @@ class TestBothRoute:
         assert len(stub_strategist) == 2
         called_ids = {call["strategist_id"] for call in stub_strategist}
         assert called_ids == {"track_a", "track_b"}
-        assert len(result.agent_responses) == 2
+        # 두 전략가 모두 같은 prefetched 자료 받음 (dedupe + 단일 prefetch)
+        pa = stub_strategist[0].get("prefetched_analyst_outputs")
+        pb = stub_strategist[1].get("prefetched_analyst_outputs")
+        assert pa is not None and pb is not None
+        assert pa == pb  # 동일 객체 reference (dedupe + single prefetch)
+        # agent_responses = analyst_prefetch N + strategist 2
+        kinds = [r["kind"] for r in result.agent_responses]
+        assert kinds.count("strategist") == 2
+        assert kinds.count("analyst_prefetch") >= 1
 
 
 class TestAnalystDirect:
@@ -232,16 +249,19 @@ class TestPendingMs5:
 
 
 class TestErrorHandling:
-    def test_strategist_exception_is_captured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_strategist_exception_is_captured(
+        self, monkeypatch: pytest.MonkeyPatch, stub_analyst
+    ) -> None:
         async def _raises(*args, **kwargs):
             raise RuntimeError("strategist boom")
 
         monkeypatch.setattr("core.intent.router.run_strategist", _raises)
         c = _make_classification(agent_route="track_a", ticker="005930")
         result = asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
-        # error 가 raise 되지 않고 metadata 에 들어감
-        assert len(result.agent_responses) == 1
-        assert "strategist boom" in (result.agent_responses[0].get("error") or "")
+        # prefetch 분석가는 정상 호출 + strategist 만 error
+        strategist_responses = [r for r in result.agent_responses if r.get("kind") == "strategist"]
+        assert len(strategist_responses) == 1
+        assert "strategist boom" in (strategist_responses[0].get("error") or "")
 
     def test_analyst_not_found_is_captured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from core.inference.run_analyst import AnalystNotFoundError

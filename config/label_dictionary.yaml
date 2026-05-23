@@ -1,0 +1,96 @@
+# PRODUCTION-UX-001 — 코드 라벨 → 자연어 변환 사전.
+#
+# formatter.py 가 분석가/전략가 raw 응답을 자연어 1~3줄 결론 + 1~3줄 근거로
+# 압축할 때 system prompt 에 본 사전 주입.
+#
+# 시드 14종 (memory `feedback_production_answer_brevity` § 번역 사전).
+# 신규 영역 라벨 발견 시 본 yaml 에 추가 — watchdog hot reload.
+#
+# 양식: <code_label>: <자연어 표현>
+# formatter 의 출력엔 코드 라벨이 절대 노출되지 않아야 (test_formatter.py grep 0건).
+
+labels:
+  # 분석가 점수
+  "α":
+    natural: "가속계수 (추세의 가속도, 1.0 = 1차 발산 속도와 동일, 2.0+ = 과열)"
+    short: "가속도"
+  "alpha":
+    natural: "가속계수 (추세의 가속도)"
+    short: "가속도"
+  "S-Score":
+    natural: "주도주 점수 (시장 주도력, 10점 만점)"
+    short: "주도주 점수"
+  "s_score":
+    natural: "주도주 점수"
+    short: "주도주 점수"
+  "F-Score":
+    natural: "수급 점수 (외국인·기관 매수 강도, 4축 가중)"
+    short: "수급 점수"
+  "f_score":
+    natural: "수급 점수"
+    short: "수급 점수"
+  "T-Score":
+    natural: "타점 점수 (트레이딩 진입 적합도)"
+    short: "타점 점수"
+  "t_score":
+    natural: "타점 점수"
+    short: "타점 점수"
+  "buy_score":
+    natural: "매수 점수"
+    short: "매수 점수"
+
+  # verdict / regime
+  "verdict":
+    natural: "판단"
+    short: "판단"
+  "regime":
+    natural: "시장 국면"
+    short: "국면"
+  "confidence":
+    natural: "신뢰도"
+    short: "신뢰도"
+  "cited":
+    natural: "근거 명제"
+    short: "근거"
+
+  # 기술적 지표
+  "RS":
+    natural: "상대 강도 (Relative Strength)"
+    short: "상대강도"
+  "RS Score":
+    natural: "상대 강도 점수"
+    short: "상대강도"
+  "breadth":
+    natural: "시장 폭 (상승 종목 비율)"
+    short: "시장폭"
+  "divergence":
+    natural: "다이버전스 (가격↔지표 불일치)"
+    short: "다이버전스"
+  "분배일":
+    natural: "분배일 (Distribution Day, 기관 매도 신호)"
+    short: "분배일"
+  "Distribution Day":
+    natural: "분배일 (기관 매도 신호)"
+    short: "분배일"
+
+  # 시간 normalization
+  "holding_period":
+    natural: "예상 보유 기간"
+    short: "보유 기간"
+  "progress_to_b":
+    natural: "B anchor 대비 진행률"
+    short: "B 진행률"
+
+  # 7계명 (principle_guardian)
+  "operational_safeguards":
+    natural: "운용 안전핀 (진입 검증 룰)"
+    short: "운용 안전핀"
+  "philosophy_7_commandments":
+    natural: "투자 7계명"
+    short: "7계명"
+
+# 근거 3요소 (formatter 가 raw 에서 추출해서 자연어 1~2줄로 풀어 쓸 카테고리)
+evidence_categories:
+  수급: "외국인/기관 매수·매도 흐름 + 시장 폭"
+  차트: "추세·anchor·가속계수·이동평균선"
+  실적: "EPS·매출·영업이익률·F-Score 등 펀더멘털"

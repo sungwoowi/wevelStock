@@ -1,31 +1,34 @@
 "use client";
 
 /**
- * PRODUCTION-UX-001 — 자연어 채팅창 production UX (PROD-UX-1).
+ * PRODUCTION-UX-001 — 자연어 채팅창 production UX (PROD-UX-1+2).
  *
- * 하나의 채팅 입력창 + 분류 결과 헤더 + agent 별 응답 카드.
- * 사용자가 코드 라벨(S-Score/α/F-Score) 노출 없이 시스템을 자연어로 사용하는 진입점.
+ * 하나의 채팅 입력창 + 자연어 1~3줄 결론/근거 + 근거 토글 (raw) + manual fallback.
  *
- * v1 시연 = 시나리오 1~5:
- *   "삼성전자 들고 있는데?" → 시나리오 1 → track_a
- *   "삼성전자 살까?"        → 시나리오 2 → both (track_a + track_b)
- *   "지금 시장 어때?"       → 시나리오 3 → market_state_analyzer 직접
- *   "어떤 섹터 강해?"        → 시나리오 4 → stock_picker + market_state_analyzer
- *   "지금 뭐 사?"           → 시나리오 5 → both
+ * PROD-UX-2 변화 (옵션 A 협동 + formatter):
+ *   - 라우터가 분석가 6명 동시 호출 후 전략가에 raw 직접 주입 (DB read 우회)
+ *   - formatter (FAST tier Flash-lite) 가 raw → 1~3줄 자연어 압축
+ *   - 코드 라벨 (S-Score/α 등) 자연어 변환 (label_dictionary.yaml)
+ *   - 근거 토글 = raw 분석가/전략가 응답 풀세트
+ *   - manual fallback drop-down = 분류 신뢰도 < 0.6 시 직접 시나리오/종목 선택
  *
- * SSE 프로토콜:
+ * SSE 이벤트:
  *   { type: "classification", scenario_id, ticker, agent_route, confidence, ... }
+ *   { type: "prefetch_start", track_ids: ["track_a", "track_b"] }
+ *   { type: "analyst_prefetch", agent, text, metadata, error }
+ *   { type: "prefetch_done", analysts, missing }
  *   { type: "agent_start", agent, kind }
  *   { type: "text_delta", text, agent }
  *   { type: "agent_metadata", agent, ...metadata }
  *   { type: "agent_done", agent }
+ *   { type: "formatted", text, model, ...metadata }
  *   { type: "done" }
- *
- * PROD-UX-1 = raw 응답 그대로 표시. 자연어 1~3줄 압축 + label_dictionary 는 PROD-UX-2 후속.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/api";
+import { EvidenceToggle } from "./components/EvidenceToggle";
+import { IntentFallback, ManualOverride } from "./components/IntentFallback";
 
 type Role = "user" | "assistant";
 type Message = { role: Role; content: string };
@@ -45,27 +48,34 @@ type Classification = {
   upstream_error?: string | null;
 };
 
-type AgentMetadata = {
-  agent: string;
-  model?: string;
-  tokens_in?: number;
-  tokens_out?: number;
-  cost_usd?: number;
-  latency_s?: number;
-  first_token_ms?: number | null;
-  is_mock?: boolean;
-  upstream_error?: string | null;
-  analyst_published_count?: number;
-  analyst_missing_count?: number;
-};
-
 type AgentResponse = {
   agent: string;
-  kind: string; // strategist | analyst | refuse_or_guide | pending_ms5
+  kind: string;
   text: string;
-  metadata?: AgentMetadata;
+  metadata?: Record<string, any>;
   error?: string | null;
   done: boolean;
+};
+
+type FormattedAnswer = {
+  text: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number;
+  latency_ms: number;
+  is_mock: boolean;
+  upstream_error?: string | null;
+};
+
+type Exchange = {
+  user: string;
+  classification?: Classification;
+  prefetchTrackIds?: string[];
+  agentResponses: AgentResponse[];
+  formatted?: FormattedAnswer;
+  streaming: boolean;
+  error?: string | null;
 };
 
 const SCENARIO_NAMES: Record<number, string> = {
@@ -99,11 +109,7 @@ function ClassificationBadge({ c }: { c: Classification }) {
       ? "bg-amber-900 text-amber-200"
       : "bg-red-900 text-red-200";
   const stageLabel =
-    c.stage === "deterministic"
-      ? "결정론"
-      : c.stage === "cache"
-      ? "캐시"
-      : "LLM";
+    c.stage === "deterministic" ? "결정론" : c.stage === "cache" ? "캐시" : "LLM";
   return (
     <div className="border border-neutral-800 bg-neutral-900/50 rounded-md p-2 text-xs space-y-1">
       <div className="flex items-center gap-2 flex-wrap">
@@ -124,16 +130,10 @@ function ClassificationBadge({ c }: { c: Classification }) {
         <span className={`px-2 py-0.5 rounded ${confColor}`}>
           신뢰도 {(c.confidence * 100).toFixed(0)}%
         </span>
-        <span className="text-neutral-500">{stageLabel} · {c.latency_ms}ms</span>
+        <span className="text-neutral-500">
+          {stageLabel} · {c.latency_ms}ms
+        </span>
       </div>
-      {c.manual_fallback_required && (
-        <div className="text-amber-400">
-          ⚠ 분류 신뢰도 낮음 — 직접 시나리오/종목 선택 권장 (manual fallback 은 PROD-UX-2)
-        </div>
-      )}
-      {c.reasoning && (
-        <div className="text-neutral-500 italic">근거: {c.reasoning}</div>
-      )}
       {c.upstream_error && (
         <div className="text-red-400">LLM 오류: {c.upstream_error}</div>
       )}
@@ -141,80 +141,68 @@ function ClassificationBadge({ c }: { c: Classification }) {
   );
 }
 
-function AgentCard({ ar }: { ar: AgentResponse }) {
-  const kindLabel =
-    ar.kind === "strategist"
-      ? "전략가"
-      : ar.kind === "analyst"
-      ? "분석가"
-      : ar.kind === "refuse_or_guide"
-      ? "안내"
-      : ar.kind === "pending_ms5"
-      ? "(MS5 대기)"
-      : ar.kind;
-  const borderColor = ar.error
-    ? "border-red-800"
-    : ar.metadata?.is_mock
-    ? "border-amber-700"
-    : "border-neutral-800";
-  return (
-    <div className={`border ${borderColor} rounded-md p-3 bg-neutral-950 space-y-2`}>
-      <div className="flex items-baseline justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <span className="text-xs uppercase tracking-wider text-neutral-500">
-            {kindLabel}
-          </span>
-          <span className="font-mono text-sm text-emerald-300">{ar.agent}</span>
-          {!ar.done && (
-            <span className="text-xs text-neutral-500 animate-pulse">스트리밍 중...</span>
-          )}
-        </div>
-        {ar.metadata && (
-          <div className="text-[11px] text-neutral-500 font-mono space-x-2">
-            {ar.metadata.model && <span>{ar.metadata.model}</span>}
-            {ar.metadata.is_mock && (
-              <span className="text-amber-400">⚠ MOCK (실 LLM 호출 X)</span>
-            )}
-            {typeof ar.metadata.first_token_ms === "number" && (
-              <span>first {ar.metadata.first_token_ms}ms</span>
-            )}
-            {typeof ar.metadata.latency_s === "number" && (
-              <span>{ar.metadata.latency_s}s</span>
-            )}
-            {typeof ar.metadata.cost_usd === "number" && (
-              <span>${ar.metadata.cost_usd.toFixed(4)}</span>
-            )}
+function FormattedAnswerCard({
+  fmt,
+  prefetchTrackIds,
+  agentResponses,
+}: {
+  fmt?: FormattedAnswer;
+  prefetchTrackIds?: string[];
+  agentResponses: AgentResponse[];
+}) {
+  if (!fmt) {
+    // 아직 형성 중이면 빈 placeholder + 진행 상태
+    return (
+      <div className="border border-neutral-800 rounded-md p-3 bg-neutral-950 text-sm text-neutral-400">
+        분석가 + 전략가 응답 종합 중…
+        {prefetchTrackIds && prefetchTrackIds.length > 0 && (
+          <div className="text-[11px] text-neutral-500 mt-1">
+            prefetch 진행: {prefetchTrackIds.join(", ")} (분석가 동시 호출)
+          </div>
+        )}
+        {agentResponses.length > 0 && (
+          <div className="text-[11px] text-neutral-500 mt-1">
+            {agentResponses.filter((r) => r.done).length}/{agentResponses.length} agent 완료
           </div>
         )}
       </div>
-      {ar.metadata?.upstream_error && (
-        <div className="text-xs text-red-400">
-          업스트림 오류: {ar.metadata.upstream_error}
+    );
+  }
+  const borderColor = fmt.upstream_error
+    ? "border-red-800"
+    : fmt.is_mock
+    ? "border-amber-700"
+    : "border-emerald-800";
+  return (
+    <div className={`border ${borderColor} rounded-md p-3 bg-emerald-950/20 space-y-2`}>
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <span className="text-xs uppercase tracking-wider text-emerald-400">답변</span>
+        <div className="text-[11px] text-neutral-500 font-mono space-x-2">
+          {fmt.is_mock && (
+            <span className="text-amber-400">⚠ MOCK</span>
+          )}
+          {fmt.model && <span>{fmt.model}</span>}
+          {typeof fmt.latency_ms === "number" && <span>{fmt.latency_ms}ms</span>}
+          {typeof fmt.cost_usd === "number" && fmt.cost_usd > 0 && (
+            <span>${fmt.cost_usd.toFixed(4)}</span>
+          )}
         </div>
+      </div>
+      {fmt.upstream_error && (
+        <div className="text-xs text-red-400">오류: {fmt.upstream_error}</div>
       )}
-      {ar.error && (
-        <div className="text-xs text-red-400">에러: {ar.error}</div>
-      )}
-      <pre className="whitespace-pre-wrap break-words text-sm text-neutral-200 font-sans">
-        {ar.text || (ar.done ? "(빈 응답)" : "")}
+      <pre className="whitespace-pre-wrap break-words text-base text-neutral-100 font-sans leading-relaxed">
+        {fmt.text}
       </pre>
-      {ar.metadata?.analyst_published_count != null && (
-        <div className="text-[11px] text-neutral-500">
-          분석가 read 발행 {ar.metadata.analyst_published_count} · 미발행{" "}
-          {ar.metadata.analyst_missing_count ?? 0}
-        </div>
-      )}
     </div>
   );
 }
 
 export default function ProductionChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [classification, setClassification] = useState<Classification | null>(null);
-  const [agentResponses, setAgentResponses] = useState<AgentResponse[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -222,18 +210,21 @@ export default function ProductionChatPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [agentResponses, classification]);
+  }, [exchanges]);
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, manualOverride?: ManualOverride) {
     if (!text.trim() || streaming) return;
     const userMsg: Message = { role: "user", content: text };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
     setStreaming(true);
-    setClassification(null);
-    setAgentResponses([]);
-    setError(null);
+
+    const exchangeIdx = exchanges.length;
+    setExchanges((prev) => [
+      ...prev,
+      { user: text, agentResponses: [], streaming: true },
+    ]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -242,7 +233,10 @@ export default function ProductionChatPage() {
       const res = await fetch(`${API_BASE}/api/chat/production/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages,
+          manual_override: manualOverride || null,
+        }),
         signal: controller.signal,
       });
 
@@ -253,7 +247,10 @@ export default function ProductionChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
-      const agentState = new Map<string, AgentResponse>();
+      const agentMap = new Map<string, AgentResponse>();
+      let prefetchTrackIds: string[] | undefined;
+      let formatted: FormattedAnswer | undefined;
+      let classification: Classification | undefined;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -273,54 +270,104 @@ export default function ProductionChatPage() {
           }
           const t = evt.type;
           if (t === "classification") {
-            setClassification(evt as Classification);
+            classification = evt as Classification;
+          } else if (t === "prefetch_start") {
+            prefetchTrackIds = evt.track_ids;
+          } else if (t === "analyst_prefetch") {
+            const aid = evt.agent;
+            agentMap.set(aid, {
+              agent: aid,
+              kind: "analyst_prefetch",
+              text: evt.text || "",
+              metadata: evt.metadata,
+              error: evt.error,
+              done: true,
+            });
+          } else if (t === "prefetch_done") {
+            // no-op (이미 analyst_prefetch 들로 표시됨)
           } else if (t === "agent_start") {
-            const ar: AgentResponse = {
+            agentMap.set(evt.agent, {
               agent: evt.agent,
               kind: evt.kind,
               text: "",
               done: false,
-            };
-            agentState.set(evt.agent, ar);
-            setAgentResponses(Array.from(agentState.values()));
+            });
           } else if (t === "text_delta") {
-            const agent = evt.agent;
-            const existing = agentState.get(agent);
-            if (existing) {
-              existing.text += evt.text || "";
-              setAgentResponses(Array.from(agentState.values()));
+            const ar = agentMap.get(evt.agent);
+            if (ar) {
+              ar.text += evt.text || "";
             }
           } else if (t === "agent_metadata") {
-            const existing = agentState.get(evt.agent);
-            if (existing) {
-              existing.metadata = { ...existing.metadata, ...evt };
-              setAgentResponses(Array.from(agentState.values()));
+            const ar = agentMap.get(evt.agent);
+            if (ar) {
+              ar.metadata = { ...(ar.metadata || {}), ...evt };
             }
           } else if (t === "agent_error") {
-            const existing = agentState.get(evt.agent);
-            if (existing) {
-              existing.error = evt.message || "unknown error";
-              setAgentResponses(Array.from(agentState.values()));
-            }
+            const ar = agentMap.get(evt.agent);
+            if (ar) ar.error = evt.message;
           } else if (t === "agent_done") {
-            const existing = agentState.get(evt.agent);
-            if (existing) {
-              existing.done = true;
-              setAgentResponses(Array.from(agentState.values()));
-            }
-          } else if (t === "error") {
-            setError(evt.message || "stream error");
+            const ar = agentMap.get(evt.agent);
+            if (ar) ar.done = true;
+          } else if (t === "formatted") {
+            formatted = {
+              text: evt.text,
+              model: evt.model,
+              tokens_in: evt.tokens_in,
+              tokens_out: evt.tokens_out,
+              cost_usd: evt.cost_usd,
+              latency_ms: evt.latency_ms,
+              is_mock: evt.is_mock,
+              upstream_error: evt.upstream_error,
+            };
+          } else if (t === "formatted_error") {
+            formatted = {
+              text: "(자연어 정리 실패 — 아래 '근거 보기' 토글로 raw 응답 확인)",
+              model: "",
+              tokens_in: 0,
+              tokens_out: 0,
+              cost_usd: 0,
+              latency_ms: 0,
+              is_mock: false,
+              upstream_error: evt.message,
+            };
           }
+
+          // 점진 갱신
+          setExchanges((prev) => {
+            const next = [...prev];
+            next[exchangeIdx] = {
+              ...next[exchangeIdx],
+              classification,
+              prefetchTrackIds,
+              agentResponses: Array.from(agentMap.values()),
+              formatted,
+              streaming: true,
+            };
+            return next;
+          });
         }
       }
-      // 모든 agent done
-      for (const ar of agentState.values()) {
-        ar.done = true;
-      }
-      setAgentResponses(Array.from(agentState.values()));
+
+      // 종료 후 finalize
+      setExchanges((prev) => {
+        const next = [...prev];
+        next[exchangeIdx] = {
+          ...next[exchangeIdx],
+          streaming: false,
+        };
+        return next;
+      });
     } catch (e: any) {
       if (e?.name !== "AbortError") {
-        setError(`전송 실패: ${e?.message || e}`);
+        setExchanges((prev) => {
+          const next = [...prev];
+          next[exchangeIdx] = {
+            ...next[exchangeIdx],
+            error: `전송 실패: ${e?.message || e}`,
+            streaming: false,
+          };
+          return next;
+        });
       }
     } finally {
       setStreaming(false);
@@ -341,10 +388,14 @@ export default function ProductionChatPage() {
   function handleReset() {
     abortRef.current?.abort();
     setMessages([]);
-    setClassification(null);
-    setAgentResponses([]);
-    setError(null);
+    setExchanges([]);
     setStreaming(false);
+  }
+
+  function handleManualOverride(idx: number, override: ManualOverride) {
+    const ex = exchanges[idx];
+    if (!ex) return;
+    sendMessage(ex.user, override);
   }
 
   return (
@@ -357,16 +408,17 @@ export default function ProductionChatPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             production 채팅 (자연어)
             <span className="ml-3 text-sm font-normal text-neutral-500">
-              PRODUCTION-UX-001 · PROD-UX-1 · 자동 라우팅 (분석가/전략가)
+              PRODUCTION-UX-001 · PROD-UX-1+2 · 분석가 협동 + 자연어 압축
             </span>
           </h1>
           <div className="text-xs text-neutral-500">
-            v1 시연 = 시나리오 1~5 (보유/진입/시장/섹터/주도주)
+            v1 시연 = 시나리오 1~10 (보유/진입/시장/섹터/주도주/매도/손절/추매/위기/계좌)
           </div>
         </div>
         <p className="text-xs text-neutral-500">
-          자연어로 묻기만 하면 자동 분류 → 적절한 분석가/전략가 호출. PROD-UX-1 = raw
-          응답 표시 (자연어 1~3줄 압축은 PROD-UX-2 후속). 기존 R&D 비교 UI 는{" "}
+          자연어로 묻기만 하면 자동 분류 → 분석가 동시 호출 → 전략가가 raw 통합 →
+          자연어 1~3줄 결론. 근거 토글로 분석가/전략가 raw 응답 풀세트 확인. 기존
+          R&D 비교 UI 는{" "}
           <a href="/analyst-chat" className="underline text-emerald-400">
             /analyst-chat
           </a>{" "}
@@ -375,7 +427,9 @@ export default function ProductionChatPage() {
       </header>
 
       <div className="border border-neutral-800 rounded-md p-3 bg-neutral-900/30 text-xs space-y-2">
-        <div className="text-neutral-500 uppercase tracking-wider">예시 발화 (클릭 시 자동 입력)</div>
+        <div className="text-neutral-500 uppercase tracking-wider">
+          예시 발화 (클릭 시 자동 입력)
+        </div>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_PROMPTS.map((p) => (
             <button
@@ -393,44 +447,55 @@ export default function ProductionChatPage() {
 
       <div
         ref={scrollRef}
-        className="flex-1 min-h-[300px] overflow-y-auto space-y-3 border border-neutral-800 rounded-md p-3 bg-neutral-950"
+        className="flex-1 min-h-[300px] overflow-y-auto space-y-4 border border-neutral-800 rounded-md p-3 bg-neutral-950"
       >
-        {messages.length === 0 && !streaming && (
+        {exchanges.length === 0 && !streaming && (
           <div className="text-sm text-neutral-500 text-center py-10">
             자연어로 질문해보세요. 예: "삼성전자 살까?"
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === "user"
-                ? "text-right"
-                : "text-left text-sm text-neutral-300"
-            }
-          >
-            {m.role === "user" ? (
+        {exchanges.map((ex, i) => (
+          <div key={i} className="space-y-2">
+            <div className="text-right">
               <div className="inline-block bg-blue-900/50 px-3 py-1.5 rounded text-sm">
-                {m.content}
+                {ex.user}
               </div>
-            ) : (
-              <pre className="whitespace-pre-wrap break-words">{m.content}</pre>
+            </div>
+
+            {ex.classification && <ClassificationBadge c={ex.classification} />}
+
+            {ex.classification?.manual_fallback_required && (
+              <IntentFallback
+                defaultScenario={ex.classification.scenario_id}
+                defaultTicker={ex.classification.ticker || undefined}
+                onApply={(ov) => handleManualOverride(i, ov)}
+              />
+            )}
+
+            <FormattedAnswerCard
+              fmt={ex.formatted}
+              prefetchTrackIds={ex.prefetchTrackIds}
+              agentResponses={ex.agentResponses}
+            />
+
+            <EvidenceToggle
+              responses={ex.agentResponses.map((ar) => ({
+                kind: ar.kind,
+                agent_id: ar.agent,
+                text: ar.text,
+                error: ar.error,
+                metadata: ar.metadata,
+              }))}
+            />
+
+            {ex.error && (
+              <div className="text-sm text-red-400 border border-red-900 bg-red-950/30 rounded p-2">
+                {ex.error}
+              </div>
             )}
           </div>
         ))}
-
-        {classification && <ClassificationBadge c={classification} />}
-
-        {agentResponses.map((ar) => (
-          <AgentCard key={ar.agent} ar={ar} />
-        ))}
-
-        {error && (
-          <div className="text-sm text-red-400 border border-red-900 bg-red-950/30 rounded p-2">
-            {error}
-          </div>
-        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2">

@@ -27,6 +27,7 @@ from core.llm.tiers import resolve_model_for_area
 from core.logging import get_logger
 from core.strategist.run_strategist import (
     StrategistNotFoundError,
+    load_strategist_spec,
     run_strategist,
     run_strategist_stream,
 )
@@ -68,11 +69,21 @@ async def _call_strategist_safe(
     *,
     target: str,
     provider: str | None,
+    prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """run_strategist wrap — 실패 시 error 필드 채워 반환 (예외 raise X)."""
+    """run_strategist wrap — 실패 시 error 필드 채워 반환 (예외 raise X).
+
+    Args:
+        prefetched_analyst_outputs: 옵션 A — 라우터가 미리 동시 호출해 둔 분석가
+            raw 응답들. None 이면 전략가가 DB read 모드.
+    """
     try:
         resp = await run_strategist(
-            strategist_id, messages, target=target, provider=provider
+            strategist_id,
+            messages,
+            target=target,
+            provider=provider,
+            prefetched_analyst_outputs=prefetched_analyst_outputs,
         )
         return {
             "kind": "strategist",
@@ -157,6 +168,54 @@ async def _call_analyst_safe(
         }
 
 
+async def _prefetch_analysts_for_tracks(
+    track_ids: list[str],
+    *,
+    ticker: str | None,
+    messages: list[dict],
+    provider: str | None,
+) -> list[dict[str, Any]]:
+    """옵션 A — 전략가들의 reads_analysts 합집합 → 동시 호출.
+
+    prism-insight 의 Orchestrator pass-through + wevelStock 의 asyncio.gather 결합.
+    DB write 우회 — 본 production-chat 흐름 내 일관성만 보장.
+
+    Args:
+        track_ids: ["track_a"] 또는 ["track_a", "track_b"] (both)
+        ticker: 종목 6자리 또는 None (global)
+
+    Returns:
+        list of {"id": analyst_id, "text": str, "metadata": dict, "error": str | None}.
+        분석가 호출 실패 시 error 필드만 채워서 반환 (raise X).
+    """
+    analyst_ids_set: set[str] = set()
+    for tid in track_ids:
+        try:
+            spec = load_strategist_spec(tid)
+            analyst_ids_set.update(spec.reads_analysts)
+        except StrategistNotFoundError as e:
+            log.warning("router_prefetch_strategist_missing", strategist=tid, error=str(e))
+            continue
+    if not analyst_ids_set:
+        return []
+
+    ordered = sorted(analyst_ids_set)
+    tasks = [
+        _call_analyst_safe(aid, messages, target_ticker=ticker, provider=provider)
+        for aid in ordered
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=False)
+    return [
+        {
+            "id": r.get("agent_id", aid),
+            "text": r.get("text", ""),
+            "metadata": r.get("metadata", {}),
+            "error": r.get("error"),
+        }
+        for aid, r in zip(ordered, results)
+    ]
+
+
 async def _call_refuse_or_guide(
     classification: IntentClassification, provider: str | None
 ) -> dict[str, Any]:
@@ -239,24 +298,54 @@ async def route_intent(
 
     responses: list[dict[str, Any]] = []
 
-    if route == "track_a":
+    if route in ("track_a", "track_b", "both"):
         target = ticker or "global"
-        responses.append(
-            await _call_strategist_safe("track_a", messages, target=target, provider=provider)
+        track_ids = ["track_a", "track_b"] if route == "both" else [route]
+        # 옵션 A: 분석가들을 먼저 동시 호출 → 전략가 prompt 에 raw 직접 주입.
+        prefetched = await _prefetch_analysts_for_tracks(
+            track_ids, ticker=ticker, messages=messages, provider=provider
         )
-    elif route == "track_b":
-        target = ticker or "global"
-        responses.append(
-            await _call_strategist_safe("track_b", messages, target=target, provider=provider)
-        )
-    elif route == "both":
-        target = ticker or "global"
-        results = await asyncio.gather(
-            _call_strategist_safe("track_a", messages, target=target, provider=provider),
-            _call_strategist_safe("track_b", messages, target=target, provider=provider),
-            return_exceptions=False,
-        )
-        responses.extend(results)
+        # prefetch 응답을 agent_responses 에 먼저 동봉 (UI 근거 토글용 raw 자료).
+        for entry in prefetched:
+            responses.append(
+                {
+                    "kind": "analyst_prefetch",
+                    "agent_id": entry["id"],
+                    "target": ticker,
+                    "text": entry.get("text", ""),
+                    "metadata": entry.get("metadata", {}),
+                    "error": entry.get("error"),
+                }
+            )
+        if route == "both":
+            strat_results = await asyncio.gather(
+                _call_strategist_safe(
+                    "track_a",
+                    messages,
+                    target=target,
+                    provider=provider,
+                    prefetched_analyst_outputs=prefetched,
+                ),
+                _call_strategist_safe(
+                    "track_b",
+                    messages,
+                    target=target,
+                    provider=provider,
+                    prefetched_analyst_outputs=prefetched,
+                ),
+                return_exceptions=False,
+            )
+            responses.extend(strat_results)
+        else:
+            responses.append(
+                await _call_strategist_safe(
+                    route,
+                    messages,
+                    target=target,
+                    provider=provider,
+                    prefetched_analyst_outputs=prefetched,
+                )
+            )
     elif route == "analyst_direct":
         analyst_ids = classification.analyst_ids or []
         if not analyst_ids:
@@ -298,11 +387,19 @@ async def _stream_strategist_safe(
     target: str,
     provider: str | None,
     agent_label: str,
+    prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
 ):
-    """run_strategist_stream wrap — agent 라벨 prefix 첨가."""
+    """run_strategist_stream wrap — agent 라벨 prefix 첨가.
+
+    옵션 A 적용: prefetched_analyst_outputs 가 있으면 전략가가 DB read 우회.
+    """
     try:
         async for event in run_strategist_stream(
-            strategist_id, messages, target=target, provider=provider
+            strategist_id,
+            messages,
+            target=target,
+            provider=provider,
+            prefetched_analyst_outputs=prefetched_analyst_outputs,
         ):
             etype = event.get("type")
             if etype == "text_delta":
@@ -454,20 +551,37 @@ async def route_intent_stream(
     route = classification.agent_route
     ticker = classification.ticker
 
-    if route in ("track_a", "track_b"):
+    if route in ("track_a", "track_b", "both"):
         target = ticker or "global"
-        label = route
-        yield {"type": "agent_start", "agent": label, "kind": "strategist"}
-        async for ev in _stream_strategist_safe(
-            route, messages, target=target, provider=provider, agent_label=label
-        ):
-            yield ev
-    elif route == "both":
-        target = ticker or "global"
-        for sid in ("track_a", "track_b"):
-            yield {"type": "agent_start", "agent": sid, "kind": "strategist"}
+        track_ids = ["track_a", "track_b"] if route == "both" else [route]
+        # 옵션 A: prefetch 단계 — 사용자 가시화 (각 분석가 진행 표시)
+        yield {"type": "prefetch_start", "track_ids": track_ids}
+        prefetched = await _prefetch_analysts_for_tracks(
+            track_ids, ticker=ticker, messages=messages, provider=provider
+        )
+        for entry in prefetched:
+            yield {
+                "type": "analyst_prefetch",
+                "agent": entry["id"],
+                "kind": "analyst_prefetch",
+                "text": entry.get("text", ""),
+                "metadata": entry.get("metadata", {}),
+                "error": entry.get("error"),
+            }
+        yield {
+            "type": "prefetch_done",
+            "analysts": [e["id"] for e in prefetched],
+            "missing": [e["id"] for e in prefetched if e.get("error") or not (e.get("text") or "").strip()],
+        }
+        for tid in track_ids:
+            yield {"type": "agent_start", "agent": tid, "kind": "strategist"}
             async for ev in _stream_strategist_safe(
-                sid, messages, target=target, provider=provider, agent_label=sid
+                tid,
+                messages,
+                target=target,
+                provider=provider,
+                agent_label=tid,
+                prefetched_analyst_outputs=prefetched,
             ):
                 yield ev
     elif route == "analyst_direct":

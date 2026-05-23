@@ -14,6 +14,7 @@ from core.intent.classifier import (
     IntentClassifierError,
     classify_intent,
 )
+from core.intent.formatter import FormatterResult, format_answer
 from core.intent.router import (
     RouteResponse,
     route_intent,
@@ -27,4 +28,6 @@ __all__ = [
     "RouteResponse",
     "route_intent",
     "route_intent_stream",
+    "FormatterResult",
+    "format_answer",
 ]

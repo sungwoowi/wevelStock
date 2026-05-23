@@ -236,6 +236,54 @@ def _insert_analyst_scores_block(blocks: list[dict], scores_md: str) -> list[dic
     return [*blocks, score_block]
 
 
+def render_prefetched_analyst_outputs(prefetched: list[dict[str, Any]]) -> str:
+    """PRODUCTION-UX-001 옵션 A — production-chat 라우터가 분석가 N명을 동시 호출해
+    얻은 raw text 응답을 전략가 system prompt 에 직접 주입하는 블록.
+
+    DB read (team_outputs) 우회 — 본 production-chat 흐름 내 일관성만 보장. prism-insight
+    의 Orchestrator pass-through 패턴 + wevelStock 의 asyncio.gather 병렬 결합.
+
+    Args:
+        prefetched: list of {"id": str, "text": str, "metadata": dict, "error": str | None}
+
+    Returns:
+        markdown block.
+    """
+    if not prefetched:
+        return ""
+    lines = [
+        "## Analyst Direct Outputs (Layer 2 — production-chat 직접 주입)",
+        "",
+        "아래는 본 사용자 발화 직전에 reads_analysts 분석가들을 동시 호출하여 받은 raw 응답",
+        "원문입니다. DB (`team_outputs`) read 우회 — 본 응답 흐름 내 일관성만 보장.",
+        "",
+        "**권고 양식 cited_scores 인용 시**: 본 블록의 raw 응답 내 명제 ID / 점수 / verdict",
+        "/ confidence 만 사용. 다른 값 추정 금지. raw text 가 비어있거나 error 가 있는",
+        "분석가는 cited_scores 해당 필드 = null + reasons 에 '분석가 응답 누락' 명시.",
+        "",
+    ]
+    for entry in prefetched:
+        aid = entry.get("id", "unknown")
+        text = (entry.get("text") or "").strip()
+        err = entry.get("error")
+        lines.append(f"### {aid}")
+        if err:
+            lines.append(f"**호출 실패** — {err}. 본 분석가 의견은 미반영.")
+            lines.append("")
+            continue
+        if not text:
+            lines.append("**빈 응답** — 본 분석가 의견은 미반영.")
+            lines.append("")
+            continue
+        # 길이 제한: 분석가 1명 당 max ~3000 chars (system prompt 폭발 방지).
+        # 6명 x 3000 = 18K chars ≈ ~5K tokens — 전략가 prompt 안정.
+        if len(text) > 3000:
+            text = text[:3000] + "\n... (truncated)"
+        lines.append(text)
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _extract_cache_tokens(raw: dict) -> tuple[int, int]:
     usage = raw.get("usage") or {}
     return (
@@ -254,6 +302,7 @@ async def run_strategist(
     temperature: float | None = None,
     include_memory: bool = True,
     provider: str | None = None,
+    prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
 ) -> StrategistResponse:
     """단일 전략가 호출. 멀티턴 messages 배열 그대로 수용.
 
@@ -265,6 +314,10 @@ async def run_strategist(
         model/max_tokens/temperature: manifest override
         include_memory: core/memory 시계열 메모리 주입 ON/OFF
         provider: backend 강제 (None = config + auto fallback)
+        prefetched_analyst_outputs: PRODUCTION-UX-001 옵션 A — production-chat
+            라우터가 미리 동시 호출해 받은 분석가 raw 응답 list. None 이면 기존
+            DB (team_outputs) read 모드. dict 형식 =
+            {"id": str, "text": str, "metadata": dict, "error": str | None}.
 
     Returns:
         StrategistResponse(text, metadata)
@@ -277,9 +330,15 @@ async def run_strategist(
     rag_dept = spec.reads_depts[0] if spec.reads_depts else None
     query_for_rag = _last_user_text(messages)
 
-    # 분석가 점수 모으기 (target 별)
-    scores = gather_analyst_scores(spec.reads_analysts, target=target)
-    scores_md = render_analyst_scores_block(scores)
+    # 분석가 자료 모으기 — prefetch 우선 (옵션 A), 없으면 DB read (기존)
+    if prefetched_analyst_outputs is not None:
+        scores = {}  # DB read 우회
+        scores_md = render_prefetched_analyst_outputs(prefetched_analyst_outputs)
+        analyst_source = "prefetch"
+    else:
+        scores = gather_analyst_scores(spec.reads_analysts, target=target)
+        scores_md = render_analyst_scores_block(scores)
+        analyst_source = "db_read"
 
     # market snapshot (분석가와 동일)
     snap_started = time.monotonic()
@@ -301,13 +360,26 @@ async def run_strategist(
         response_rules=spec.response_rules,
     )
 
-    # 분석가 점수 블록 insert (RAG 직전)
+    # 분석가 자료 블록 insert (RAG 직전, source 에 따라 prefetch 또는 db_read)
     blocks = _insert_analyst_scores_block(bundle.blocks, scores_md)
 
     sys_chars = _system_char_count(blocks)
     rag_chunks = _rag_chunks_in_blocks(blocks)
-    analyst_published = sum(1 for s in scores.values() if s.get("found"))
-    analyst_missing = sum(1 for s in scores.values() if not s.get("found"))
+    if analyst_source == "prefetch":
+        prefetched = prefetched_analyst_outputs or []
+        analyst_published = sum(
+            1 for e in prefetched if not e.get("error") and (e.get("text") or "").strip()
+        )
+        analyst_missing = len(prefetched) - analyst_published
+        analyst_missing_ids = [
+            e.get("id", "?")
+            for e in prefetched
+            if e.get("error") or not (e.get("text") or "").strip()
+        ]
+    else:
+        analyst_published = sum(1 for s in scores.values() if s.get("found"))
+        analyst_missing = sum(1 for s in scores.values() if not s.get("found"))
+        analyst_missing_ids = [aid for aid, s in scores.items() if not s.get("found")]
 
     started = time.monotonic()
     resp = await call_llm(
@@ -337,9 +409,10 @@ async def run_strategist(
         "track": spec.track,
         "target": target,
         "reads_analysts": list(spec.reads_analysts),
+        "analyst_source": analyst_source,
         "analyst_published_count": analyst_published,
         "analyst_missing_count": analyst_missing,
-        "analyst_missing_ids": [aid for aid, s in scores.items() if not s.get("found")],
+        "analyst_missing_ids": analyst_missing_ids,
         "rag_dept": rag_dept,
         "rag_chunks_returned": rag_chunks,
         "system_prompt_chars": sys_chars,
@@ -392,8 +465,13 @@ async def run_strategist_stream(
     temperature: float | None = None,
     include_memory: bool = True,
     provider: str | None = None,
+    prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
 ):
     """run_strategist 의 streaming 변종. text_delta + 종료 시 metadata.
+
+    Args (run_strategist 와 동일 시그니처 + prefetched_analyst_outputs):
+        prefetched_analyst_outputs: PRODUCTION-UX-001 옵션 A — production-chat
+            라우터가 미리 동시 호출해 받은 분석가 raw list. None 이면 DB read.
 
     Yields:
         {"type": "text_delta", "text": str}
@@ -408,8 +486,14 @@ async def run_strategist_stream(
     rag_dept = spec.reads_depts[0] if spec.reads_depts else None
     query_for_rag = _last_user_text(messages)
 
-    scores = gather_analyst_scores(spec.reads_analysts, target=target)
-    scores_md = render_analyst_scores_block(scores)
+    if prefetched_analyst_outputs is not None:
+        scores = {}
+        scores_md = render_prefetched_analyst_outputs(prefetched_analyst_outputs)
+        analyst_source = "prefetch"
+    else:
+        scores = gather_analyst_scores(spec.reads_analysts, target=target)
+        scores_md = render_analyst_scores_block(scores)
+        analyst_source = "db_read"
 
     snap_started = time.monotonic()
     snapshot, snapshot_cache_hit = await build_market_snapshot()
@@ -433,8 +517,21 @@ async def run_strategist_stream(
     blocks = _insert_analyst_scores_block(bundle.blocks, scores_md)
     sys_chars = _system_char_count(blocks)
     rag_chunks = _rag_chunks_in_blocks(blocks)
-    analyst_published = sum(1 for s in scores.values() if s.get("found"))
-    analyst_missing = sum(1 for s in scores.values() if not s.get("found"))
+    if analyst_source == "prefetch":
+        prefetched = prefetched_analyst_outputs or []
+        analyst_published = sum(
+            1 for e in prefetched if not e.get("error") and (e.get("text") or "").strip()
+        )
+        analyst_missing = len(prefetched) - analyst_published
+        analyst_missing_ids = [
+            e.get("id", "?")
+            for e in prefetched
+            if e.get("error") or not (e.get("text") or "").strip()
+        ]
+    else:
+        analyst_published = sum(1 for s in scores.values() if s.get("found"))
+        analyst_missing = sum(1 for s in scores.values() if not s.get("found"))
+        analyst_missing_ids = [aid for aid, s in scores.items() if not s.get("found")]
 
     started = time.monotonic()
     first_token_at: float | None = None
@@ -487,9 +584,10 @@ async def run_strategist_stream(
         "track": spec.track,
         "target": target,
         "reads_analysts": list(spec.reads_analysts),
+        "analyst_source": analyst_source,
         "analyst_published_count": analyst_published,
         "analyst_missing_count": analyst_missing,
-        "analyst_missing_ids": [aid for aid, s in scores.items() if not s.get("found")],
+        "analyst_missing_ids": analyst_missing_ids,
         "rag_dept": rag_dept,
         "rag_chunks_returned": rag_chunks,
         "system_prompt_chars": sys_chars,
