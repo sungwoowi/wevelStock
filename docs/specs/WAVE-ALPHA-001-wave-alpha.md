@@ -3,7 +3,7 @@ spec_id: WAVE-ALPHA-001
 title: 프랙탈 파동 α — anchor 정의 + 시간 정규화 공식 + 3 timeframe 동시 산출 + verdict 분기 매트릭스
 team: shared
 type: feature
-status: frozen
+status: implemented
 version: 1
 owner: stock_analyst
 generates:
