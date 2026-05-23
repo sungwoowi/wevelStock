@@ -21,17 +21,33 @@ export default function Home() {
       </header>
 
       <a
-        href="/analyst-chat"
-        className="block border border-emerald-900 bg-emerald-950/30 hover:bg-emerald-950/50 rounded-md p-4 transition"
+        href="/production-chat"
+        className="block border border-emerald-700 bg-emerald-950/50 hover:bg-emerald-900/50 rounded-md p-4 transition"
       >
-        <div className="text-xs uppercase tracking-wider text-emerald-500">
-          Layer 2 — 추론부 데모
+        <div className="text-xs uppercase tracking-wider text-emerald-400">
+          ✨ production UX — 자연어 채팅 (PROD-UX-1)
         </div>
         <div className="text-base font-medium mt-1">
-          자산전략가에 자유 질문 (멀티턴 채팅)
+          하나의 채팅창, 백단 0 노출 — 자동 분류 + 분석가/전략가 호출
         </div>
         <div className="text-xs text-neutral-400 mt-1">
-          canon (19K chars) + RAG 회수 (박종훈 강의) + persona 결합 응답.
+          "삼성전자 살까?" → 자동 시나리오 분류 (1~11) → track_a / track_b / 분석가 호출.
+          PROD-UX-1 = raw 응답, PROD-UX-2 후속 = 1~3줄 자연어 압축.
+        </div>
+      </a>
+
+      <a
+        href="/analyst-chat"
+        className="block border border-neutral-800 bg-neutral-950/30 hover:bg-neutral-900/50 rounded-md p-4 transition"
+      >
+        <div className="text-xs uppercase tracking-wider text-neutral-500">
+          Layer 2 · 3 — R&D 비교 데모 (백단 노출)
+        </div>
+        <div className="text-base font-medium mt-1">
+          분석가 ↔ 전략가 좌/우 분할 (멀티턴 채팅 + agent 선택)
+        </div>
+        <div className="text-xs text-neutral-400 mt-1">
+          agent_id / target / Layer 토글 모두 노출 — 양쪽 호출 톤·근거 비교용.
           누적 토큰·캐시 hit·비용 가시화.
         </div>
       </a>

@@ -1,0 +1,177 @@
+# PRODUCTION-UX-001 — Intent Classifier Stage 1 결정론 keyword 룰.
+#
+# 매칭 흐름 (classifier._stage1_classify):
+#   1. shortcuts 단축어 (long:/swing:/both:) 가 normalized 앞에 prefix → 즉시 분기
+#   2. scenarios 의 keywords any-match → match_count 최다 단일 시나리오 선택
+#   3. 동률 시 Stage 2 (LLM Flash-lite) 로 위임
+#
+# Hot reload: watcher 가 본 yaml 변경 감지 시 reload_keywords() 자동 호출.
+#
+# 시나리오 정의는 docs/specs/PRODUCTION-UX-001-natural-language-chat.md § 30 시나리오 매핑 표.
+# v1 PROD-UX-1 시연 = 시나리오 1~5. 6~11 keyword 도 본 yaml 에 포함 (분류기는 작동, 라우터는 v1 일부만).
+
+shortcuts:
+  "long:":
+    scenario_id: 2
+    agent_route: track_a
+    analyst_ids: []
+  "swing:":
+    scenario_id: 2
+    agent_route: track_b
+    analyst_ids: []
+  "both:":
+    scenario_id: 2
+    agent_route: both
+    analyst_ids: []
+
+scenarios:
+  # 시나리오 1: 보유 종목에 대한 4 결정 (추매·홀딩·매도·손절)
+  1:
+    name: 보유자 결정
+    agent_route: track_a
+    keywords:
+      - "들고 있"
+      - "보유 중"
+      - "보유중"
+      - "갖고 있"
+      - "가지고 있"
+      - "물려"
+      - "내 종목"
+      - "내가 산"
+      - "샀는데"
+
+  # 시나리오 2: 신규 진입 (얼마에 어떻게 사)
+  2:
+    name: 신규 진입
+    agent_route: both
+    keywords:
+      - "살까"
+      - "사도 돼"
+      - "사도 될까"
+      - "들어가도"
+      - "진입"
+      - "매수해도"
+      - "매수 타이밍"
+      - "지금 들어"
+      - "신규 진입"
+
+  # 시나리오 3: 시장 판단 (불장/횡보/하락)
+  3:
+    name: 시장 판단
+    agent_route: analyst_direct
+    analyst_ids: [market_state_analyzer]
+    keywords:
+      - "시장 어때"
+      - "시장이 어때"
+      - "장 어때"
+      - "장이 어때"
+      - "시장 분위기"
+      - "코스피 분위기"
+      - "장세"
+      - "불장"
+      - "횡보"
+      - "지수 어"
+
+  # 시나리오 4: 섹터 선택 (Top 3)
+  4:
+    name: 섹터 선택
+    agent_route: analyst_direct
+    analyst_ids: [stock_picker, market_state_analyzer]
+    keywords:
+      - "어떤 섹터"
+      - "강한 섹터"
+      - "섹터 추천"
+      - "섹터 top"
+      - "주도 섹터"
+      - "어느 업종"
+      - "강한 업종"
+
+  # 시나리오 5: 주도주 진입 (언제 얼마) — "지금 뭐 사" 같은 종목명 미지정 매수 의향
+  5:
+    name: 주도주 진입
+    agent_route: both
+    keywords:
+      - "뭐 사"
+      - "뭐 살까"
+      - "뭐가 좋"
+      - "주도주"
+      - "지금 사면"
+      - "뭐 추천"
+      - "추천 종목"
+      - "오늘 뭐"
+
+  # 시나리오 6: 매도 시그널 (상승 후 분할)
+  6:
+    name: 매도 시그널
+    agent_route: track_a
+    keywords:
+      - "팔까"
+      - "매도 타이밍"
+      - "수익실현"
+      - "익절"
+      - "팔아도"
+      - "정리할까"
+
+  # 시나리오 7: 손절 발동 (선 이탈)
+  7:
+    name: 손절 발동
+    agent_route: track_a
+    analyst_ids: [principle_guardian]
+    keywords:
+      - "손절"
+      - "스탑"
+      - "스톱"
+      - "선 깼"
+      - "손절선"
+      - "이탈"
+
+  # 시나리오 8: 추매 시그널 (눌림 2차)
+  8:
+    name: 추매 시그널
+    agent_route: track_a
+    keywords:
+      - "추매"
+      - "물타기"
+      - "물타"
+      - "더 살까"
+      - "더 사도"
+      - "분할 매수"
+
+  # 시나리오 9: 시장 위기 (kill switch / 전쟁 / 폭락)
+  # NOTE: "위기" 단독은 "분위기" 와 substring 충돌 → "위기 신호" / "시장 위기" 로 명시화.
+  9:
+    name: 시장 위기
+    agent_route: analyst_direct
+    analyst_ids: [market_state_analyzer, principle_guardian]
+    keywords:
+      - "위기 신호"
+      - "시장 위기"
+      - "폭락"
+      - "무너지"
+      - "전쟁"
+      - "긴급"
+      - "비상"
+      - "kill switch"
+      - "급락"
+
+  # 시나리오 10: 계좌 안심 (매일 아침)
+  10:
+    name: 계좌 안심
+    agent_route: track_a
+    keywords:
+      - "계좌"
+      - "내 계좌"
+      - "안심"
+      - "보유 점검"
+      - "보유종목 점검"
+
+  # 시나리오 11: 자가 진화 — v1 = pending_ms5
+  11:
+    name: 자가 진화
+    agent_route: pending_ms5
+    keywords:
+      - "시스템 개선"
+      - "회고"
+      - "자가 진화"
+      - "PROPOSAL"
+      - "고도화"

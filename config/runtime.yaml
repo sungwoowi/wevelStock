@@ -24,6 +24,26 @@ llm:
     model: gemini-2.5-flash
     max_tokens: 4096
     temperature: 0.3
+  # PRODUCTION-UX-001 — LLM 3 계층 정책 (Gemini-Anthropic 1:1 mirror).
+  # 영역별 tier 매핑 → call_llm 시 resolve_model_for_area 가 tier+provider → 모델 결정.
+  # 변경 시 hot reload (watchdog) — 재시작 불필요.
+  tiers:
+    fast:
+      gemini: gemini-2.5-flash-lite
+      anthropic: claude-haiku-4-5
+    balanced:
+      gemini: gemini-2.5-flash
+      anthropic: claude-sonnet-4-5
+    deep:
+      gemini: gemini-2.5-pro
+      anthropic: claude-opus-4-6
+  areas:
+    intent_classifier: fast       # 본 SPEC 신규
+    answer_formatter: fast        # PROD-UX-2 신규
+    analyst: balanced             # 9 분석가, 기존 유지
+    strategist: balanced          # Track A/B, 기존 유지
+    anchors_stage2: balanced      # LLM-TIER-MIGRATION-001 후속에서 fast 로 변경 예정
+    retrospect: deep              # M4 후속
 
 # 예시: 모델 교체 / 크로스 검증 활성화
 # llm:

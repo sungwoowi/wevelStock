@@ -52,6 +52,51 @@ class CrosscheckConfig(BaseModel):
     targets: list[str] = Field(default_factory=list)
 
 
+# PRODUCTION-UX-001 — LLM 3계층 정책 (FAST / BALANCED / DEEP, Gemini-Anthropic 1:1 mirror).
+# 영역별 tier 매핑: intent_classifier·answer_formatter = FAST (저렴+빠름),
+# analyst·strategist = BALANCED (현재 default 유지), 회고분석가 등 무거운 합성 = DEEP.
+
+TierName = Literal["fast", "balanced", "deep"]
+
+
+class LLMTierModels(BaseModel):
+    """단일 tier 의 provider-별 모델 매핑."""
+
+    gemini: str
+    anthropic: str
+
+
+class LLMTiers(BaseModel):
+    """3 tier × 2 provider 매트릭스. provider 가 바뀌어도 area→tier 매핑은 그대로."""
+
+    fast: LLMTierModels = Field(
+        default_factory=lambda: LLMTierModels(
+            gemini="gemini-2.5-flash-lite", anthropic="claude-haiku-4-5"
+        )
+    )
+    balanced: LLMTierModels = Field(
+        default_factory=lambda: LLMTierModels(
+            gemini="gemini-2.5-flash", anthropic="claude-sonnet-4-5"
+        )
+    )
+    deep: LLMTierModels = Field(
+        default_factory=lambda: LLMTierModels(
+            gemini="gemini-2.5-pro", anthropic="claude-opus-4-6"
+        )
+    )
+
+
+class LLMAreas(BaseModel):
+    """영역별 tier 매핑. 신규 영역 = LLM-TIER-MIGRATION-001 후속에서 추가."""
+
+    intent_classifier: TierName = "fast"
+    answer_formatter: TierName = "fast"
+    analyst: TierName = "balanced"
+    strategist: TierName = "balanced"
+    anchors_stage2: TierName = "balanced"
+    retrospect: TierName = "deep"
+
+
 class LLMConfig(BaseModel):
     # "anthropic" = direct Anthropic SDK with ANTHROPIC_API_KEY
     # "claude_code" = subprocess via local `claude` CLI (subscription auth)
@@ -64,6 +109,8 @@ class LLMConfig(BaseModel):
     claude_code: ClaudeCodeLLMConfig = Field(default_factory=ClaudeCodeLLMConfig)
     gemini: GeminiLLMConfig = Field(default_factory=GeminiLLMConfig)
     crosscheck: CrosscheckConfig = Field(default_factory=CrosscheckConfig)
+    tiers: LLMTiers = Field(default_factory=LLMTiers)
+    areas: LLMAreas = Field(default_factory=LLMAreas)
 
 
 class TelegramConfig(BaseModel):
