@@ -65,8 +65,9 @@
 
 ### 2. PoC SPEC 신설 + 브랜치 생성 (옵션 결단 직후) ✨
 - **왜**: 사용자 명시 "이 다음에 하이브리드 poc를 해보고 싶은데 아마도 이건 별도 feature 브랜치 따서 Poc 해봐야할 것 같아". main 안전성 보호 + PoC 격리
-- **흐름**: `git checkout -b feature/hybrid-executive-poc` → SPEC 신설 (`docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001-hybrid-executive-llm.md`, PoC scope 만 명시) → 최소 PoC 구현 (임원 페르소나 1개 + Track A 만 + 005930 smoke + **prism 응답 5 패턴 시연**)
-- **검증 기준**: prism 005930 응답과 1:1 비교 (사용자 평가 "위 수준 이상" 받으면 옵션 2 확정). 5 패턴 = 5-layer chain / 시나리오 3 / 솔직 톤 / 상황별 가중치 통합 / 컨텍스트 이어짐
+- **흐름**: `git checkout -b feature/hybrid-executive-poc` → SPEC 신설 (`docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001-hybrid-executive-llm.md`, PoC scope 만 명시) → 최소 PoC 구현 (**[최우선] 임원 페르소나 doctrine 설계** + 임원 페르소나 1개 + Track A 만 + 005930 smoke + **prism 응답 7 패턴 시연**)
+- **⭐ PoC 핵심 = 임원 doctrine 의 질** (prism `/signal` § 2.6 교훈): 양식 갖추기는 쉬움, 승부는 doctrine. 두 축 = (a) 사용자 framework (박종훈·WAVE-ALPHA·7계명·변곡점 3 케이스) 흡수 (b) 9 분석가 정량 anchor + cited grounding 으로 환각 가드. prism 의 "얕은 거시 교과서 + 환각" 을 넘는 게 검증 목표
+- **검증 기준**: prism 005930 응답과 1:1 비교 (사용자 평가 "위 수준 이상" 받으면 옵션 2 확정). 7 패턴 = 5-layer chain / 시나리오 3 / 솔직 톤 / 상황별 가중치 통합 / 컨텍스트 이어짐 / 수혜·피해 매트릭스 / 과거 사례 인용
 - **결정 시점**: PoC 결과 → main 머지 (성공) or 폐기·learnings 메모 (실패)
 - **모델 제약**: Opus API 키 없음 → 임원 LLM = Gemini Pro / 9 분석가 = Gemini Flash
 - **예상 산출**: feature 브랜치 + SPEC + 임원 페르소나 1개 + smoke 결과 (prism 1:1 비교 표)

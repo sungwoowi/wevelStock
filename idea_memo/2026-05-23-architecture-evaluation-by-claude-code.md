@@ -86,6 +86,32 @@ PoC scope 재조정:
 - **최소 PoC** = 임원 페르소나 1개 (prism Investment Strategist 패턴 차용) + Track A + 005930 단일 종목 + **prism 응답 5 패턴 모두 시연** (5-layer chain + 시나리오 3 + 솔직 톤 + 상황별 가중치 통합 + 컨텍스트 이어짐)
 - **검증 기준 = prism 응답과 1:1 비교** (005930 같은 종목, 같은 질문). 사용자 평가 "위 수준 이상" 받으면 옵션 2 확정, 못 미치면 9 분석가 cited 자연어 풀이 슬림화까지 escalation
 
+### 2.6 prism `/signal` (한국 시장 시그널) 응답 — 양식 모범 + 통찰 미달 사례 (사용자 2번째 샘플)
+
+사용자가 prism 의 한국 시장 시그널 기능 `/signal` 도 질의 → 케빈 워시 Fed 의장 가능성 + 미 국채 금리 regime 의 한국 시장 영향 macro 분석 응답 가져옴. 사용자 평가:
+
+> *"이것도 옵션2일까?? 내 인사이트랑은 맞지 않아. **얕은 통찰의 환각** 같긴 해."*
+
+→ § 2.5 (005930 평가) 가 "도달하고 싶은 수준" 이라면, § 2.6 (`/signal` macro) 은 **"양식은 옳지만 통찰은 미달인 경계 사례"**. 옵션 2 의 성패가 어디서 갈리는지 보여주는 결정적 반례.
+
+**2 차원 분석 결론**:
+
+| 차원 | 평가 | 근거 |
+|---|---|---|
+| **양식 (shell)** | ✅ 옵션 2 시연 | 5-layer chain + 시나리오 구조 유지. **신규 양식 패턴 2건 추가 발견** |
+| **통찰 (substance)** | ❌ 얕음 + 환각 | 일반 거시 교과서 답안 + 사용자 framework 부재 + 사실 환각 |
+
+**신규 양식 패턴 2건 (§ 2.5.1 의 5 패턴에 추가)**:
+6. **수혜/피해 섹터·종목 매트릭스** = macro 이벤트 → 수혜 섹터 (예: 금융·가치주) vs 피해 섹터 (예: 성장·고PER) 를 표로 분기. wevelStock 의 sector RS (INFRA-SNAPSHOT-EXTEND-001 B) 와 결합 시 강력
+7. **과거 유사 사례 인용** = "2013 테이퍼링 당시 ~" 식 역사적 anchor 로 시나리오 설득력 강화
+
+**통찰 깊이 부족 본질 3가지** (= 옵션 2 임원 doctrine 이 반드시 넘어야 할 벽):
+1. **얕은 통찰 = 학부 거시경제 교과서 답안** = "금리 오르면 성장주 불리" 수준의 일반론. 사용자의 wealth_strategist canon (박종훈 framework — 거시 변곡점 3 케이스 lens) 같은 **고유 관점 부재**
+2. **사실 환각 3건** = (a) "케빈 워시 의장 확정" (실제 = 후보 가능성) (b) "30조 달러 국채" (실제 ~33조 + 단위 모호) (c) "2013 외국인 3-4조원 순매도" (수치 미검증). **wevelStock 의 9 분석가 정량 anchor + cited grounding 이 차단해야 할 정확히 그 사고**
+3. **사용자 framework 부재** = prism 은 일반 GPT 거시 지식으로 답함. wevelStock 임원은 wealth_strategist canon + 변곡점 doctrine 으로 grounding 해야 차별화
+
+**§ 2.6 의 결정적 함의** = **옵션 2 의 성패는 "임원 LLM 을 양식 갖추게 하는 것" 이 아니라 "임원 doctrine 의 질" 에서 갈린다.** prism `/signal` 은 양식(5-layer + 매트릭스 + 사례 인용)은 모범이지만, doctrine 이 일반 거시 지식이라 사용자가 "얕은 환각" 으로 즉시 간파. wevelStock 임원 페르소나 doctrine = **(a) 사용자 framework (박종훈·WAVE-ALPHA·7계명·변곡점) 흡수 + (b) 9 분석가 정량 anchor 로 환각 가드** 가 PoC 의 진짜 핵심.
+
 ---
 
 ## 3. prism-insight `/evaluate` 실 패턴 확인 (WebFetch 결과)
@@ -210,6 +236,16 @@ GitHub `dragon1086/prism-insight` 의 `docs/CLAUDE_AGENTS.md` 원문:
 5. **구현 부담 ~2-3 세션** = main 안전성은 별 feature 브랜치 + 최소 PoC 단계로 보존
 6. **속도·비용 동시 개선** = 9 분석가 Gemini Flash 정량 dispatch (~5s 병렬) + 임원 Gemini Pro 1회 (~10-15s) = 총 15-20s. 현재 30-60s 의 1/2-1/3
 
+### 6.0.1 옵션 2 의 성패 결정 요인 = 임원 doctrine 의 질 (prism `/signal` § 2.6 반영)
+
+prism `/signal` 응답 (§ 2.6) 이 결정적 교훈을 줌: **옵션 2 로 가는 것만으로는 부족하다. 양식(5-layer chain)을 갖춰도 임원 doctrine 이 일반 거시 지식이면 사용자가 "얕은 통찰의 환각" 으로 즉시 간파한다.**
+
+→ **옵션 2 의 진짜 핵심 = 임원 페르소나 doctrine 설계** (양식 구현이 아님). 두 축:
+1. **사용자 framework 흡수** = 박종훈 거시 framework + WAVE-ALPHA(α) + 7계명 + 변곡점 3 케이스 lens 를 임원 system prompt + canon 주입에 내장. prism 의 "학부 교과서 거시" 와 차별화되는 지점
+2. **환각 가드 강화** = 9 분석가 정량 anchor + cited grounding 으로 prism `/signal` 의 사실 환각 3건 (워시 의장 확정 / 30조 달러 / 2013 순매도 수치) 같은 사고 차단
+
+**PoC 의 무게중심 이동** = "임원 LLM 이 5-layer chain 을 뱉느냐" (양식, 쉬움) → **"임원 doctrine 이 prism 보다 깊은 통찰 + 낮은 환각을 내느냐"** (본질, PoC 검증의 진짜 대상). § 6.2 PoC scope 의 임원 페르소나 doctrine 설계가 최소 PoC 의 최우선 작업.
+
 ### 6.1 옵션 3 단계적 접근의 한계 (정정 이유)
 
 prism 실 응답을 본 후 옵션 3 의 본질 한계 노출:
@@ -219,6 +255,7 @@ prism 실 응답을 본 후 옵션 3 의 본질 한계 노출:
 ### 6.2 PoC scope 재조정 (옵션 2 직진)
 
 - **최소 PoC** (Phase 1, ~1 세션):
+  - **[최우선] 임원 페르소나 doctrine 설계** (§ 6.0.1) = 사용자 framework (박종훈·WAVE-ALPHA·7계명·변곡점 3 케이스) 흡수 + 환각 가드 (9 분석가 정량 anchor + cited grounding). prism `/signal` § 2.6 의 "얕은 거시 교과서 + 환각" 을 넘는 게 검증 목표
   - 임원 페르소나 1개 신설 (prism Investment Strategist 패턴 차용 + wevelStock 고유 doctrine)
   - Track A 만 적용 + 005930 단일 종목 smoke
   - **prism 응답 5 패턴 모두 시연** (5-layer chain + 시나리오 3 + 솔직 톤 + 상황별 가중치 통합 + 컨텍스트 이어짐)

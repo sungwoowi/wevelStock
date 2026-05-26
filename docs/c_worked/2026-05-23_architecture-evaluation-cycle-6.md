@@ -74,6 +74,14 @@ plan_file: C:\Users\HOME\.claude\plans\snoopy-booping-haven.md
 - **추천 정정**: 옵션 3 단계적 접근 → **옵션 2 (하이브리드) 직진**. prism 응답 5 패턴 = 옵션 2 가 도달 가능, 옵션 3 으로는 부분 도달만 (9 분석가 cited 자연어가 5-layer chain 차단)
 - idea_memo § 2.5 신설 + § 6 추천 정정 + PoC scope 재조정 (최소 PoC = prism 응답 5 패턴 모두 시연, 검증 기준 = prism 005930 응답과 1:1 비교)
 
+### 6. prism `/signal` (한국 시장 시그널) 2번째 샘플 분석 — 양식 모범 + 통찰 미달 (본 세션 최종 증분)
+- 사용자가 prism `/signal` (케빈 워시 Fed 의장 + 미 국채 금리 regime → 한국 시장 영향 macro) 응답 가져옴. 사용자 평가: *"내 인사이트랑은 맞지 않아. 얕은 통찰의 환각 같긴 해"*
+- claude-code 2 차원 분석:
+  - **양식 (shell)** = ✅ 옵션 2 시연. 신규 양식 패턴 2건 (§ 2.5.1 5 패턴 → 7 패턴): ⑥ 수혜/피해 섹터·종목 매트릭스 ⑦ 과거 유사 사례 인용 (2013 테이퍼링 등)
+  - **통찰 (substance)** = ❌ 얕음 + 환각. 본질 3: (1) 학부 거시 교과서 답안 (사용자 framework 부재) (2) 사실 환각 3건 (워시 의장 확정 / 30조 달러 국채 / 2013 외국인 3-4조원 순매도 수치) (3) 박종훈·변곡점 lens 부재
+- **결정적 함의**: 옵션 2 의 성패 = "임원 LLM 양식 갖추기" 가 아니라 **"임원 doctrine 의 질"**. prism `/signal` 은 양식 모범 + doctrine(일반 거시 지식) 미달 → 사용자 즉시 간파
+- idea_memo § 2.6 신설 + § 6.0.1 신설 (옵션 2 성패 = 임원 doctrine 질) + § 6.2 최소 PoC 최우선 작업 = 임원 doctrine 설계 (사용자 framework 흡수 + 환각 가드) 로 명문화
+
 ## 검증 결과
 - ✅ 객관 평가 메모 작성 완료 (~400 LOC), chat Opus 가 받아서 핑퐁 가능한 객관성 + 미해결 질문 5건
 - ✅ RESUME Top 3 재배치 = 옵션 결단 전 다른 SPEC 진입 차단 명시
@@ -98,7 +106,9 @@ plan_file: C:\Users\HOME\.claude\plans\snoopy-booping-haven.md
 3. **(PoC 결과 후)** main 머지 (성공) or 폐기·learnings 메모 (실패) → INFRA-SCORE-INPUTS-001 재평가 → 진행 결단
 
 ## 커밋 상태
-- 코드 변경 0. idea_memo + RESUME + c_worked 3 파일 = `docs: cycle 6 architecture evaluation memo + RESUME re-prioritization` 단일 commit 예정 (사용자 명시 시).
+- 코드 변경 0.
+- commit 1 = `1e42c9d docs: cycle 6 architecture evaluation + prism response analysis (옵션 2 직진 추천)` (idea_memo + RESUME + c_worked 3 파일, 푸시 완료)
+- commit 2 = prism `/signal` 증분 (idea_memo § 2.6/§ 6.0.1/§ 6.2 + c_worked 한 일 #6). 본 세션 재개 후 추가.
 
 ## 메모리 검토 결과
 - **신설 후보 없음** — 본 사이클은 가능성 탐색 + 옵션 결단 대기 상태. PoC 결과·옵션 결단 후 영구 가치 패턴 발견 시 신설
