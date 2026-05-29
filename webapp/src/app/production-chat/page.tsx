@@ -203,6 +203,9 @@ export default function ProductionChatPage() {
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  // 종합 모드 (ARCHITECTURE-HYBRID-EXECUTIVE-001): off=압축기(formatter) / flash=임원·Flash / pro=임원·Pro.
+  // 기본 flash = 임원 종합 켜짐 (저렴·시연 즉시 체감). Pro 자동 발동 라우팅은 SLOT S7.
+  const [executiveMode, setExecutiveMode] = useState<"off" | "flash" | "pro">("flash");
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -230,13 +233,20 @@ export default function ProductionChatPage() {
     abortRef.current = controller;
 
     try {
+      const body: Record<string, any> = {
+        messages: newMessages,
+        manual_override: manualOverride || null,
+      };
+      if (executiveMode === "flash") {
+        body.executive_mode = true;
+      } else if (executiveMode === "pro") {
+        body.executive_mode = true;
+        body.executive_tier = "deep";
+      }
       const res = await fetch(`${API_BASE}/api/chat/production/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages,
-          manual_override: manualOverride || null,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
@@ -427,6 +437,36 @@ export default function ProductionChatPage() {
       </header>
 
       <div className="border border-neutral-800 rounded-md p-3 bg-neutral-900/30 text-xs space-y-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-neutral-500 uppercase tracking-wider">종합 모드</span>
+          <div className="inline-flex rounded border border-neutral-700 overflow-hidden">
+            {([
+              { value: "off", label: "압축기", hint: "formatter — raw 를 1~3줄로 압축 (현행)" },
+              { value: "flash", label: "임원 · Flash", hint: "투자 총괄 임원 doctrine 종합 (Gemini Flash · 저렴)" },
+              { value: "pro", label: "임원 · Pro", hint: "임원 종합 (Gemini Pro · 주요 트리거용, 50/일)" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setExecutiveMode(opt.value)}
+                disabled={streaming}
+                title={opt.hint}
+                className={
+                  executiveMode === opt.value
+                    ? "px-3 py-1 bg-emerald-700 text-white disabled:opacity-50"
+                    : "px-3 py-1 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 disabled:opacity-50"
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-neutral-600">
+            {executiveMode === "off"
+              ? "raw 응답을 짧게 압축만 합니다."
+              : "여러 분석가·전략가 판단을 임원이 doctrine 으로 종합해 직답합니다."}
+          </span>
+        </div>
         <div className="text-neutral-500 uppercase tracking-wider">
           예시 발화 (클릭 시 자동 입력)
         </div>

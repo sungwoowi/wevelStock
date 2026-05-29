@@ -26,7 +26,7 @@ from typing import Any
 
 import yaml
 
-from core.intent.formatter import _build_label_block, _is_mock_entry
+from core.intent.formatter import _build_label_block, _is_mock_entry, scrub_code_labels
 from core.knowledge.compose import load_shared_canon
 from core.llm.client import call_llm
 from core.llm.tiers import resolve_model_for_area
@@ -272,7 +272,7 @@ async def synthesize_executive(
     raw = resp.get("raw") or {}
     is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
     return ExecutiveResult(
-        text=resp.get("content", ""),
+        text=scrub_code_labels(resp.get("content", "")),
         model=resp.get("model", model),
         tokens_in=int(resp.get("tokens_in", 0)),
         tokens_out=int(resp.get("tokens_out", 0)),

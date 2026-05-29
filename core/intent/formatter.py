@@ -11,6 +11,7 @@ LLM 1콜 → **1~3줄 결론 + 1~3줄 근거 (수급/차트/실적 3요소)** �
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,8 +50,68 @@ def _load_label_dictionary() -> dict:
 
 def reload_label_dictionary() -> None:
     """테스트/hot reload — 캐시 클리어."""
-    global _LABEL_DICT_CACHE
+    global _LABEL_DICT_CACHE, _SCRUB_RULES_CACHE
     _LABEL_DICT_CACHE = None
+    _SCRUB_RULES_CACHE = None
+
+
+# ---------------------------------------------------------------------------
+# 결정론 코드 라벨 스크러버 (ARCHITECTURE-HYBRID-EXECUTIVE-001 SLOT — Flash 누출 보험)
+# ---------------------------------------------------------------------------
+#
+# system prompt 사전 주입만으론 약한 모델(Flash)이 `sweet`/`S-Score` 같은 코드 라벨을
+# 본문에 잔존 노출. label_dictionary 를 단일 소스로 출력 텍스트에서 결정론 역치환 →
+# 모델 무관 production-clean. natural 이 아니라 short 로 치환 (본문엔 간결형).
+
+_SCRUB_RULES_CACHE: list[tuple[re.Pattern[str], str]] | None = None
+
+
+def _is_code_form(label: str) -> bool:
+    """스크러빙 대상 판정 — ASCII 알파벳 또는 그리스 α 를 포함한 '코드형' 라벨만.
+
+    순수 한국어 key (`분배일` 등) 는 제외 — 이미 자연어라 이중 wrap 방지.
+    """
+    return bool(re.search(r"[A-Za-z]", label)) or "α" in label
+
+
+def _scrub_rules() -> list[tuple[re.Pattern[str], str]]:
+    """label_dictionary → (경계 인식 정규식, short 치환어) 리스트. 길이 내림차순.
+
+    길이 내림차순: `S-Score` 가 `Score` 보다, `RS Score` 가 `RS` 보다 먼저 매칭.
+    경계 `(?<![A-Za-z0-9_]) ... (?![A-Za-z0-9_])`: 짧은 ASCII 토큰(`RS`)이 영단어
+    내부에서 오치환되는 것 방지 (한국어 인접은 경계로 막지 않으므로 정상 치환).
+    """
+    global _SCRUB_RULES_CACHE
+    if _SCRUB_RULES_CACHE is None:
+        labels = _load_label_dictionary().get("labels") or {}
+        rules: list[tuple[re.Pattern[str], str]] = []
+        for code, mapping in labels.items():
+            if not _is_code_form(str(code)):
+                continue
+            if isinstance(mapping, dict):
+                repl = mapping.get("short") or mapping.get("natural") or str(code)
+            else:
+                repl = str(mapping)
+            pattern = re.compile(
+                r"(?<![A-Za-z0-9_])" + re.escape(str(code)) + r"(?![A-Za-z0-9_])",
+                re.IGNORECASE,
+            )
+            rules.append((pattern, str(repl)))
+        rules.sort(key=lambda r: len(r[0].pattern), reverse=True)
+        _SCRUB_RULES_CACHE = rules
+    return _SCRUB_RULES_CACHE
+
+
+def scrub_code_labels(text: str) -> str:
+    """출력 텍스트에서 잔존 코드 라벨을 자연어 short 로 결정론 치환.
+
+    format_answer / synthesize_executive 반환 직전에 적용 (모든 경로 일괄 커버).
+    """
+    if not text:
+        return text
+    for pattern, repl in _scrub_rules():
+        text = pattern.sub(repl, text)
+    return text
 
 
 def _build_label_block() -> str:
@@ -293,7 +354,7 @@ async def format_answer(
     raw = resp.get("raw") or {}
     is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
     return FormatterResult(
-        text=resp.get("content", ""),
+        text=scrub_code_labels(resp.get("content", "")),
         model=resp.get("model", model),
         tokens_in=int(resp.get("tokens_in", 0)),
         tokens_out=int(resp.get("tokens_out", 0)),

@@ -26,6 +26,7 @@ from core.intent import (
     route_intent,
     route_intent_stream,
 )
+from core.llm.tiers import model_for_tier
 from core.logging import get_logger
 
 log = get_logger(__name__)
@@ -49,6 +50,16 @@ class ProductionChatRequest(BaseModel):
     manual_override: dict[str, Any] | None = None  # IntentFallback drop-down 결과
     skip_formatter: bool = False  # raw 만 반환 (PROD-UX-1 호환 모드)
     executive_mode: bool = False  # ARCHITECTURE-HYBRID-EXECUTIVE-001 — formatter 대신 임원 종합
+    # 임원 종합 tier 수동 선택 (Pro 자동 발동 라우팅 = SLOT S7). "deep" = Pro override,
+    # None/"balanced" = config area 기본값 (Flash). webapp Off/Flash/Pro 토글이 설정.
+    executive_tier: Literal["balanced", "deep"] | None = None
+
+
+def _executive_model_override(tier: Literal["balanced", "deep"] | None) -> str | None:
+    """executive_tier → synthesize_executive 의 model override. deep 만 Pro 강제."""
+    if tier == "deep":
+        return model_for_tier("deep")
+    return None
 
 
 class FormattedAnswer(BaseModel):
@@ -134,6 +145,7 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
                     analyst_outputs=analyst_outputs,
                     strategist_outputs=strategist_outputs,
                     provider=payload.provider,
+                    model=_executive_model_override(payload.executive_tier),
                 )
             else:
                 fmt = await format_answer(
@@ -268,6 +280,7 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
                             analyst_outputs=list(analyst_buffer.values()),
                             strategist_outputs=list(strategist_buffer.values()),
                             provider=payload.provider,
+                            model=_executive_model_override(payload.executive_tier),
                         )
                     else:
                         fmt = await format_answer(

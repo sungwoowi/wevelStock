@@ -156,6 +156,29 @@ class TestSynthesizeExecutive:
         )
         assert captured.get("model") == "gemini-2.5-flash"
 
+    def test_applies_code_label_scrubber(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """임원 답변 반환 직전 결정론 스크러버 — Flash 코드 라벨 누출 제거."""
+        async def _stub_llm(*args: Any, **kwargs: Any) -> dict:
+            return {
+                "content": "분할 접근 권고예요. 주봉 sweet 구간, S-Score=8, verdict=hold.",
+                "tokens_in": 10, "tokens_out": 5,
+                "model": "gemini-2.5-flash", "cost_usd": 0.0, "raw": {},
+            }
+
+        monkeypatch.setattr("core.executive.synthesize.call_llm", _stub_llm)
+        result = asyncio.run(
+            synthesize_executive(
+                user_input="삼성전자 살까?",
+                analyst_outputs=[{"id": "a1", "text": "raw"}],
+                strategist_outputs=[],
+            )
+        )
+        assert "S-Score" not in result.text
+        assert "sweet" not in result.text
+        assert "verdict" not in result.text
+        assert "주도주 점수" in result.text
+        assert "적정 가속 구간" in result.text
+
     def test_handles_llm_exception(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _raises(*args: Any, **kwargs: Any) -> dict:
             raise RuntimeError("gemini boom")

@@ -39,6 +39,23 @@ labels:
     natural: "매수 점수"
     short: "매수 점수"
 
+  # α 5 단계 label (collectors/scoring.py AlphaLabel — interpret_alpha 출력. Flash 본문 누출 빈발)
+  "trend_broken":
+    natural: "추세 이탈 (1차 발산 추세가 깨진 상태)"
+    short: "추세 이탈"
+  "weak":
+    natural: "약한 추세 (가속도 미미)"
+    short: "약한 추세"
+  "modest":
+    natural: "완만한 가속"
+    short: "완만한 가속"
+  "sweet":
+    natural: "적정 가속 구간 (1차 발산과 유사한 건강한 속도)"
+    short: "적정 가속 구간"
+  "overheated":
+    natural: "과열 구간 (가속도가 1차 발산을 크게 초과)"
+    short: "과열 구간"
+
   # verdict / regime
   "verdict":
     natural: "판단"

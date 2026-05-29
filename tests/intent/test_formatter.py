@@ -21,6 +21,7 @@ from core.intent.formatter import (
     _compose_user_message,
     format_answer,
     reload_label_dictionary,
+    scrub_code_labels,
 )
 
 
@@ -236,3 +237,87 @@ class TestCodeLabelGrep:
             assert label not in good_text
         # bad_text 에 일부 라벨 있음
         assert any(label in bad_text for label in self.FORBIDDEN_CODE_LABELS)
+
+
+class TestScrubCodeLabels:
+    """결정론 스크러버 — Flash 누출 코드 라벨 자연어 역치환 (모델 무관 production-clean)."""
+
+    LEAKY_LABELS = [
+        "S-Score", "s_score", "F-Score", "f_score", "T-Score", "buy_score",
+        "verdict", "regime", "confidence", "cited", "RS Score", "RS",
+        "Distribution Day", "holding_period", "progress_to_b",
+        "sweet", "overheated", "trend_broken", "modest",
+    ]
+
+    def test_scrub_removes_score_labels(self) -> None:
+        text = "주봉 S-Score=8 이고 buy_score 높음, F-Score 7."
+        out = scrub_code_labels(text)
+        assert "S-Score" not in out
+        assert "buy_score" not in out
+        assert "F-Score" not in out
+        # 자연어 short 로 치환됨
+        assert "주도주 점수" in out
+        assert "매수 점수" in out
+        assert "수급 점수" in out
+
+    def test_scrub_removes_alpha_stage_labels(self) -> None:
+        """α 5 단계 라벨 (sweet/overheated 등) = Flash 가 실제 누출한 토큰."""
+        text = "주봉은 sweet 구간, 월봉은 overheated, 일봉은 weak."
+        out = scrub_code_labels(text)
+        assert "sweet" not in out
+        assert "overheated" not in out
+        assert "적정 가속 구간" in out
+        assert "과열 구간" in out
+
+    def test_scrub_skips_pure_korean_keys(self) -> None:
+        """순수 한국어 key (분배일) 는 이미 자연어라 이중 wrap 하지 않음."""
+        text = "오늘 분배일 신호 발생."
+        out = scrub_code_labels(text)
+        # 분배일 은 그대로 (괄호 설명으로 부풀지 않음)
+        assert out == text
+
+    def test_scrub_does_not_touch_english_word_internals(self) -> None:
+        """짧은 ASCII 토큰 (RS) 이 영단어 내부에서 오치환되지 않아야."""
+        text = "the first course covers diverse topics"
+        out = scrub_code_labels(text)
+        # 'first'(RS 포함), 'course', 'diverse'(RS 포함) 내부 미치환
+        assert out == text
+
+    def test_scrub_replaces_rs_score_before_rs(self) -> None:
+        """길이 내림차순 — 'RS Score' 가 'RS' 보다 먼저 매칭."""
+        out = scrub_code_labels("RS Score 가 높다")
+        assert "RS" not in out
+        assert "상대강도" in out
+
+    def test_scrub_empty_and_clean_text(self) -> None:
+        assert scrub_code_labels("") == ""
+        clean = "지금은 보류예요. 외국인 매수가 강합니다."
+        assert scrub_code_labels(clean) == clean
+
+    def test_scrub_output_has_no_forbidden_labels(self) -> None:
+        text = " ".join(f"{lbl}=x" for lbl in self.LEAKY_LABELS)
+        out = scrub_code_labels(text)
+        for label in TestCodeLabelGrep.FORBIDDEN_CODE_LABELS:
+            assert label not in out
+
+    def test_format_answer_applies_scrubber(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """format_answer 가 LLM 누출 라벨을 반환 직전 스크러빙."""
+        async def _stub_llm(*args: Any, **kwargs: Any) -> dict:
+            return {
+                "content": "보류예요. 근거: S-Score=8, sweet 구간, verdict=hold.",
+                "tokens_in": 10, "tokens_out": 5,
+                "model": "gemini-2.5-flash", "cost_usd": 0.0, "raw": {},
+            }
+
+        monkeypatch.setattr("core.intent.formatter.call_llm", _stub_llm)
+        result = asyncio.run(
+            format_answer(
+                user_input="삼성전자 살까?",
+                analyst_outputs=[{"id": "a1", "text": "정상 raw"}],
+                strategist_outputs=[],
+            )
+        )
+        assert "S-Score" not in result.text
+        assert "sweet" not in result.text
+        assert "verdict" not in result.text
+        assert "주도주 점수" in result.text
