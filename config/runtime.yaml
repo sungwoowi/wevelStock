@@ -44,6 +44,7 @@ llm:
     strategist: balanced          # Track A/B, 기존 유지
     anchors_stage2: balanced      # LLM-TIER-MIGRATION-001 후속에서 fast 로 변경 예정
     retrospect: deep              # M4 후속
+    executive_synthesis: balanced # ARCHITECTURE-HYBRID-EXECUTIVE-001 — 기본 임원 종합 = Flash(무료 1,500/일). Pro(deep)는 주요 트리거/이벤트만 model override (라우팅 추후 확정)
 
 # 예시: 모델 교체 / 크로스 검증 활성화
 # llm:

@@ -174,9 +174,12 @@ async def _call_gemini_real(
     usage = getattr(resp, "usage_metadata", None)
     tokens_in = getattr(usage, "prompt_token_count", 0) if usage else 0
     tokens_out = getattr(usage, "candidates_token_count", 0) if usage else 0
+    # Gemini 2.5 reasoning 모델의 thinking 토큰: max_output_tokens 예산을 잠식하고
+    # output rate 로 과금된다. 비용 정확성 위해 cost 에 포함 (candidates 와 별도 surface).
+    tokens_thinking = (getattr(usage, "thoughts_token_count", 0) if usage else 0) or 0
 
     rates = _GEMINI_COSTS.get(model, {"in": 0.075, "out": 0.30})
-    cost = (tokens_in * rates["in"] + tokens_out * rates["out"]) / 1_000_000
+    cost = (tokens_in * rates["in"] + (tokens_out + tokens_thinking) * rates["out"]) / 1_000_000
 
     return {
         "content": text,
@@ -186,6 +189,7 @@ async def _call_gemini_real(
         "cost_usd": cost,
         "raw": {
             "finish_reason": str(getattr(resp.candidates[0], "finish_reason", "")) if resp.candidates else "",
+            "thinking_tokens": tokens_thinking,
             "provider": "gemini",
         },
     }

@@ -1,0 +1,28 @@
+# 투자 총괄 임원 (Chief Investment Executive) manifest
+# ARCHITECTURE-HYBRID-EXECUTIVE-001 PoC — Layer 3 종합 unit.
+# 9 분석가 정량 + 2 전략가 권고를 받아 사용자 직답 자연어 1개로 종합.
+
+id: chief_executive
+display_name: 투자 총괄 임원
+role: layer3_synthesis
+
+# 임원이 통찰 권위로 주입받을 canon 카테고리 (`<dept>/<category>`).
+# 기본 트레이딩 렌즈 = WAVE-ALPHA(fractal_wave) + 7계명 + 시장체제 + 운용 안전핀.
+# 거시(macro_roadmap/crisis_signals)는 변곡점 전용 — persona § 박종훈 스코프 가드로 평상시 비인용.
+canon_categories:
+  - stock-analysis/fractal_wave
+  - principles/philosophy_seven_commandments
+  - principles/market_regime_rules
+  - principles/trading_doctrine
+  - trading/operational_safeguards
+  - wealth_compounding/macro_roadmap
+  - wealth_compounding/crisis_signals
+
+# LLM 호출 설정. 모델은 config.llm.areas.executive_synthesis (= deep tier = Gemini Pro)
+# 가 resolve_model_for_area 로 결정. max_tokens/temperature 는 본 manifest 가 권위.
+llm:
+  model: null              # null = resolve_model_for_area("executive_synthesis")
+  max_tokens: 8000         # Gemini 2.5 Pro thinking 토큰이 예산 잠식 → 답 잘림 방지 (thinking+답 수용)
+  temperature: 0.5         # 통찰 자연어 + 정량 grounding 균형
+
+contract_version: "1.0"

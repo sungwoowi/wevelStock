@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.executive import synthesize_executive
 from core.intent import (
     classify_intent,
     format_answer,
@@ -47,6 +48,7 @@ class ProductionChatRequest(BaseModel):
     skip_stage2: bool = False  # Stage 1 만 검증 (테스트용)
     manual_override: dict[str, Any] | None = None  # IntentFallback drop-down 결과
     skip_formatter: bool = False  # raw 만 반환 (PROD-UX-1 호환 모드)
+    executive_mode: bool = False  # ARCHITECTURE-HYBRID-EXECUTIVE-001 — formatter 대신 임원 종합
 
 
 class FormattedAnswer(BaseModel):
@@ -126,12 +128,20 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
             if r.get("kind") in ("strategist", "refuse_or_guide", "pending_ms5")
         ]
         try:
-            fmt = await format_answer(
-                user_input=last_user,
-                analyst_outputs=analyst_outputs,
-                strategist_outputs=strategist_outputs,
-                provider=payload.provider,
-            )
+            if payload.executive_mode:
+                fmt = await synthesize_executive(
+                    user_input=last_user,
+                    analyst_outputs=analyst_outputs,
+                    strategist_outputs=strategist_outputs,
+                    provider=payload.provider,
+                )
+            else:
+                fmt = await format_answer(
+                    user_input=last_user,
+                    analyst_outputs=analyst_outputs,
+                    strategist_outputs=strategist_outputs,
+                    provider=payload.provider,
+                )
             formatted = FormattedAnswer(
                 text=fmt.text,
                 model=fmt.model,
@@ -143,7 +153,7 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
                 upstream_error=fmt.upstream_error,
             )
         except Exception as e:  # noqa: BLE001
-            log.error("formatter_dispatch_failed", error=str(e))
+            log.error("synthesis_dispatch_failed", error=str(e), executive_mode=payload.executive_mode)
 
     return ProductionChatResponse(
         classification=route_resp.classification,
@@ -252,12 +262,20 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
             # 모든 agent stream 종료 후 formatter 호출 (SSE 마지막 event 로 추가)
             if not payload.skip_formatter:
                 try:
-                    fmt = await format_answer(
-                        user_input=last_user,
-                        analyst_outputs=list(analyst_buffer.values()),
-                        strategist_outputs=list(strategist_buffer.values()),
-                        provider=payload.provider,
-                    )
+                    if payload.executive_mode:
+                        fmt = await synthesize_executive(
+                            user_input=last_user,
+                            analyst_outputs=list(analyst_buffer.values()),
+                            strategist_outputs=list(strategist_buffer.values()),
+                            provider=payload.provider,
+                        )
+                    else:
+                        fmt = await format_answer(
+                            user_input=last_user,
+                            analyst_outputs=list(analyst_buffer.values()),
+                            strategist_outputs=list(strategist_buffer.values()),
+                            provider=payload.provider,
+                        )
                     fmt_event = {
                         "type": "formatted",
                         "text": fmt.text,

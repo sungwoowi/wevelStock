@@ -95,6 +95,8 @@ class LLMAreas(BaseModel):
     strategist: TierName = "balanced"
     anchors_stage2: TierName = "balanced"
     retrospect: TierName = "deep"
+    # 기본 = Flash(balanced, 무료 1,500/일). Pro(deep)는 주요 트리거/이벤트만 model override.
+    executive_synthesis: TierName = "balanced"
 
 
 class LLMConfig(BaseModel):
