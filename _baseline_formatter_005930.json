@@ -1,0 +1,534 @@
+﻿{
+    "classification":  {
+                           "scenario_id":  2,
+                           "ticker":  "005930",
+                           "ticker_display":  "ì¼ì±ì ì",
+                           "agent_route":  "both",
+                           "analyst_ids":  [
+
+                                           ],
+                           "confidence":  0.8,
+                           "manual_fallback_required":  false,
+                           "stage":  "deterministic",
+                           "latency_ms":  15,
+                           "raw_input":  "ì¼ì±ì ì ì´ê¹?",
+                           "reasoning":  "Stage 1 keyword (match_count=1)",
+                           "upstream_error":  null,
+                           "extras":  {
+
+                                      }
+                       },
+    "agent_responses":  [
+                            {
+                                "kind":  "analyst_prefetch",
+                                "agent_id":  "stock_picker",
+                                "target":  "005930",
+                                "text":  "### [1] Stock Selection Grid\n| ì¶ | ìì¹ | ëª\u0085ì  ID | íì ë |\n|---|---|---|---|\n| S-Score ë¶í¬ | ë¨ì¼ ì¢\u0085ëª© ë¶ì | stock_selection canon (ì£¼ëì£¼ ì ì) | 40% |\n| buy_score ë¶í¬ | ë¨ì¼ ì¢\u0085ëª© ë¶ì | stock_selection canon (CAN SLIM) | 40% |\n| ê°ì¸ ì¹í° | ë°ëì²´ (10.00) | snapshot.sector_rs | 80% |\n\n### [2] Candidate Branches\në¨ì¼ ì¢\u0085ëª© ë¶ìì¼ë¡ ìëë¦¬ì¤ ìì¸¡ ë¶ê°.\n\n### [3] Selection Implication (frame íì  â ë§¤ì ì¡ì\u0085ì Layer 3 ì ëµê° ìì­)\n- Track A ì£¼ëì£¼ íë³´ (S-Score â¥ 7): [] â stock_selection canon\n- Track B ë§¤ì íë³´ (buy_score â¥ ì²´ì  min): [] â stock_selection canon\n- ì²´ì ë³ buy_score min: parabolicÂ·strong_bull 4 / moderate_bull 5 / sideways 6 / bear ë§¤ë§¤ ì¤ë¨\nâ» ì¤ì  ì§ì\u0085",
+                                "metadata":  {
+                                                 "analyst_id":  "stock_picker",
+                                                 "display_name":  "ì¢\u0085ëª©ì ì ê°",
+                                                 "learning_dept":  "stock_selection",
+                                                 "rag_dept":  "stock_selection",
+                                                 "rag_chunks_returned":  0,
+                                                 "system_prompt_chars":  22223,
+                                                 "system_blocks":  4,
+                                                 "cache_breakpoint_count":  2,
+                                                 "tokens_in":  11687,
+                                                 "tokens_out":  240,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.000948525,
+                                                 "latency_s":  29.08,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  29,
+                                                 "snapshot_fetch_seconds":  29.16,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         },
+                                                 "snapshot_extend_failures":  [
+
+                                                                              ],
+                                                 "market_macro_source":  "computed",
+                                                 "sector_rs_count":  15,
+                                                 "supply_60d_age_days":  2,
+                                                 "chart_data_age_seconds":  null,
+                                                 "chart_fetch_seconds":  null,
+                                                 "chart_cache_hit":  null,
+                                                 "chart_failures":  [
+
+                                                                    ],
+                                                 "chart_ohlcv_count":  null,
+                                                 "chart_source":  null,
+                                                 "chart_ticker":  null,
+                                                 "alpha_3tf_failures":  [
+
+                                                                        ],
+                                                 "alpha_3tf_ticker_used":  null,
+                                                 "alpha_daily":  null,
+                                                 "alpha_weekly":  null,
+                                                 "alpha_monthly":  null,
+                                                 "fundamental_source":  null,
+                                                 "fundamental_fetched_at":  null,
+                                                 "fundamental_age_seconds":  null,
+                                                 "fundamental_failures":  [
+
+                                                                          ],
+                                                 "fundamental_quarter_count":  null,
+                                                 "fundamental_ratios_count":  null,
+                                                 "fundamental_ticker_used":  null
+                                             },
+                                "error":  null
+                            },
+                            {
+                                "kind":  "analyst_prefetch",
+                                "agent_id":  "stock_analyst",
+                                "target":  "005930",
+                                "text":  "### [1] Quality Grid (ì¢\u0085ëª© ë³¸ì§ 5 ì¶)\n| ì¶ | ìì¹ | íì ë | ì¶ì² |\n|---|---|---|---|\n| Î± (ê°ìê³ì, scoring.alpha ê²°ì ë¡ ) | daily=0.432 (weak, source=deterministic_fallback) / weekly=1.287 (sweet, source=deterministic_fallback) / monthly=3.908 (overheated, source=deterministic_fallback) | 60% | WAVE-ALPHA-001 (WA1Â·WA2Â·WA3Â·WF1Â·WF2Â·WF3Â·WL1Â·WE6) |\n| F1 (ì¥ê¸° ì¶ì¸ â ìë´/ì£¼ë´ ì¶ì¸ ì í¨ì±) | valid | 85% | chart_data_md [4] ìë´ 7MAÂ·20MA + 52ì£¼ ê³ ì  |\n| F2 (íëë©í¸ â EPS TTMÂ·PEÂ·ROEÂ·Op.MarginÂ·Debt/Eq) | ìí¸ | 80% | fundamental_data_md [5] TTM 5 ratio |\n| F3 (ìê¸ â flow_analyzer F-Score read) | í¼ì¡°ì¸ (ì¸ì¸ ë§¤ë, ê¸°ê´ ë§¤ì) | 70% | flow_analyzer ì team_outputs read (raw data ê¸°ë° ì¶ë¡ ) |\n| F4 (ì°ì\u0085 ì¬ì´í´ ìì¹) | ì¤ê¸° (ê°ì¸ ì§ì) | 85% | chart_data_md [4] 52ì£¼ ê³ ì  + ê±°ëë spike + Market Snapshot ì¹í° RS |\n| F5 (ì¤ì  ëª¨ë©í\u0085) | ê°ì | 90% | fundamental_data_md [5] ë¶ê¸° 4ë¶ê¸° QoQÂ·YoY |\n\n### [2] Anchor Scenario (Module A ëª©íê° 3 ë¨)\n| ìµì»¤ | ê°ê²© | ì ì |\n|---|---|---|\n| anchor_a | daily=2026-03-09 @ 167,300.00 / weekly=2025-11-21 @ 94,500.00 / monthly=2024-11-30 @ 49,900.00 | 1ì°¨ íë ììì  (ë¡ê·¸ ì°¨í¸ ì ì ) |\n| anchor_b | daily=2026-03-18 @ 209,000.00 / weekly=2026-02-27 @ 223,000.00 / monthly=2025-07-31 @ 74,000.00 | 1ì°¨ íë ì¢\u0085ë£ì  (ë¡ê·¸ ì°¨í¸ 1ì°¨ ì ì ) |\n| anchor_c | daily=2026-03-31 @ 167,000.00 / weekly=2026-04-03 @ 167,000.00 / monthly=2025-09-30 @ 67,500.00 | 2ì°¨ íë ììì  (1ì°¨ ëëë¦¼ ì ì ) |\n\n| ëª©íê° | ê°ê²© | ì°ì¶ |\n|---|---|---|\n| ë³´ì | null | SLOT S1 íì SPEC ê²°ë¨ í ì ì ë°í |\n| ì¤ë¦½ | null | SLOT S1 íì SPEC ê²°ë¨ í ì ì ë°í |\n| ê³µê²© | null | SLOT S1 íì SPEC ê²°ë¨ í ì ì ë°í |\n\n### [3] Stock Implication (frame íì  â ë§¤ì ì¡ì\u0085Â·ìê¸ì¡ ì§ì X)\n- ê°ìê³ì: ì¼ì±ì ì (005930)ë ì£¼ë´ ê°ìê³ì 1.287 (alpha_weekly=1.287 sweet, source=deterministic_fallback) ë¡ 2ì°¨ ë°ì°ì´ 1ì°¨ ë°ì°ë³´ë¤ ë¹ ë¥´ê² ì§íëë sweet spot ì ì§ì\u0085íìµëë¤. ë¤ë§ ìë´ ê°ìê³ì 3.908 (alpha_monthly=3.908 overheated, source=deterministic_fallback) ë¡ ì¥ê¸°ì ì¸ ê´ì ììë ê³¼ì´ êµ¬ê°ì ì§ì\u0085íì ê°ë¥ì±ì´ ììµëë¤. ì¼ë´ ê°ìê³ì 0.432 (alpha_daily=0.432 weak, source=deterministic_fallback) ë ë¨ê¸° ë°ì°ì´ ì½í¨ì ëíë\u0085ëë¤.\n- ëª©íê° 3 ë¨ = ë³´ì null / ì¤ë¦½ null / ê³µê²© null (3 ë¨ target_prices, SLOT S1 íì SPEC ê²°ë¨ í ì ì ë°í)\n- F1~F5 ì²­ì° í¸ë¦¬ê±°:\n  - ì¥ê¸°ì¶ì¸ valid (F1=valid, chart_data_md [4] ìë´Â·ì£¼ë´ ì¶ì¸ì  ëª¨ë ì ë°°ì´ ì ì§ ë° íì¬ê° ìí)\n  - íëë©í¸ ìí¸ (F2=ìí¸, fundamental_data_md [5] ROE 18.9%, Operating Margin 42.8%, Debt/Equity 5.8% ë¡ ë§¤ì° ê²¬ê³ íë, EPS TTM ë° PE ë°ì´í°ë N/A)\n  - ìê¸ í¼ì¡°ì¸ (F3=í¼ì¡°ì¸, KOSPI 60ì¼ ëì  ì¸ì¸ ë§¤ë, ê¸°ê´ ë§¤ì)\n  - ì°ì\u0085ì¬ì´í´ ì¤ê¸° (F4=ì¤ê¸°, chart_data_md [4] 52ì£¼ ê³ ê° ê·¼ì  ë° Market Snapshot ì¹í° RS ë°ëì²´ ê°ì¸)\n  - ì¤ì  ëª¨ë©í\u0085 ê°ì (F5=ê°ì, fundamental_data_md [5] ë§¤ì¶Â·ìì\u0085ì´ìµ QoQÂ·YoY ëª¨ë ê°í ê°ìì¸)\n- ì¤ê¸° ë³´ì  ê¶ì¥ (holding_period=ì¤ê¸°, WL3 ë§¤í weeklyâ3~12 ê°ì)\n- Track A ì§ì\u0085 íê²½ = ì¹í (ì£¼ë´ ê¸°ì¤ sweet spot, íëë©í¸ ë° ì¤ì  ëª¨ë©í\u0085 ê°ì¸)\n\n### [4] Citation\ncited: [WA1, WA2, WA3, WA5, WF1, WF2, WF3, WF4, WL1, WL2, WL3, WE6, WX1]\n\nê·¼ê±° ëª\u0085ì  íì´:\n- WA1 (A ì ì), WA2 (B ì ì), WA3 (C ì ì) ì ë°ë¼ anchor AÂ·BÂ·C ê° ê²°ì ëìì¼ë©°, WA5 (3 timeframe ëì ì ì©) ì ë°ë¼ daily/weekly/monthly ê° ë\u0085ë¦½ì ì¸ Î± ê°ì´ ì°ì¶ëììµëë¤.\n- WF1 (1ì°¨ ë°ì° ì¼ë³ ë¡ê·¸ ë³íì¨ kâ), WF2 (2ì°¨ ë°ì° ì¼ë³ ë¡ê·¸ ë³íì¨ kâ), WF3 (Î± = kâ / kâ ë¬´ì°¨ì ë¹ì¨) ê³µìì ë°ë¼ ê°ìê³ì Î± ê° ê³ì°ëììµëë¤. WF4 (ì¸ì½ ë©íë°ì´í°) ë¥¼ íµí´ progress_to_b ì duration_ratio ê° í¨ê» ì ê³µëì´ Î± ì ì§í ì ëë¥¼ íì\u0085í  ì ììµëë¤.\n- WL1 (5 ë¨ê³ label) ì ë°ë¼ ê° timeframe ë³ Î± ê°ì´ \u0027weak\u0027, \u0027sweet\u0027, \u0027overheated\u0027 ë¡ ë¶ë¥ëììµëë¤.\n- WL2 (verdict ë¶ê¸° ë§¤í¸ë¦­ì¤) ì ë°ë¼ ì¬ì©ì ì\u0085ë ¥ ìë (`long:`) ì ì£¼ë´ \u0027sweet\u0027, ìë´ \u0027overheated\u0027 ì¡°í©ì¼ë¡ `confirmed_high_quality` verdict ê° ì°ì¶ëììµëë¤.\n- WL3 (holding_period ë§¤í) ì ë°ë¼ ê°ì¥ ê¸´ \u0027sweet\u0027 timeframe ì¸ ì£¼ë´ì ê¸°ì¤ì¼ë¡ `ì¤ê¸°` ë³´ì  ê¸°ê°ì´ ê¶ì¥ëììµëë¤.\n- WE6 (llm_fallback_to_deterministic) ì ë°ë¼ ëª¨ë  timeframe ì anchor source ê° `deterministic_fallback` ì¼ë¡ ëª\u0085ìëììµëë¤.\n- WX1 (ì¬ì©ì ê³ ì  íëë¶ì ìì­ + 2-Stage íì´ë¸ë¦¬ë + ë°±í\u0085ì¤í\u0085 ì¹í) ì ë°ë¼ ë³¸ ë¶ìì ì¬ì©ì ê³ ì  framework ì ê¸°ë°íë©°, anchor ì°ì¶ì ê²°ì ë¡  fallback ë°©ìì ë°ëìµëë¤.\n- chart_data_md [4] ì ìë´ 7MAÂ·20MA, 52ì£¼ ê³ ì , ê±°ëë spike ë° fundamental_data_md [5] ì TTM 5 ratio, ë¶ê¸° QoQÂ·YoY ë°ì´í°ë¥¼ íì©íì¬ F1~F5 ì²­ì° í¸ë¦¬ê±°ë¥¼ íê°íìµëë¤.\n\n### [5] Yesterday Delta\nyesterday_delta: \"first run\"",
+                                "metadata":  {
+                                                 "analyst_id":  "stock_analyst",
+                                                 "display_name":  "ì¢\u0085ëª©ë¶ìê°",
+                                                 "learning_dept":  "stock-analysis",
+                                                 "rag_dept":  "stock-analysis",
+                                                 "rag_chunks_returned":  3,
+                                                 "system_prompt_chars":  58544,
+                                                 "system_blocks":  9,
+                                                 "cache_breakpoint_count":  3,
+                                                 "tokens_in":  28947,
+                                                 "tokens_out":  1804,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.002712225,
+                                                 "latency_s":  25.53,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  28,
+                                                 "snapshot_fetch_seconds":  28.04,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         },
+                                                 "snapshot_extend_failures":  [
+
+                                                                              ],
+                                                 "market_macro_source":  "computed",
+                                                 "sector_rs_count":  15,
+                                                 "supply_60d_age_days":  2,
+                                                 "chart_data_age_seconds":  9,
+                                                 "chart_fetch_seconds":  9.33,
+                                                 "chart_cache_hit":  false,
+                                                 "chart_failures":  [
+                                                                        "kis_chart_fetch:RemoteProtocolError"
+                                                                    ],
+                                                 "chart_ohlcv_count":  1825,
+                                                 "chart_source":  "stale_cache",
+                                                 "chart_ticker":  "005930",
+                                                 "alpha_3tf_failures":  [
+
+                                                                        ],
+                                                 "alpha_3tf_ticker_used":  "005930",
+                                                 "alpha_daily":  {
+                                                                     "value":  0.43197804348441166,
+                                                                     "label":  "weak",
+                                                                     "source":  "deterministic_fallback",
+                                                                     "reason":  "WE6 fallback (Stage 2 ì¤í¨ ëë ë¬´í¨ â ê²°ì ë¡  ë§ì§ë§ 3 candidate, C \u003c current ê°ë ì ì©)",
+                                                                     "progress_to_b":  1.4688995215311005,
+                                                                     "duration_ratio":  6.333333333333333,
+                                                                     "anchor_a_date":  "2026-03-09",
+                                                                     "anchor_b_date":  "2026-03-18",
+                                                                     "anchor_c_date":  "2026-03-31"
+                                                                 },
+                                                 "alpha_weekly":  {
+                                                                      "value":  1.2869709502938866,
+                                                                      "label":  "sweet",
+                                                                      "source":  "deterministic_fallback",
+                                                                      "reason":  "WE6 fallback (Stage 2 ì¤í¨ ëë ë¬´í¨ â ê²°ì ë¡  ë§ì§ë§ 3 candidate, C \u003c current ê°ë ì ì©)",
+                                                                      "progress_to_b":  1.3766816143497758,
+                                                                      "duration_ratio":  0.5510204081632653,
+                                                                      "anchor_a_date":  "2025-11-21",
+                                                                      "anchor_b_date":  "2026-02-27",
+                                                                      "anchor_c_date":  "2026-04-03"
+                                                                  },
+                                                 "alpha_monthly":  {
+                                                                       "value":  3.9083725702155236,
+                                                                       "label":  "overheated",
+                                                                       "source":  "deterministic_fallback",
+                                                                       "reason":  "WE6 fallback (Stage 2 ì¤í¨ ëë ë¬´í¨ â ê²°ì ë¡  ë§ì§ë§ 3 candidate, C \u003c current ê°ë ì ì©)",
+                                                                       "progress_to_b":  4.148648648648648,
+                                                                       "duration_ratio":  0.9835390946502057,
+                                                                       "anchor_a_date":  "2024-11-30",
+                                                                       "anchor_b_date":  "2025-07-31",
+                                                                       "anchor_c_date":  "2025-09-30"
+                                                                   },
+                                                 "fundamental_source":  "yfinance",
+                                                 "fundamental_fetched_at":  "2026-05-28T22:47:41+00:00",
+                                                 "fundamental_age_seconds":  0,
+                                                 "fundamental_failures":  [
+
+                                                                          ],
+                                                 "fundamental_quarter_count":  5,
+                                                 "fundamental_ratios_count":  3,
+                                                 "fundamental_ticker_used":  "005930"
+                                             },
+                                "error":  null
+                            },
+                            {
+                                "kind":  "analyst_prefetch",
+                                "agent_id":  "market_state_analyzer",
+                                "target":  "005930",
+                                "text":  "### [1] Market State Grid\n| ì¶ | ìì¹ | ëª\u0085ì  ID | íì ë |\n|---|---|---|---|\n| ì§ì ìê³ (KOSPI 36/60ìì  ìê³) | ì (ì ë°°ì´) | (ìë£ 0 â framework ë°) | 90% |\n| ë±ë½ ì¶ì¸ (20ì¼ / 60ì¼ MA ê¸°ì¸ê¸°) | ìì¹ (KOSPI) / í¡ë³´ (KOSDAQ) | (ìë£ 0 â framework ë°) | 85% |\n| ë³ëì± (VIX Â· KOSPI ì¼ì§í­) | ë®ì (VIX 15.74) | (ìë£",
+                                "metadata":  {
+                                                 "analyst_id":  "market_state_analyzer",
+                                                 "display_name":  "ìì¥ìíë¶ìê°",
+                                                 "learning_dept":  "market_macro",
+                                                 "rag_dept":  "market_macro",
+                                                 "rag_chunks_returned":  0,
+                                                 "system_prompt_chars":  19527,
+                                                 "system_blocks":  4,
+                                                 "cache_breakpoint_count":  2,
+                                                 "tokens_in":  10566,
+                                                 "tokens_out":  157,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.00083955,
+                                                 "latency_s":  24.97,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  23,
+                                                 "snapshot_fetch_seconds":  23.9,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         },
+                                                 "snapshot_extend_failures":  [
+
+                                                                              ],
+                                                 "market_macro_source":  "computed",
+                                                 "sector_rs_count":  15,
+                                                 "supply_60d_age_days":  2,
+                                                 "chart_data_age_seconds":  null,
+                                                 "chart_fetch_seconds":  null,
+                                                 "chart_cache_hit":  null,
+                                                 "chart_failures":  [
+
+                                                                    ],
+                                                 "chart_ohlcv_count":  null,
+                                                 "chart_source":  null,
+                                                 "chart_ticker":  null,
+                                                 "alpha_3tf_failures":  [
+
+                                                                        ],
+                                                 "alpha_3tf_ticker_used":  null,
+                                                 "alpha_daily":  null,
+                                                 "alpha_weekly":  null,
+                                                 "alpha_monthly":  null,
+                                                 "fundamental_source":  null,
+                                                 "fundamental_fetched_at":  null,
+                                                 "fundamental_age_seconds":  null,
+                                                 "fundamental_failures":  [
+
+                                                                          ],
+                                                 "fundamental_quarter_count":  null,
+                                                 "fundamental_ratios_count":  null,
+                                                 "fundamental_ticker_used":  null
+                                             },
+                                "error":  null
+                            },
+                            {
+                                "kind":  "analyst_prefetch",
+                                "agent_id":  "principle_guardian",
+                                "target":  "005930",
+                                "text":  "ì¼ì±ì ì(005930) ì ê· ì§ì\u0085ì ëí ìì¹ ìë°° ìíì ì¬ì  ê²ì¦í ê²°ê³¼, íì¬ë **advisory_warning (ì¬ì  ê²í  ê¶ì¥)** ìíì\u0085ëë¤. ì´ë ì¤ ì§ì\u0085 ì  ì¬ì©ìê° ë³´ê°í´ì¼ í  ì¬ë¬ í­ëª©ì´ ììì ìë¯¸í©ëë¤.\n\n### [1] Principle Compliance Grid\n| ì¶ | ìë° ì¬ë¶ | ìë°° ëª\u0085ì  ID | íì ë |\n|---|---|---|---|\n| ë¹ì¤ ë£° (ì´ë¹ì¤Â·ë¨ì¼Â·í¸ë ì´ë©) | unknown | OS1Â·OS2Â·OS3 | 0% |\n| ìì  ë£° (ì¬ì  ëª\u0085ì) | advisory_warning | OS4 | 90% |\n| 3 êµì°¨ ê²ì¦ (signal ì°¨ì â¥ 3) | advisory_warning | OS5 | 90% |\n| ë°ì´í° ë¬´ê²°ì± (data + reasons â¥ 3) | compliant | OS6 | 90% |\n| ì ì± ìì¹ (7ê³ëª\u0085Â·ì¬ë²Â·êµ­ë©´ ë£°) | advisory_warning | C2Â·C3Â·C4Â·C5Â·C6Â·C7Â·D1Â·D2Â·D3Â·D4Â·D5 | 70% |\n\n### [2] Scenario Branches\n| ìëë¦¬ì¤ | íë¥  | í¸ë¦¬ê±° |\n|---|---|---|\n| compliant ì§ì\u0085 OK | 0% | 5 ì¶ ëª¨ë ì¤ì |\n| warning ì¡°ê±´ë¶ (ì ì± ë£° ìë°) | 0% | CÂ·DÂ·R ìë° 1ê±´+ , OS ì ë ë£° ì¤ì |\n| violation ì°¨ë¨ (ì ë ë£° ìë°) | 0% | OS1~OS6 ìë° 1ê±´+ |\n| unknown ì\u0085ë ¥ ë¶ì¡± | 10% | portfolioÂ·actionÂ·signalÂ·ë§¤ëê³í ê²°ì¸¡ |\n| advisory_warning (ì¬ì  ê²í  ê¶ì¥) | 90% | ì ì±Â·ì ë advisory ìí 1ê±´+ |\n(íë¥  í©ê³ = 100%)\n\n### [3] Principle Implication (frame íì  â ë§¤ì ì¡ì\u0085Â·ìê¸ì¡ ì§ì X)\n- verdict = `advisory_warning (ì¬ì  ê²í  ê¶ì¥)`\n- ìë° í­ëª© list:\n  - ì ë ë£° (advisory_warning):\n    - OS4 (ì´ì© ìì í â ìì ì  ì¬ì  ëª\u0085ì): ë§¤ì ì  ìì ì  ì¤ì ì´ ëª\u0085ìëì§ ìììµëë¤.\n    - OS5 (ì´ì© ìì í â 3êµì°¨ ê²ì¦): ì§ì\u0085ì ìí 3ê° ì´ìì ë\u0085ë¦½ì ì¸ ì í¸ê° ì ìëì§ ìììµëë¤.\n  - ì ì± ë£° (advisory_warning):\n    - C2 (7ê³ëª\u0085 #2 â ìì¤ íí¼): ìì¤ íí¼ë¥¼ ìí êµ¬ì²´ì ì¸ ê³íì´ ëª\u0085ìëì§ ìììµëë¤.\n    - C3 (7ê³ëª\u0085 #3 â ê±°ìê²½ì  ì´í´): ê±°ì ê²½ì ì ëí ì¬ì©ì ì´í´ê° íì¸ëì§ ìììµëë¤.\n    - C4 (7ê³ëª\u0085 #4 â ìëë¥¼ ì¬ë¼): ì¼ì±ì ìê° ìëì  ì£¼ëì£¼ íë¦ì ë¶í©íëì§, í¹í ì¤ë íë½(-3.99%)ìë ë¶êµ¬íê³  ë§¤ìíë ì´ì ê° ëª\u0085ííì§ ììµëë¤.\n    - C5 (7ê³ëª\u0085 #5 â ê°ì¸ê³¼ ë°ëë¡): KOSPI ìì¥ ì ì²´ì ì¼ë¡ ì¸êµ­ì¸ ë§¤ë, ê°ì¸ ë§¤ì íë¦ì´ ê´ì°°ëì´ ê°ì¸ê³¼ ë°ëë¡ ìì§ì´ë ìì¹ì ìë°°ë  ì ììµëë¤.\n    - C6 (7ê³ëª\u0085 #6 â ì¬ë¦¬ê° ë²í¸ ì ìë ë²ì): ì¬ë¦¬ì ì¼ë¡ ê°ë¹ ê°ë¥í í¬ì ë²ì ë´ì¸ì§ íì¸ëì§ ìììµëë¤.\n    - C7 (7ê³ëª\u0085 #7 â ë§¤ë ìì¹ ì¬ì  ìë¦½): ë§¤ì ì ì ììµ ì¤í ë° ìì  ê¸°ì¤ì í¬í¨í ë§¤ë ê³íì´ ëª\u0085ìëì§ ìììµëë¤.\n    - D1 (5ë ì¬ë² #1 â êµ­ë©´): KOSPIë ìì¹ ì¶ì¸ì´ë KOSDAQì Distribution Dayê° 9íë¡ ëì ì ì ìì¥ ì ì²´ì ì£¼ìê° íìí¨ì ìì¬í©ëë¤.\n    - D2 (5ë ì¬ë² #2 â ìê¸): KOSPI ìì¥ìì ì¸êµ­ì¸ì´ ë§¤ëíê³  ìì´, ì¸êµ­ì¸ ë§¤ë ë°©í¥ì ì­ííë ì§ì\u0085ì´ ë  ì ììµëë¤.\n    - D3 (5ë ì¬ë² #3 â ì§ì\u0085): ë¶í  ë§¤ì ë¹ì¤ ê³í, 2ì°¨ í¨ì íë ì´ì\u0085 ì¬ë¶, FOMO ì¬ë¶, ì¢\u0085ëª© ì(5ê° ì´í)ì ëí ì ë³´ê° ë¶ì¡±í©ëë¤. (ìë´ ë§¤ì ìì²´ë ì¤ë ì¼ì±ì ì íë½ì¼ë¡ ì¶©ì¡±)\n    - D4 (5ë ì¬ë² #4 â ì²­ì°): ë§¤ì ì ì ë§¤ë ê³íì´ ì¸ìì ¸ ìì§ ììµëë¤.\n    - D5 (5ë ì¬ë² #5 â ì¬ë¦¬): í¬ì ì¬ë¦¬ íµì ì ëí ì ë³´ê° ë¶ì¡±í©ëë¤.\n- ì°¨ë¨ (blocking) vs ê²½ê³  (warning) êµ¬ë¶: ë³¸ í¸ì¶ì advisory frameì´ë¯ë¡, ì ë ë£° ìë° íë³´ë `advisory_warning`ì¼ë¡ íê¸°ë©ëë¤. ì¤ ì£¼ë¬¸ ë¨ê³(execution frame)ììë OS ë£° ìë° ì `violation`ì¼ë¡ ì§ì\u0085ì´ ì°¨ë¨ë©ëë¤.\n\n### [4] Citation\ncited: [C2, C3, C4, C5, C6, C7, D1, D2, D3, D4, D5, OS4, OS5, OS6]\n\nê·¼ê±° ëª\u0085ì  íì´:\n- C2 (ìì¹ìí¸ 7ê³ëª\u0085-ì² í): 50% ìì¤ â 100% íë³µ íì. ììµë³´ë¤ ìì¤ íí¼ê° êµ¬ì¡°ì ì¼ë¡ ì°ì .\n- C3 (ìì¹ìí¸ 7ê³ëª\u0085-íë¨ë ¥): ê±°ì ì´í´ê° ìì¥ì ë¨¸ë¬¼ê¸° ìí ì¤í ëë ¥. ê±°ìë¥¼ ëª¨ë¥´ë©´ í¨ëì ë¹ ì§ê¸° ì½ë¤.\n- C4 (ìì¹ìí¸ 7ê³ëª\u0085-ë°©í¥): ì¢\u0085ëª©ì ì¬ì§ ë§ê³  ìëì íë¦ì ì¬ë¼. ìëì íë¦ì ë¨¼ì  ì½ë ê²ì´ ì¤ì.\n- C5 (ìì¹ìí¸ 7ê³ëª\u0085-íì´ë°): ê°ì¸ê³¼ ë°ëë¡ ìì§ì¬ë¼. ì¸ê°ì§í, ì¸ì¸ ë§¤ë/ê°ë¯¸ ë§¤ì ì ë¦¼ì ê²½ê³.\n- C6 (ìì¹ìí¸ 7ê³ëª\u0085-í ë): ìì¤ì´ ëë ë¤ì íë¨ì íë¦¬ì§ ìë ê¸ì¡ì¼ë¡ í¬ìíë¼. ì¬ë¦¬ê° ë²í¸ ì ìë ë²ìê° ì¤ì.\n- C7 (ìì¹ìí¸ 7ê³ëª\u0085-ìê²°): ë§¤ì ì ì ë§¤ë ìì¹(ììµ ì¤í ë° ìì  ê¸°ì¤)ì ë¯¸ë¦¬ ì¸ìë¼.\n- D1 (ìì¹ìí¸ 5ë ì¬ë²-êµ­ë©´): ì§ê¸ì´ ìì¹ì¥/ì¡°ì ì¥/íë½ì¥ ì¤ ì´ëì¸ì§ ë¨¼ì  íë¨í´ì¼ íë¤.\n- D2 (ìì¹ìí¸ 5ë ì¬ë²-ìê¸): ì¸êµ­ì¸ì´ ë§¤ëíë ìì¥ìì ê°ì¸ ë§¤ìë í­í¬ë¥¼ ê±°ì¬ë¬ ì¤ë¥´ë ê²ê³¼ ê°ë¤.\n- D3 (ìì¹ìí¸ 5ë ì¬ë²-ì§ì\u0085): í­ì ìë´ì ë§¤ì, ë¶í  ë§¤ì ë¹ì¤, 2ì°¨ í¨ì íë ì´ì\u0085, FOMO ê¸ì§, ì¢\u0085ëª© 5ê° ì´í ì§ì¤.\n- D4 (ìì¹ìí¸ 5ë ì¬ë²-ì²­ì°): ë§¤ì ì ì ë§¤ë ê³íì ì¸ìë¼. ë¤ì´ê° íì ê°ì ì´ ê°ì\u0085ëë¤.\n- D5 (ìì¹ìí¸ 5ë ì¬ë²-ì¬ë¦¬): í¬ìë ì±ê²©ì´ê³  ìµê´ì´ë¤. ê¸°ë¤ë¦¬ê³  ì¼ìê°ì´ ë¤ì´ê°ê³  ë§ì¡±íê³  ëìë¼.\n- OS4 (ìì¹ìí¸ ì´ì© ìì í-ìì ): ë§¤ì ì£¼ë¬¸ ê²ì¦ ì `stop_loss_price` íì. ìì¼ë©´ violation (advisory frameììë advisory_warning).\n- OS5 (ìì¹ìí¸ ì´ì© ìì í-3êµì°¨): ë§¤ì ê²°ì ì ì¬ì©í ì í¸ê° 3ê° ì´ì ë\u0085ë¦½ì´ì´ì¼ íë¤.\n- OS6 (ìì¹ìí¸ ì´ì© ìì í-ë°ì´í° ë¬´ê²°ì±): ë¶ìê° ìëµì `data` íë ë¹ì´ìì¼ë©´ violation. ëª¨ë  verdictìë `reasons` ë°°ì´ì ìµì 3ê° ê·¼ê±° íì.\n\n### [5] Yesterday Delta\nyesterday_delta: \"first run\"\n\nì¼ì±ì ì ì ê· ì§ì\u0085ì ê³ ë ¤íìë ìí©ìì, íì¬ë `advisory_warning (ì¬ì  ê²í  ê¶ì¥)` ìíì\u0085ëë¤. ì´ë ì¤ ì£¼ë¬¸ ì ì ì¬ë¬ ìì¹ë¤ì ì ê²íê³  ë³´ê°í´ì¼ í  íìê° ììì ìë¯¸í©ëë¤.\n\ní¹í, **ìì ì  ì¤ì (OS4) ë° 3ê° ì´ìì ë\u0085ë¦½ì ì¸ ì§ì\u0085 ì í¸(OS5) íë³´**ë ì ëì ì¸ ì´ì© ìì í ì¸¡ë©´ìì ì¤ìí ê²í  ì¬í­ì\u0085ëë¤. ëí, **ë§¤ë ê³í ì¬ì  ìë¦½(C7, D4)**ê³¼ **ê±°ì ê²½ì  ë° ìì¥ ìê¸(C3, C5, D1, D2)**ì ëí ëª\u0085íí ì´í´ë¥¼ ë°íì¼ë¡ ì§ì\u0085 ì¬ë¶ë¥¼ ê²°ì íë ê²ì´ ì¤ìí©ëë¤. ì¤ë ì¼ì±ì ìê° ìë´(-3.99%)ì¸ ì ì D3(ì§ì\u0085)ì \u0027ìë´ ë§¤ì\u0027 ìì¹ìë ë¶í©íì§ë§, KOSPI ìì¥ ì ë°ì ì¸êµ­ì¸ ë§¤ëì¸(D2)ì KOSDAQì ëì Distribution Day(D1)ë ìì¥ ì ë°ì ì£¼ìë¥¼ ìí©ëë¤.\n\nì´ë¬í ì ë¤ì ì¶©ë¶í ê²í íìê³ , ë³¸ì¸ì í¬ì ì¬ë¦¬ê° ë²í¸ ì ìë ë²ì(C6, D5) ë´ìì ì ì¤íê² ì ê·¼íìê¸¸ ê¶ê³ í©ëë¤.",
+                                "metadata":  {
+                                                 "analyst_id":  "principle_guardian",
+                                                 "display_name":  "ìì¹ìí¸ì",
+                                                 "learning_dept":  "principles",
+                                                 "rag_dept":  "principles",
+                                                 "rag_chunks_returned":  3,
+                                                 "system_prompt_chars":  38514,
+                                                 "system_blocks":  6,
+                                                 "cache_breakpoint_count":  3,
+                                                 "tokens_in":  21138,
+                                                 "tokens_out":  2079,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.0022090499999999997,
+                                                 "latency_s":  23.33,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  31,
+                                                 "snapshot_fetch_seconds":  31.42,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         },
+                                                 "snapshot_extend_failures":  [
+
+                                                                              ],
+                                                 "market_macro_source":  "computed",
+                                                 "sector_rs_count":  15,
+                                                 "supply_60d_age_days":  2,
+                                                 "chart_data_age_seconds":  null,
+                                                 "chart_fetch_seconds":  null,
+                                                 "chart_cache_hit":  null,
+                                                 "chart_failures":  [
+
+                                                                    ],
+                                                 "chart_ohlcv_count":  null,
+                                                 "chart_source":  null,
+                                                 "chart_ticker":  null,
+                                                 "alpha_3tf_failures":  [
+
+                                                                        ],
+                                                 "alpha_3tf_ticker_used":  null,
+                                                 "alpha_daily":  null,
+                                                 "alpha_weekly":  null,
+                                                 "alpha_monthly":  null,
+                                                 "fundamental_source":  null,
+                                                 "fundamental_fetched_at":  null,
+                                                 "fundamental_age_seconds":  null,
+                                                 "fundamental_failures":  [
+
+                                                                          ],
+                                                 "fundamental_quarter_count":  null,
+                                                 "fundamental_ratios_count":  null,
+                                                 "fundamental_ticker_used":  null
+                                             },
+                                "error":  null
+                            },
+                            {
+                                "kind":  "analyst_prefetch",
+                                "agent_id":  "flow_analyzer",
+                                "target":  "005930",
+                                "text":  "ì¢\u0085ëª© 005930 (ì¼ì±ì ì) ì ëí ìê¸ ë¶ì ê²°ê³¼ì\u0085ëë¤. ê°ë³ ì¢\u0085ëª©ì 5 ì£¼ì²´ ìê¸ ë°ì´í°ê° íì¬ Market Snapshot ì ìì´ ìì¥ ì ì²´ ìê¸ íë¦ê³¼ ì¹í° í¸ë ëë¥¼ íì©íì¬ ë¶ë¶ì ì¼ë¡ ë¶ìëìì¼ë©°, ì´ë¡ ì¸í´ F-Score ì°ì¶ì íì ëë ë®ìµëë¤.\n\n### [1] Flow Grid (4-tier)\n| tier | ìì¹ | íµì¬ ìì¹ | íì ë |\n|---|---|---|---|\n| liquidity_macro | ì¤ë¦½ | DXYÂ·US10Y íë½ (ì ëì± í½ì°½ ìì¸) vs KOSPI ì¸ì¸ ë§¤ë (ìê¸ ì ì¶) | 50% |\n| industry",
+                                "metadata":  {
+                                                 "analyst_id":  "flow_analyzer",
+                                                 "display_name":  "ìê¸ë¶ìê°",
+                                                 "learning_dept":  "flow_analysis",
+                                                 "rag_dept":  "flow_analysis",
+                                                 "rag_chunks_returned":  0,
+                                                 "system_prompt_chars":  19675,
+                                                 "system_blocks":  4,
+                                                 "cache_breakpoint_count":  2,
+                                                 "tokens_in":  11067,
+                                                 "tokens_out":  157,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.000877125,
+                                                 "latency_s":  24.12,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  30,
+                                                 "snapshot_fetch_seconds":  30.34,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         },
+                                                 "snapshot_extend_failures":  [
+
+                                                                              ],
+                                                 "market_macro_source":  "computed",
+                                                 "sector_rs_count":  15,
+                                                 "supply_60d_age_days":  2,
+                                                 "chart_data_age_seconds":  null,
+                                                 "chart_fetch_seconds":  null,
+                                                 "chart_cache_hit":  null,
+                                                 "chart_failures":  [
+
+                                                                    ],
+                                                 "chart_ohlcv_count":  null,
+                                                 "chart_source":  null,
+                                                 "chart_ticker":  null,
+                                                 "alpha_3tf_failures":  [
+
+                                                                        ],
+                                                 "alpha_3tf_ticker_used":  null,
+                                                 "alpha_daily":  null,
+                                                 "alpha_weekly":  null,
+                                                 "alpha_monthly":  null,
+                                                 "fundamental_source":  null,
+                                                 "fundamental_fetched_at":  null,
+                                                 "fundamental_age_seconds":  null,
+                                                 "fundamental_failures":  [
+
+                                                                          ],
+                                                 "fundamental_quarter_count":  null,
+                                                 "fundamental_ratios_count":  null,
+                                                 "fundamental_ticker_used":  null
+                                             },
+                                "error":  null
+                            },
+                            {
+                                "kind":  "strategist",
+                                "agent_id":  "track_a",
+                                "target":  "005930",
+                                "text":  "```yaml\nrecommendation_id: REC-20260529-005930-A\ndate: 2026-05-29\nticker: \"005930\"\ndisplay_name: \"ì¼ì±ì ì\"\ntrack: A\nverdict: \"wait\"\nentry_price: null\ntarget_price_1: null\ntarget_price_2: null\ntarget_price_3: null\nstop_loss: null\nrisk_reward: null\ncited_scores:\n  s_score: null\n  alpha: 1.287\n  f_score: null\n  t_score: null\n  buy_score: null\n  cited_propositions: [OS4, OS5, OS6, C4, C5, D1, D2, D3, D4]\nconfidence: null\nreasons:\n  - \"ì£¼ëì£¼ ì ì (S-Score) ë¯¸ë°í â Track A ì§ì\u0085 ì¡°ê±´ ë¯¸ì¶©ì¡±ì¼ë¡ ë§¤ì ë³´ë¥\"\n  - \"ìê¸ ì ì (F-Score) ë¯¸ë°í â Track A ì§ì\u0085 ì¡°ê±´ ë¯¸ì¶©ì¡±ì¼ë¡ ë§¤ì ë³´ë¥\"\n  - \"ê±°ì ì ëµê° (wealth_strategist) ë¶ì ë¯¸ë°í â Track A ì§ì\u0085 ì¡°ê±´ ë¯¸ì¶©ì¡±ì¼ë¡ ë§¤ì ë³´ë¥\"\n  - \"ìì¹ìí¸ì (principle_guardian) `advisory_warning` ìí â ìì ì  ë° 3êµì°¨ ê²ì¦ ë¯¸íì¸, ì¬ë¬ ì ì± ìì¹ ìë° ê°ë¥ì± ì¡´ì¬\"\n  - \"ê°ìê³ì (Î±) ì£¼ë´ 1.287 (sweet spot)ì¼ë¡ ê¸ì ì ì´ë, ì¼ë´ì 0.432 (weak)ë¡ ë¨ê¸° ë°ì° ì½ì¸\"\n  - \"ìì¥ ì²´ì  `strong_bull` (KOSPI)ë¡ ë§¤ì ì¹íì ì´ë, KOSDAQ Distribution Day 9íë¡ ìì¥ ì ë° ì£¼ì íì\"\n  - \"ëª©íê° 3ë¨ (target_price_1/2/3) ë¯¸ë°í\"\ndata:\n  monthly_7ma_aligned: true\n  market_regime: \"strong_bull\"\n  holding_period_estimate_days: null\n  distribution_day_count: 0\n  yesterday_verdict_delta: \"first run\"\ncontract_version: \"1.0\"\n```\n\nì¼ì±ì ì(005930)ì ëí Track A ì ëµê°ì ë¶ì ê²°ê³¼, íì¬ë **ê´ë§ (wait)** ìê²¬ì\u0085ëë¤. Track Aë ì£¼ëì£¼ ì ì (S-Score), ìê¸ ì ì (F-Score), ê±°ì ì ëµê° ë¶ì ë± íµì¬ ì§íê° ëª¨ë ë°íëì´ì¼ ì§ì\u0085ì ê³ ë ¤í©ëë¤. íì¬ ì´ ì¤ìí ì§íë¤ì´ ë¯¸ë°í ìíì´ë¯ë¡, ì ë³´ ë¶ì¡±ì¼ë¡ ì¸í´ ë§¤ìë¥¼ ë³´ë¥í©ëë¤.\n\nëí, ìì¹ìí¸ì (principle_guardian)ë¡ë¶í° ìì ì  ë¯¸ì¤ì , 3êµì°¨ ê²ì¦ ë¯¸ë¬ ë± ì¬ë¬ `advisory_warning`ì´ ê°ì§ëììµëë¤. ì´ë ì§ì\u0085 ì  ì¶ê°ì ì¸ ì ë³´ ë³´ê°ê³¼ ìì¹ ì¤ì ì¬ë¶ íì¸ì´ íìí¨ì ìë¯¸í©ëë¤. ì£¼ë´ ê°ìê³ì (Î±)ë 1.287ë¡ ê¸ì ì ì¸ \u0027sweet spot\u0027ì ìì¹íë, ì¼ë´ ê°ìê³ìë 0.432ë¡ ë¨ê¸° ë°ì°ì´ ì½íë©°, ëª©íê° 3ë¨ ëí ë¯¸ë°í ìíì\u0085ëë¤. KOSPI ìì¥ ì²´ì ë `strong_bull`ë¡ ë§¤ì ì¹íì ì´ì§ë§, KOSDAQì Distribution Dayê° 9íë¡ ìì¥ ì ë°ì ì£¼ìê° íìí©ëë¤.\n\n**ê·¼ê±° ëª\u0085ì  íì´:**\n- OS4 (ìì¹ìí¸ ì´ì© ìì í-ìì ): ë§¤ì ì£¼ë¬¸ ê²ì¦ ì ìì ì  ì¬ì  ëª\u0085ìê° íìì\u0085ëë¤.\n- OS5 (ìì¹ìí¸ ì´ì© ìì í-3êµì°¨): ë§¤ì ê²°ì ì ì¬ì©í ì í¸ê° 3ê° ì´ì ë\u0085ë¦½ì ì´ì´ì¼ í©ëë¤.\n- OS6 (ìì¹ìí¸ ì´ì© ìì í-ë°ì´í° ë¬´ê²°ì±): ë¶ìê° ìëµì ë°ì´í° íëê° ë¹ì´ìì¼ë©´ ì ë©ëë¤.\n- C4 (ìì¹ìí¸ 7ê³ëª\u0085-ë°©í¥): ì¢\u0085ëª©ì ì¬ì§ ë§ê³  ìëì íë¦ì ì¬ì¼ í©ëë¤.\n- C5 (ìì¹ìí¸ 7ê³ëª\u0085-íì´ë°): ì¼ë°ì ì¸ ê°ì¸ë¤ ìì§ìê³¼ë ë°ëë¡ ìì§ì¬ì¼ í©ëë¤.\n- D1 (ìì¹ìí¸ 5ë ì¬ë²-êµ­ë©´): ì§ê¸ì´ ìì¹ì¥/ì¡°ì ì¥/íë½ì¥ ì¤ ì´ëì¸ì§ ë¨¼ì  íë¨í´ì¼ í©ëë¤.\n- D2 (ìì¹ìí¸ 5ë ì¬ë²-ìê¸): ì¸êµ­ì¸ì´ ë§¤ëíë ìì¥ìì ê°ì¸ ë§¤ìë í­í¬ë¥¼ ê±°ì¬ë¬ ì¤ë¥´ë ê²ê³¼ ê°ìµëë¤.\n- D3 (ìì¹ìí¸ 5ë ì¬ë²-ì§ì\u0085): í­ì ìë´ì ë§¤ìíê³ , ë¶í  ë§¤ì ë¹ì¤, 2ì°¨ í¨ì íë ì´ì\u0085, FOMO ê¸ì§, ì¢\u0085ëª© 5ê° ì´í ì§ì¤ ìì¹ì ì§ì¼ì¼ í©ëë¤.\n- D4 (ìì¹ìí¸ 5ë ì¬ë²-ì²­ì°): ë§¤ì ì ì ë§¤ë ê³íì ì¸ìì¼ í©ëë¤.",
+                                "metadata":  {
+                                                 "strategist_id":  "track_a",
+                                                 "display_name":  "Track A ì¶ì¸ ì¶ì  ì ëµê°",
+                                                 "track":  "A",
+                                                 "target":  "005930",
+                                                 "reads_analysts":  [
+                                                                        "stock_picker",
+                                                                        "stock_analyst",
+                                                                        "wealth_strategist",
+                                                                        "principle_guardian",
+                                                                        "market_state_analyzer",
+                                                                        "flow_analyzer"
+                                                                    ],
+                                                 "analyst_source":  "prefetch",
+                                                 "analyst_published_count":  5,
+                                                 "analyst_missing_count":  0,
+                                                 "analyst_missing_ids":  [
+
+                                                                         ],
+                                                 "rag_dept":  "principles",
+                                                 "rag_chunks_returned":  3,
+                                                 "system_prompt_chars":  52729,
+                                                 "system_blocks":  7,
+                                                 "cache_breakpoint_count":  3,
+                                                 "tokens_in":  28218,
+                                                 "tokens_out":  1142,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.0024589499999999997,
+                                                 "latency_s":  27.34,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  5,
+                                                 "snapshot_fetch_seconds":  5.18,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         }
+                                             }
+                            },
+                            {
+                                "kind":  "strategist",
+                                "agent_id":  "track_b",
+                                "target":  "005930",
+                                "text":  "```yaml\nrecommendation_id: REC-20260529-005930-B\ndate: 2026-05-29\nticker: \"005930\"\ndisplay_name: \"ì¼ì±ì ì\"\ntrack: B\nverdict: \"wait\"\nentry_price: null\ntarget_price_1: null\ntarget_price_2: null\ntarget_price_3: null\nstop_loss: null\nrisk_reward: null\ncited_scores:\n  buy_score: null\n  t_score: null\n  f_score: null\n  s_score: null\n  alpha: 1.287\n  cited_propositions: [D1, D2, D3, D4, OS4, OS5]\nconfidence: 2\nreasons:\n  - \"íì  ì ì (T-Score) ë¯¸ë°í â ì§ì\u0085 í¸ë¦¬ê±° íì¸ ë¶ê° (D3 ìë°)\"\n  - \"ë§¤ì ì ì (buy_score) ë¯¸ë°í â ì¢\u0085ëª© ì ì  ê¸°ì¤ ë¯¸ì¶©ì¡± (D3 ìë°)\"\n  - \"ìê¸ ì ì (F-Score) ë¯¸ë°í â ê°ë³ ì¢\u0085ëª© ìê¸ ë¶ì ë¶íì¤ (D2 ìë°)\"\n  - \"ìì¹ìí¸ì ê²½ê³  (advisory_warning) â ìì ì  ë¯¸ì¤ì  (OS4 ìë°) ë° 3êµì°¨ ê²ì¦ ë¯¸ë¬ (OS5 ìë°)\"\n  - \"R/R ì°ì¶ ë¶ê° â ì§ì\u0085ê°/ëª©íê°/ìì ê° ë¯¸ì  (D4 ìë°)\"\n  - \"ìì¥ ì²´ì ë moderate_bull ì´ë, íµì¬ ì§ì\u0085 ì í¸ ë¶ì¡± (D1 ìë°)\"\ndata:\n  triggers_fired: []\n  market_regime: \"moderate_bull\"\n  distribution_day_count: 0\n  trailing_stop_active: false\n  trailing_stop_width_pct: null\n  holding_period_estimate_days: null\n  yesterday_verdict_delta: \"first run\"\ncontract_version: \"1.0\"\n```\nì¼ì±ì ì (005930) ì ëí Track B íëí 1 í ì ëµê°ì íì¬ ê¶ê³ ë **\u0027ê´ë§ (wait)\u0027** ì\u0085ëë¤. íì¬ ì¼ì±ì ìë Track B ì íµì¬ ì§ì\u0085 ì¡°ê±´ì¸ íì  ì ì (T-Score) ì ë§¤ì ì ì (buy_score), ê·¸ë¦¬ê³  ìê¸ ì ì (F-Score) ê° ëª¨ë ë°íëì§ ìì ëª\u0085íí ì§ì\u0085 ì í¸ë¥¼ íì¸í  ì ììµëë¤.\n\nìì¥ ì²´ì ë KOSPI ì ìì¹ ì¶ì¸ì ë¯¸êµ­ ìì¥ì ê°ì¸ì íì\u0085ì´ \u0027moderate_bull\u0027ë¡ íë¨ëì§ë§, ê°ë³ ì¢\u0085ëª©ì êµ¬ì²´ì ì¸ ì§ì\u0085 í¸ë¦¬ê±°ì ë§¤ì ê°ëë¥¼ ì ì ìë ìí©ì\u0085ëë¤. ëí, ìì¹ìí¸ì (principle_guardian) ì­ì ìì ì  ì¬ì  ëª\u0085ìì 3êµì°¨ ê²ì¦ ë¯¸ë¬ì ëí ê²½ê³  (advisory_warning) ë¥¼ ë°ííì¬, íì¬ë ì ì¤í ì ê·¼ì´ íìí©ëë¤.\n\nTrack B ë ì¢\u0085ëª©ì 1 í ì¬ì´í´ ì ì  ì§ì\u0085ì ëª©íë¡ íë©°, ëª\u0085íí í¸ë¦¬ê±°ì ììµë¹ (R/R) ê¸°ì¤ì ì¶©ì¡±í´ì¼ í©ëë¤. íì¬ë¡ìë ì´ë¬í ê¸°ì¤ì ì¶©ì¡±íì§ ëª»íë¯ë¡, ì¶ê°ì ì¸ ì í¸ê° ë°ìí  ëê¹ì§ ê´ë§íë ê²ì´ ë°ëì§í©ëë¤.\n\ncited: [D1, D2, D3, D4, OS4, OS5]\n\nê·¼ê±° ëª\u0085ì  íì´:\n- D1 (ìì¹ìí¸ 5ë ì¬ë²-êµ­ë©´): ì§ê¸ì´ ìì¹ì¥/ì¡°ì ì¥/íë½ì¥ ì¤ ì´ëì¸ì§ ë¨¼ì  íë¨í´ì¼ íë¤.\n- D2 (ìì¹ìí¸ 5ë ì¬ë²-ìê¸): ì¸êµ­ì¸ì´ ë§¤ëíë ìì¥ìì ê°ì¸ ë§¤ìë í­í¬ë¥¼ ê±°ì¬ë¬ ì¤ë¥´ë ê²ê³¼ ê°ë¤.\n- D3 (ìì¹ìí¸ 5ë ì¬ë²-ì§ì\u0085): í­ì ìë´ì ë§¤ì, ë¶í  ë§¤ì ë¹ì¤, 2ì°¨ í¨ì íë ì´ì\u0085, FOMO ê¸ì§, ì¢\u0085ëª© 5ê° ì´í ì§ì¤.\n- D4 (ìì¹ìí¸ 5ë ì¬ë²-ì²­ì°): ë§¤ì ì ì ë§¤ë ê³íì ì¸ìë¼. ë¤ì´ê° íì ê°ì ì´ ê°ì\u0085ëë¤.\n- OS4 (ìì¹ìí¸ ì´ì© ìì í-ìì ): ë§¤ì ì£¼ë¬¸ ê²ì¦ ì `stop_loss_price` íì.\n- OS5 (ìì¹ìí¸ ì´ì© ìì í-3êµì°¨): ë§¤ì ê²°ì ì ì¬ì©í ì í¸ê° 3ê° ì´ì ë\u0085ë¦½ì´ì´ì¼ íë¤.",
+                                "metadata":  {
+                                                 "strategist_id":  "track_b",
+                                                 "display_name":  "Track B íëí 1 í ì ëµê°",
+                                                 "track":  "B",
+                                                 "target":  "005930",
+                                                 "reads_analysts":  [
+                                                                        "stock_picker",
+                                                                        "trader",
+                                                                        "market_state_analyzer",
+                                                                        "flow_analyzer",
+                                                                        "principle_guardian"
+                                                                    ],
+                                                 "analyst_source":  "prefetch",
+                                                 "analyst_published_count":  5,
+                                                 "analyst_missing_count":  0,
+                                                 "analyst_missing_ids":  [
+
+                                                                         ],
+                                                 "rag_dept":  "trading",
+                                                 "rag_chunks_returned":  0,
+                                                 "system_prompt_chars":  41625,
+                                                 "system_blocks":  6,
+                                                 "cache_breakpoint_count":  3,
+                                                 "tokens_in":  21438,
+                                                 "tokens_out":  1017,
+                                                 "cache_read_tokens":  0,
+                                                 "cache_creation_tokens":  0,
+                                                 "model":  "gemini-2.5-flash",
+                                                 "cost_usd":  0.0019129499999999999,
+                                                 "latency_s":  23.27,
+                                                 "is_mock":  false,
+                                                 "upstream_error":  null,
+                                                 "provider_requested":  null,
+                                                 "provider_used":  "gemini",
+                                                 "snapshot_age_seconds":  3,
+                                                 "snapshot_fetch_seconds":  3.26,
+                                                 "snapshot_cache_hit":  false,
+                                                 "snapshot_failures":  [
+
+                                                                       ],
+                                                 "snapshot_source_map":  {
+                                                                             "kr":  "db",
+                                                                             "us":  "fetch"
+                                                                         },
+                                                 "snapshot_db_run_ids":  {
+                                                                             "market_briefing_now":  "2026-05-28T05:30:00.051064+00:00#sched-bd3423"
+                                                                         }
+                                             }
+                            }
+                        ],
+    "formatted":  {
+                      "text":  "ì¼ì±ì ì ë§¤ìë íì¬ ë³´ë¥íë ê²ì´ ì¢ê² ìµëë¤.\n\nê·¼ê±°:\n- **ìê¸**: ì¸êµ­ì¸ ë§¤ëì¸ê° ê´ì°°ëê³  ìì¼ë©°, ìì¥ ì ë°ì ì¼ë¡ ì£¼ìê° íìí ìí©ì\u0085ëë¤.\n- **ì°¨í¸**: ì£¼ë´ ê°ìê³ìë ê¸ì ì ì´ë ì¼ë´ ê°ìê³ìë ì½íë©°, ëª©íê° ì ë³´ê° ë¶ì¡±í©ëë¤.\n- **ì¤ì **: íëë©í¸ì ìí¸íë, ë§¤ì ì§ì\u0085ì ìí íµì¬ ì§íë¤ì´ ìì§ ë°íëì§ ìììµëë¤.",
+                      "model":  "gemini-2.5-flash-lite",
+                      "tokens_in":  5926,
+                      "tokens_out":  108,
+                      "cost_usd":  0.00047684999999999996,
+                      "latency_ms":  3041,
+                      "is_mock":  false,
+                      "upstream_error":  null
+                  },
+    "error":  null,
+    "latency_ms":  111947
+}

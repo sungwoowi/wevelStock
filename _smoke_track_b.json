@@ -1,0 +1,5 @@
+{
+  "messages": [{"role": "user", "content": "삼성전자 살까?"}],
+  "skip_cache": true,
+  "skip_formatter": true
+}
