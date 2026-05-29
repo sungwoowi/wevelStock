@@ -9,18 +9,19 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **아키텍처 본질 재평가 사이클 (6번째 세션, 2026-05-23) — 가능성 탐색 메모 + prism 실 응답 분석 완료 ✨**. 사용자가 9 분석가 multi-agent 본질 의문 제기 + prism-insight 005930 실 응답 2건 가져옴 ("환각 있지만 내용 풍부, 위 수준 정도가 되면 좋겠다"). claude-code 가 객관 평가 메모 작성 + prism 응답 5 패턴 추출 → **추천 정정 = 옵션 2 (하이브리드) 직진** (옵션 3 으로는 5-layer chain 부분 도달만). **다음 세션 = chat Claude Opus 핑퐁 → 옵션 확정 → `feature/hybrid-executive-poc` 브랜치 + 최소 PoC** (prism 005930 응답과 1:1 비교가 검증 기준).
+**현재 위치**: **하이브리드 임원 종합 레이어 PoC 완료 — 옵션 2 가설 확정 ✨ (2026-05-29)**. production UX 품질 병목 = 종합 레이어("압축기 + 점수 문지기")로 진단 (데이터 아님 — stock_analyst 혼자 풍부한 신호 내도 전략가 기계적 wait + formatter 앵무새). `feature/hybrid-executive-poc` 브랜치에 투자 총괄 임원(`agents/executive/`) + 종합 모듈(`core/executive/synthesize.py`) 구현. 005930 라이브 smoke = 같은 부분 데이터로 임원(Pro)이 prism 수준 답 산출(전략가 wait 탈출·가격 환각 0·잘림 0). **main 무변경 — 머지는 별 결단.**
 
-**본 세션 산출 (1 코드 commit + 1 wrap-up commit)**:
-- **#1 track_b MOCK silent fallback 차단** = `core/llm/client.py` (`mock_fallback_allowed` flag 4함수) + `core/inference/run_analyst.py` + `core/strategist/run_strategist.py` + `core/intent/router.py` (production-chat 6 wrap 모두 False 강제) + `core/intent/formatter.py` (mock/error 응답 본문 제외 + 모두 누락 시 LLM skip) + `webapp/.../EvidenceToggle.tsx` (⚠ MOCK 라벨 + 빨간 border) + 11 신규 테스트 (mock_fallback_gate 6 + router TestMockFallbackForwarded 3 + formatter excludes_mock 2) + 회귀 fix 3 (stub kwargs 수용)
-- **#2 principle_guardian frame 분리 (advisory vs execution)** = `config/analyst_subtasks.yaml` (advisory frame 명시 + advisory_warning 강제 + violation 금지) + `agents/analysts/principle_guardian/{persona.md, manifest.yaml}` (frame_mode 분기 표 + issue_verdict 알고리즘 frame 분기 + 한국어 verdict 표) + `agents/strategists/track_{a,b}/persona.md` (진입 조건 + 가중치 표 advisory_warning 처리) + 9 신규 테스트 (frame split assertion)
-- **검증**: pytest **590 → 610** (+20, 회귀 0). validate.py 0 errors. webapp tsc 0 errors.
+**본 세션 산출 (1 코드 commit `c55be19` + 1 wrap-up commit)**:
+- **임원 doctrine + 종합 모듈** = `agents/executive/{persona.md, manifest.yaml}` (prism 7 패턴 + 박종훈 변곡점 전용 + 환각 가드) + `core/executive/synthesize.py` (canon 주입·label 사전·mock_fallback False·model override) + `server/api/production_chat.py` (executive_mode A/B 플래그) + `docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001` + 단위 10.
+- **모델 전략 = 하이브리드** = `executive_synthesis` area 기본 BALANCED(Flash, 무료 1,500/일), Pro(deep)는 주요 트리거만 model override. `core/llm/client.py` gemini thinking 토큰 cost 포함(정확화).
+- **검증**: pytest **610 → 620** (+10, 회귀 0). validate.py 0 errors.
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **production 사용자 경로 = silent mock fallback 절대 금지**: `mock_fallback_allowed=True` (기본) 은 dev/CI 용, production-chat 흐름은 False 강제. real provider 실패 시 RuntimeError → router error 필드 → UI 빨간 표시. mock 응답이 사용자 자연어 답변에 섞이는 사고 차단.
-- **principle_guardian frame_mode 분리 (advisory vs execution)**: 사용자 일반 의견 단계 (production-chat) = advisory frame → OS 위반 식별돼도 `advisory_warning` (blocking X). 실 주문 placement (Layer 4 계좌관리자) = execution frame → blocking `violation`. Track A/B persona 의 진입 조건·가중치 표가 advisory_warning 을 위반 0 처럼 취급해 wait 강제 도미노 차단.
-- **사용자 보완점 4건 진단 권위**: Q1(수급) + Q3(실적) = INFRA-SCORE-INPUTS-001 별 사이클 / Q2(원칙수호자) = 본 세션 #2 fix / Q4(chat AI 비교) = 정량 입력 부재 + 부분 답변 불가 도미노 (#3 INFRA + 별 production UX 부분 답변 정직성 작업).
-- **silent mock fallback 진단**: gemini transient failure → claude_code fallback (Windows known issue) → mock fallback chain 의 발현. 본 fix 는 path 차단만 — gemini 안정성 자체는 별 영역 (retry/sequential).
+- **옵션 2(하이브리드 임원) 확정**: 분석가 분리 유지 + 종합 레이어를 "점수 합산" → "doctrine 통합 추론 임원"으로 교체. 같은 데이터로 임원이 prism 수준 도달 = 병목은 데이터가 아니라 종합. (단 데이터 배선 INFRA-SCORE-INPUTS-001은 그대로 = 별 작업.)
+- **박종훈 거시 framework = 변곡점 전용** (사용자 명시 재확인): 평상시 트레이딩 응답엔 비인용(과보수화·매매 마비 방지). 임원 기본 렌즈 = WAVE-ALPHA α + 7계명 + 상황별 가중치 + regime. = `feedback_park_jonghoon_scope`.
+- **LLM tier = 하이브리드 + 비용 의식**: 기본 Flash(싸고 1,500/일), Pro는 50/일·~24배라 주요 트리거만. 임원 환각 가드 핵심 = 가격 등 수치는 입력 anchor에서만(지어내기 금지). Flash 코드 라벨 잔존 누출은 결정론 후처리 스크러버로 해소(백로그).
+
+**직전 세션 판단 (2026-05-23)**: production 경로 silent mock fallback 금지(`mock_fallback_allowed` flag) / principle_guardian advisory vs execution frame 분리(advisory_warning 비차단). 둘 다 코드 반영됨.
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -44,38 +45,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: **데이터 인프라 빈공간** = F-Score 4축 / S-Score / buy_score / T-Score 의 input collector 부재 (`INFRA-SCORE-INPUTS-001` 별도 SPEC, ~5 세션) / production UX 부분 답변 정직성 (한 축 null 시 도미노 wait, 별 ~1 세션) / 서버 재시작 본 fix 반영 (PID 33600 사용자 console 책임) / SLOT S4 정확도 정정 (KIS top30 한계 → KRX manual devtools) / SLOT S1·S2·S3 후속 SPEC / 기존 영역 LLM 3계층 마이그레이션 = **`LLM-TIER-MIGRATION-001`** (~0.5 세션 microcycle) / gemini transient failure root cause (retry/sequential, 별 영역).
+**미해결 부채**: **데이터 인프라 빈공간** = F/S/buy/T-Score input collector 부재 (`INFRA-SCORE-INPUTS-001`, ~5 세션 — PoC 가 '종합이 병목'임을 증명했으나 데이터 배선은 별 작업) / **Flash 코드 라벨 잔존 누출** (결정론 후처리 스크러버 백로그, RESUME Top 1) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역).
 
-**마지막 작업일**: 2026-05-23 (아키텍처 본질 재평가 메모 작성, 같은 날 6번째 세션)
-**마지막 세션 로그**: [2026-05-23_architecture-evaluation-cycle-6.md](c_worked/2026-05-23_architecture-evaluation-cycle-6.md). 직전 5번째 = [2026-05-23_mock-fallback-block-and-principle-frame-split-5.md](c_worked/2026-05-23_mock-fallback-block-and-principle-frame-split-5.md).
-**산출**: `idea_memo/2026-05-23-architecture-evaluation-by-claude-code.md` (3 옵션 trade-off + prism `/evaluate` 실 패턴 확인 + 추천 + chat Opus 핑퐁 질문 5건). 코드 변경 0. RESUME Top 3 재배치.
-**Git**: PROD-UX-1 = `af1568c`. PROD-UX-2 = `d30cafd`. 5번째 코드 = `5d332f2`. 5번째 wrap-up = `6a48263`. **본 6번째 세션 = idea_memo + RESUME + wrap-up commit 진행**.
+**마지막 작업일**: 2026-05-29 (하이브리드 임원 PoC, cycle 6 후속)
+**마지막 세션 로그**: [2026-05-29_hybrid-executive-poc.md](c_worked/2026-05-29_hybrid-executive-poc.md). 직전 = [2026-05-23_architecture-evaluation-cycle-6.md](c_worked/2026-05-23_architecture-evaluation-cycle-6.md).
+**산출**: `feature/hybrid-executive-poc` 브랜치 = 투자 총괄 임원(`agents/executive/`) + `core/executive/synthesize.py` + executive_mode A/B + SPEC + smoke + 단위 10. 005930 라이브 smoke로 옵션 2 확정.
+**Git**: 코드 = `c55be19` (feature/hybrid-executive-poc). main 무변경 (PoC 격리, 머지는 별 결단). 본 세션 wrap-up = docs commit 진행.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 아키텍처 본질 재평가 사이클
+## 🎯 다음에 할 일 (Top 3) — 하이브리드 임원 PoC 후속
 
-우선순위 순. 사용자 본질 의문 (9 분석가 multi-agent 의 가능성 재평가) 직후. **PoC 는 별도 feature 브랜치** (사용자 명시).
+우선순위 순. PoC 옵션 2 가설 확정 직후. **PoC 는 `feature/hybrid-executive-poc` 브랜치 격리, main 머지는 별 결단.**
 
-### 1. chat Claude Opus 핑퐁 → 아키텍처 옵션 결단 ⭐
-- **왜**: 본 세션 6번째 산출 = `idea_memo/2026-05-23-architecture-evaluation-by-claude-code.md` (3 옵션 trade-off + 추천 = 옵션 3 단계적 접근). chat Opus 가 v3.0 설계서 (16 페르소나) 와의 충돌 검증 + 미해결 질문 5건 응답
-- **방식**: 사용자가 메모를 chat Claude Opus 에 전달 → 핑퐁 응답 받음 → 다음 세션 시작 시 옵션 확정 (옵션 1·2·3 또는 v3.0 부분 적용)
-- **사용자 모델 제약**: Opus API 키 없음. PoC 의 임원 LLM = **Gemini 2.5 Pro / Flash** (메모리 `feedback_llm_tier_strategy`)
-- **예상 산출**: chat Opus 응답 → 다음 세션 wrap-up 에서 결단 메모
+### 1. Flash 라벨 스크러버 + webapp 임원 토글 ⭐
+- **왜**: Flash 가 코드 라벨 (sweet/overheated/RS/S-Score/buy_score) 을 본문에 잔존 누출 — doctrine 만으론 모델 능력 한계. 결정론 후처리(label_dictionary 치환)면 모델 무관 production-clean. + 시연 가능 단위가 되려면 webapp 노출 필요
+- **범위**: `core/executive/` 출력 후처리 스크러버 + `webapp/.../page.tsx` executive_mode 토글 (Pro/Flash 선택) + SSE formatted 이벤트 분기 (SPEC SLOT S6)
+- **예상 산출**: Flash 라벨 누출 0 + webapp 실 채팅에서 임원 답변 체감
 
-### 2. PoC SPEC 신설 + 브랜치 생성 (옵션 결단 직후) ✨
-- **왜**: 사용자 명시 "이 다음에 하이브리드 poc를 해보고 싶은데 아마도 이건 별도 feature 브랜치 따서 Poc 해봐야할 것 같아". main 안전성 보호 + PoC 격리
-- **흐름**: `git checkout -b feature/hybrid-executive-poc` → SPEC 신설 (`docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001-hybrid-executive-llm.md`, PoC scope 만 명시) → 최소 PoC 구현 (**[최우선] 임원 페르소나 doctrine 설계** + 임원 페르소나 1개 + Track A 만 + 005930 smoke + **prism 응답 7 패턴 시연**)
-- **⭐ PoC 핵심 = 임원 doctrine 의 질** (prism `/signal` § 2.6 교훈): 양식 갖추기는 쉬움, 승부는 doctrine. 두 축 = (a) 사용자 framework (박종훈·WAVE-ALPHA·7계명·변곡점 3 케이스) 흡수 (b) 9 분석가 정량 anchor + cited grounding 으로 환각 가드. prism 의 "얕은 거시 교과서 + 환각" 을 넘는 게 검증 목표
-- **검증 기준**: prism 005930 응답과 1:1 비교 (사용자 평가 "위 수준 이상" 받으면 옵션 2 확정). 7 패턴 = 5-layer chain / 시나리오 3 / 솔직 톤 / 상황별 가중치 통합 / 컨텍스트 이어짐 / 수혜·피해 매트릭스 / 과거 사례 인용
-- **결정 시점**: PoC 결과 → main 머지 (성공) or 폐기·learnings 메모 (실패)
-- **모델 제약**: Opus API 키 없음 → 임원 LLM = Gemini Pro / 9 분석가 = Gemini Flash
-- **예상 산출**: feature 브랜치 + SPEC + 임원 페르소나 1개 + smoke 결과 (prism 1:1 비교 표)
+### 2. Pro 발동 라우팅(SLOT S7) + 다종목 검증
+- **왜**: 하이브리드 "주요 트리거/이벤트만 Pro" 판정 기준 미확정 (사용자 "추후 검토"). + doctrine 견고성을 005930 외 종목으로 확인 필요
+- **범위**: Pro override 트리거 규칙 설계 + 중소형·테마·거시 변곡점 종목 smoke (박종훈 변곡점 분기가 실제 발동하는 케이스 1개 확인)
+- **예상 산출**: Pro 라우팅 규칙 + 다종목 비교 표
 
-### 3. (PoC 결과 따라) INFRA-SCORE-INPUTS-001 또는 production UX 부분 답변 재평가 ⏸️
-- **왜**: 옵션 2/3 결단 시 9 분석가 페르소나 변경 → INFRA-SCORE-INPUTS-001 의 분석가 input 수요가 달라질 수 있음. 옵션 결단 전 SPEC 진입은 비효율
-- **재평가 시점**: PoC main 머지 후 또는 폐기 결단 후
-- **현재 상태**: 백로그 보류
+### 3. main 머지 결단 → INFRA-SCORE-INPUTS-001 재개 ⏸️
+- **왜**: PoC 채택 시 main 머지 + 9 분석가 cited 자연어 슬림화(풀 PoC, SLOT S5). 이후 원인 1(데이터 미배선) 해소로
+- **범위**: 사용자 main 머지 결단 → `INFRA-SCORE-INPUTS-001` (F/S/buy/T-Score input collector, ~5 세션)
+- **현재 상태**: PoC 시연(Top 1) 후 결단
 
 (추가 백로그: **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
