@@ -9,20 +9,21 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **하이브리드 임원 종합 레이어 PoC 완료 — 옵션 2 가설 확정 ✨ (2026-05-29)**. production UX 품질 병목 = 종합 레이어("압축기 + 점수 문지기")로 진단 (데이터 아님 — stock_analyst 혼자 풍부한 신호 내도 전략가 기계적 wait + formatter 앵무새). `feature/hybrid-executive-poc` 브랜치에 투자 총괄 임원(`agents/executive/`) + 종합 모듈(`core/executive/synthesize.py`) 구현. 005930 라이브 smoke = 같은 부분 데이터로 임원(Pro)이 prism 수준 답 산출(전략가 wait 탈출·가격 환각 0·잘림 0). **main 무변경 — 머지는 별 결단.**
+**현재 위치**: **하이브리드 임원 PoC main 정식 승격 + INFRA-SCORE-INPUTS-001 SPEC 작성 ✨ (2026-05-30)**. `feature/hybrid-executive-poc` → **main FF 머지 + push 완료** (8커밋, +2188/-61). 이제 main 이 임원 종합 레이어(`agents/executive/` + `core/executive/synthesize.py`) + Flash 스크러버 + prism v2.13.0 을 정식 보유. 이어서 "데이터 미배선" 해소 시작 = INFRA-SCORE-INPUTS-001 SPEC draft 작성 (T/F-Score 원시 지표 배선, 코드 구현은 다음 세션).
 
-**본 세션 산출 (1 코드 commit `c55be19` + 1 wrap-up commit)**:
-- **임원 doctrine + 종합 모듈** = `agents/executive/{persona.md, manifest.yaml}` (prism 7 패턴 + 박종훈 변곡점 전용 + 환각 가드) + `core/executive/synthesize.py` (canon 주입·label 사전·mock_fallback False·model override) + `server/api/production_chat.py` (executive_mode A/B 플래그) + `docs/specs/ARCHITECTURE-HYBRID-EXECUTIVE-001` + 단위 10.
-- **모델 전략 = 하이브리드** = `executive_synthesis` area 기본 BALANCED(Flash, 무료 1,500/일), Pro(deep)는 주요 트리거만 model override. `core/llm/client.py` gemini thinking 토큰 cost 포함(정확화).
-- **검증**: pytest **610 → 620** (+10, 회귀 0). validate.py 0 errors.
+**본 세션 산출 (머지 push `389fd98` + SPEC + wrap-up commit)**:
+- **main 머지** = 잡티 빈 파일 제거(`389fd98`) + FF 머지 + push. PoC 정식 승격.
+- **INFRA-SCORE-INPUTS-001 SPEC** = `docs/specs/INFRA-SCORE-INPUTS-001-tf-score-raw-indicators.md` (draft). MVP=T+F / SCREEN-RS 분리 / 직관축 2-Stage SLOT / generates `collectors/technicals.py`·`flow_inputs.py`·`config/score_inputs.yaml`·run_analyst hook(α mirror).
+- **검증**: pytest **629 passed** (회귀 0). validate.py 0 errors.
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **prism v2.13.0 매도 결함 = 분석가-전략가 정합 문제** (2026-05-29 후속 세션): 전략가 SPEC(STRATEGY-TRACK-001) 은 이미 prism 급(+5% 활성화·종가 -7%·regime 폭·래칫). 진짜 결함 = trader 페르소나가 모순되는 "일중 고가 -2% trailing"(intraday wick) 발행. → trader 종가 기준 봉합 + STRATEGY-TRACK v2(종가 명시+let-winners-run) + ANALYST-PERSONAS v3. RS·과열도 스크리닝(SCREEN-RS-EXTENSION-001) = SPEC 작성·구현 보류(트레이딩부 때). = `project_prism_insight_borrowing` § v2.13.0.
-- **옵션 2(하이브리드 임원) 확정**: 분석가 분리 유지 + 종합 레이어를 "점수 합산" → "doctrine 통합 추론 임원"으로 교체. 같은 데이터로 임원이 prism 수준 도달 = 병목은 데이터가 아니라 종합. (단 데이터 배선 INFRA-SCORE-INPUTS-001은 그대로 = 별 작업.)
-- **박종훈 거시 framework = 변곡점 전용** (사용자 명시 재확인): 평상시 트레이딩 응답엔 비인용(과보수화·매매 마비 방지). 임원 기본 렌즈 = WAVE-ALPHA α + 7계명 + 상황별 가중치 + regime. = `feedback_park_jonghoon_scope`.
-- **LLM tier = 하이브리드 + 비용 의식**: 기본 Flash(싸고 1,500/일), Pro는 50/일·~24배라 주요 트리거만. 임원 환각 가드 핵심 = 가격 등 수치는 입력 anchor에서만(지어내기 금지). Flash 코드 라벨 잔존 누출은 결정론 후처리 스크러버로 해소(백로그).
+- **점수 collapse 게이트키핑 금지 → advisory 강등** (사용자 직관 "정량 매기면 LLM 고차원 기회 X" + prism repo 확인 + 임원 PoC): 결정론 점수를 고정 가중 collapse 해 매수/관망 가르지 말 것. collector=원시 지표 결정론 계산 → md 주입 → **LLM 종합(판단=권위)**. 기존 `t_score`/`f_score` collapse 함수는 삭제 X, **advisory 베이스라인 강등**(참고선·override 가능·백테스팅 base). 단 스크리닝·트리거·α 권위 지표는 결정론 유지. = `feedback_score_collapse_advisory`. ANALYST-PERSONAS-001 옵션 b 의 T/F 한정 정련.
+- **INFRA-SCORE-INPUTS-001 = T/F MVP + SCREEN-RS 분리**: rs 축(S-Score)·L 축(buy_score)은 SCREEN-RS 담당(겹침 0), T/F 원시 지표는 본 SPEC. = `f-s-buy-t-score-input-collectors` 갱신본.
 
-**직전 세션 판단 (2026-05-23)**: production 경로 silent mock fallback 금지(`mock_fallback_allowed` flag) / principle_guardian advisory vs execution frame 분리(advisory_warning 비차단). 둘 다 코드 반영됨.
+**직전 세션 판단 (2026-05-29)**:
+- **옵션 2(하이브리드 임원) 확정**: 종합 레이어를 "점수 합산"→"doctrine 통합 추론 임원". 같은 데이터로 prism 수준 = 병목은 데이터 아닌 종합. (이번 세션 main 승격.)
+- **LLM tier = 하이브리드 + 비용 의식**: 기본 Flash(1,500/일), Pro(50/일·~24배)는 주요 트리거만. 임원 환각 가드 = 수치는 입력 anchor 에서만. Flash 코드 라벨은 결정론 스크러버로 해소(완료). = `feedback_llm_tier_strategy`.
+- **prism v2.13.0 매도 결함 = 분석가-전략가 정합 문제**: trader 종가 기준 봉합 + STRATEGY-TRACK v2 + ANALYST-PERSONAS v3. SCREEN-RS-EXTENSION-001 SPEC 작성·구현 보류. = `project_prism_insight_borrowing`.
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -46,33 +47,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: **데이터 인프라 빈공간** = F/S/buy/T-Score input collector 부재 (`INFRA-SCORE-INPUTS-001`, ~5 세션 — PoC 가 '종합이 병목'임을 증명했으나 데이터 배선은 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: **INFRA-SCORE-INPUTS-001 코드 미구현** (✅ 2026-05-30 SPEC draft 작성, T/F MVP — collector·hook·config·tests 구현은 다음 세션) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
 
-**마지막 작업일**: 2026-05-29 (prism v2.13.0 차용 — 매도 종가 기준 봉합 + RS·과열도 스크리닝 SPEC)
-**마지막 세션 로그**: [2026-05-29_prism-v2130-borrowing.md](c_worked/2026-05-29_prism-v2130-borrowing.md). 직전 = [2026-05-29_hybrid-executive-poc.md](c_worked/2026-05-29_hybrid-executive-poc.md).
-**산출**: `feature/hybrid-executive-poc` 브랜치 = 투자 총괄 임원(`agents/executive/`) + `core/executive/synthesize.py` + executive_mode A/B + SPEC + smoke + 단위 10. 005930 라이브 smoke로 옵션 2 확정.
-**Git**: 코드 = `c55be19` (feature/hybrid-executive-poc). main 무변경 (PoC 격리, 머지는 별 결단). 2026-05-29 후속 = prism 차용(persona+SPEC 3건) + wrap-up docs 커밋·push (feature 브랜치, main FF skip). **워킹트리에 이전 PoC 후속 코드 변경(synthesize/formatter/production_chat/label_dictionary/page.tsx/test 2건) 미커밋 잔존 — 별도 커밋 대상.**
+**마지막 작업일**: 2026-05-30 (하이브리드 임원 PoC main 승격 머지 + INFRA-SCORE-INPUTS-001 SPEC)
+**마지막 세션 로그**: [2026-05-30_main-merge-and-score-inputs-spec.md](c_worked/2026-05-30_main-merge-and-score-inputs-spec.md). 직전 = [2026-05-29_prism-v2130-borrowing.md](c_worked/2026-05-29_prism-v2130-borrowing.md).
+**산출**: main 정식 승격(임원 레이어+스크러버+prism) + `docs/specs/INFRA-SCORE-INPUTS-001-tf-score-raw-indicators.md` (draft).
+**Git**: **main = `389fd98`** (FF 머지 + push 완료, PoC 승격). 본 wrap-up = SPEC + docs 커밋·push 예정. `feature/hybrid-executive-poc` 브랜치는 main 과 동일 tip (유지/삭제 자유).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 하이브리드 임원 PoC 후속
+## 🎯 다음에 할 일 (Top 3) — INFRA-SCORE-INPUTS 구현 + 임원 후속
 
-우선순위 순. PoC 옵션 2 가설 확정 직후. **PoC 는 `feature/hybrid-executive-poc` 브랜치 격리, main 머지는 별 결단.**
+우선순위 순. main 승격 + SPEC 작성 완료 직후. **SPEC frozen → 코드 구현이 다음 큰 단위.**
 
-### 1. Flash 라벨 스크러버 + webapp 임원 토글 ⭐
-- **왜**: Flash 가 코드 라벨 (sweet/overheated/RS/S-Score/buy_score) 을 본문에 잔존 누출 — doctrine 만으론 모델 능력 한계. 결정론 후처리(label_dictionary 치환)면 모델 무관 production-clean. + 시연 가능 단위가 되려면 webapp 노출 필요
-- **범위**: `core/executive/` 출력 후처리 스크러버 + `webapp/.../page.tsx` executive_mode 토글 (Pro/Flash 선택) + SSE formatted 이벤트 분기 (SPEC SLOT S6)
-- **예상 산출**: Flash 라벨 누출 0 + webapp 실 채팅에서 임원 답변 체감
+### 1. INFRA-SCORE-INPUTS-001 코드 구현 ⭐
+- **왜**: SPEC draft 작성 완료 (T/F MVP, advisory 강등 doctrine). 원시 지표 배선으로 trader·flow_analyzer 가 LLM 고차원 종합할 입력 확보. PoC 가 증명한 "데이터 미배선(원인 1)" 해소 시작
+- **범위**: `collectors/technicals.py`(이격도·MACD·거래량비·R/R) + `collectors/flow_inputs.py`(momentum·inflow_speed·agreement 재사용) + `config/score_inputs.yaml` + `core/inference/run_analyst.py` 2 hook(α mirror) + `core/knowledge/compose.py` 파라미터 + scoring.py raw→축 매핑 helper + tests. SLOT S1(theme_match 2-Stage)·S2(매핑 임계)·S3(R/R 산출)은 위치만
+- **예상 산출**: trader/flow_analyzer 프롬프트에 원시 지표 + advisory 점수 md 블록 주입 (smoke 1종목)
 
 ### 2. Pro 발동 라우팅(SLOT S7) + 다종목 검증
 - **왜**: 하이브리드 "주요 트리거/이벤트만 Pro" 판정 기준 미확정 (사용자 "추후 검토"). + doctrine 견고성을 005930 외 종목으로 확인 필요
 - **범위**: Pro override 트리거 규칙 설계 + 중소형·테마·거시 변곡점 종목 smoke (박종훈 변곡점 분기가 실제 발동하는 케이스 1개 확인)
 - **예상 산출**: Pro 라우팅 규칙 + 다종목 비교 표
 
-### 3. main 머지 결단 → INFRA-SCORE-INPUTS-001 재개 ⏸️
-- **왜**: PoC 채택 시 main 머지 + 9 분석가 cited 자연어 슬림화(풀 PoC, SLOT S5). 이후 원인 1(데이터 미배선) 해소로
-- **범위**: 사용자 main 머지 결단 → `INFRA-SCORE-INPUTS-001` (F/S/buy/T-Score input collector, ~5 세션)
-- **현재 상태**: PoC 시연(Top 1) 후 결단
+### 3. 임원 frame_mode 결정론 배선(SLOT S1)
+- **왜**: Pro "분할 진입" 의견이 7계명·손절선 가드 안에 머무는지 점검 (가드 우회 합리화 차단). advisory 비결정성 하드닝
+- **범위**: 임원 advisory frame_mode 결정론 배선 + 가드 점검 단위
+- **현재 상태**: 임원 PoC main 승격 후 후속 트랙
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
