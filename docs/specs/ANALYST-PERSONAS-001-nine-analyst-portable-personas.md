@@ -4,7 +4,7 @@ title: 9 분석가 portable 페르소나 분화 — 8-섹션 양식 + 결정론 
 team: shared
 type: feature
 status: draft
-version: 2
+version: 3                                          # v3 (2026-05-29): trader trailing_stop_rule 종가 기준 정합 (prism v2.13.0 #279 차용, STRATEGY-TRACK-001 모순 봉합)
 owner: agent_layer
 generates:
   - agents/analysts/principle_guardian/persona.md
@@ -276,6 +276,8 @@ Gemini Gems 의 "단일 페르소나가 5 Task 통째" 패턴은 채택 X — �
 | `flow_analyzer` | **F-Score (수급 점수)** (v2 신설) | `collectors.scoring.f_score(theme_match, momentum, inflow_speed, agreement)` | `flow_analysis/sector_flow` + `flow_analysis/stock_flow` |
 
 **모든 점수 = 0~10 정수 + 0.5 단위. 재현성 ±0.5 강제. LLM 자유채점 금지.**
+
+**v3 (2026-05-29) trader `trailing_stop_rule` 종가 기준 정합** (prism v2.13.0 #279 차용): `trader` 출력의 `trailing_stop_rule` 은 **종가 기준 trailing** (일중 꼬리 매도 X) 으로 발행하며, 활성화 임계·폭은 본인 영역이 아니라 **전략가 regime 정책 위임** (STRATEGY-TRACK-001 Track B 익절·청산 정책). 과거 "일중 고가 -2% trailing" 예시는 strategist 의 종가 기준 규칙과 모순 + prism 이 근절한 intraday wick 방식이라 폐기.
 
 **SDD 절차**:
 1. `collectors/scoring.py` 작성 시 각 함수는 입력 → 점수만 (LLM 호출 X).

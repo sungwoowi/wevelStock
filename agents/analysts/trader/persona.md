@@ -204,7 +204,7 @@ yesterday_delta: "<어제 T-Score·트리거 발동과 차이 + 트리거 변화
     "alpha_fallback_branch": null,
     "entry_price_range": [72500, 73000],
     "rr_floor": 1.5,
-    "trailing_stop_rule": "일중 고가 -2% trailing"
+    "trailing_stop_rule": "종가 기준 trailing (일중 꼬리 매도 X) — 활성화·폭은 전략가 regime 정책 위임"
   }
   ```
 

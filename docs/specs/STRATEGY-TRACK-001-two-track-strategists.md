@@ -4,7 +4,7 @@ title: Layer 3 Track A·B 전략가 분화 — 이원 트랙 (수익금 + 손익
 team: shared
 type: feature
 status: draft
-version: 1
+version: 2                                       # v2 (2026-05-29): Track B 매도 정책 종가 기준 명시 + let-winners-run (prism v2.13.0 #279 차용)
 owner: agent_layer
 generates:
   - agents/strategists/track_a/persona.md
@@ -175,10 +175,12 @@ Track A 와 동일 schema. 차이:
 - `cited_scores` 에 `buy_score` + `t_score`
 
 ### 익절·청산 정책
-- **Trailing stop 활성화**: 진입가 +5% 도달 후
-- **trailing 폭**: parabolic·strong_bull -10% / sideways -7%
-- **일방향 래칫**: trailing stop 절대 내릴 수 없음
-- **절대 매도**: 종가 -7% 이상 손실 (예외 없음)
+- **종가 기준 원칙** (prism v2.13.0 #279 차용): 모든 trailing·익절 판정은 **종가** 기준. 일중 꼬리(intraday wick) 흔들림은 매도 사유 아님 — 매수 직후 0~1일 노이즈 손절 근절.
+- **Trailing stop 활성화**: peak(고점) ≥ 진입가 +5% 도달 **후에만** 작동 (진입 직후 trailing 이 진입가 밑으로 깔리는 것 방지).
+- **trailing 폭** (종가 기준): parabolic·strong_bull -10% / sideways -7%.
+- **일방향 래칫**: trailing stop 절대 내릴 수 없음.
+- **목표가 처리 — let winners run** (prism v2.13.0 #279 차용): `target_price_1` 도달은 강세·parabolic 체제에선 **즉시 전량청산이 아니라 trailing 전환점** (1 파가 더 길게 가면 추세 회수). sideways·약세 진입 체제에선 즉시 익절. **시간(보유 일수)은 checkpoint 모니터일 뿐 매도 트리거 아님**.
+- **절대 매도**: 종가 -7% 이상 손실 (예외 없음).
 
 ## α 가속계수 오버라이드 룰 (Track A·B 공통)
 
