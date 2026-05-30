@@ -41,7 +41,38 @@ flow:
   # 시총 정규화 자금 유입 속도 = 외인+기관 60일 순매수액 / 시총 * 10000 (bp).
   inflow_speed:
     breakpoints: [[-50.0, 1.0], [0.0, 5.0], [50.0, 8.0], [150.0, 10.0]]
+  # theme_match (SLOT S1, 2-Stage) — 권위 주체 net / (5주체 abs 합 +1) = -1..+1 → 0~10.
+  # ⚠️ placeholder (SLOT S2 production 분포 튜닝). momentum 곡선 재사용.
+  theme_match:
+    breakpoints: [[-1.0, 1.0], [-0.3, 4.0], [0.0, 5.0], [0.3, 7.0], [1.0, 9.0]]
+  # 테마 → 권위 주체 매핑 (SLOT S1/S8 초안). 주체 짧은 이름 = foreign/institution/individual/
+  # financial_inv/pension. ⚠️ 운용 데이터 누적 후 사용자·회고분석가 합의로 갱신 (watchdog 즉시 반영).
+  theme_authority:
+    AI_semiconductor: [foreign, institution]
+    semiconductor: [foreign, institution]
+    cosmetics: [foreign]
+    defense_nuclear: [pension, institution]
+    automotive: [foreign, institution]
+    secondary_battery: [foreign, institution]
+    bio: [institution, individual]
+    shipbuilding: [foreign, institution]
+    robotics: [institution]
+    kosdaq_theme: [individual]
+  # 테마 taxonomy — key + 한국어 라벨 (LLM Stage 2 분류 후보). theme_authority 와 key 정합 유지.
+  theme_taxonomy:
+    AI_semiconductor: "AI·반도체"
+    semiconductor: "반도체"
+    cosmetics: "화장품"
+    defense_nuclear: "방산·원전"
+    automotive: "자동차"
+    secondary_battery: "2차전지"
+    bio: "바이오"
+    shipbuilding: "조선"
+    robotics: "로봇"
+    kosdaq_theme: "코스닥 테마주"
+  # 수동 override (ticker → theme key). 빈 시드 — LLM 오분류 정정 시 사용자가 박음.
+  manual_theme: {}
 
 advisory:
-  # MVP theme_match 직관축 미배선 시 중립값 (SLOT S1 = 2-Stage 하이브리드 후 대체).
+  # theme_match 미해소(taxonomy 부재·LLM 실패·권위 미정의) 시 중립 fallback (SLOT S1).
   theme_match_neutral: 5.0

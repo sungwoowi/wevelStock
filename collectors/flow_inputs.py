@@ -52,6 +52,9 @@ class FlowInputs:
     reasons: list[str] = field(default_factory=list)
     source: str = "db"
     cutoff_date: str | None = None
+    # theme_match (SLOT S1) 분류 메타
+    theme_match_theme: str | None = None
+    theme_match_source: str = "neutral_fallback"  # manual | llm | neutral_fallback
 
 
 def _bps(
@@ -78,11 +81,23 @@ def _row_get(row: Any, key: str) -> int:
     return int(getattr(row, key, 0))
 
 
+def _sum_net(rows: list[Any]) -> dict[str, int]:
+    """5주체 net 합 (백만원). compute + build(theme_match 채점 입력) 공용."""
+    sums = {k: 0 for k in _NET_KEYS}
+    for r in rows:
+        for k in _NET_KEYS:
+            sums[k] += _row_get(r, k)
+    return sums
+
+
 def compute_flow_inputs(
     rows: list[Any],
     *,
     market_cap: float | None = None,
     breakpoints: dict[str, list[tuple[float, float]]] | None = None,
+    theme_match_score: float | None = None,
+    theme_match_theme: str | None = None,
+    theme_match_source: str = "neutral_fallback",
     theme_match_neutral: float = 5.0,
     ticker: str = "",
     market: str = "KOSPI",
@@ -95,14 +110,15 @@ def compute_flow_inputs(
         rows: SupplyRow 또는 dict 리스트 (과거→최신 정순). 5주체 net (백만원).
         market_cap: 시가총액 (백만원). None → inflow_speed 미산출.
         breakpoints: 축 매핑 DI. None → config.
-        theme_match_neutral: theme_match 직관축 미배선 시 중립값 (SLOT S1).
+        theme_match_score: SLOT S1 resolve_theme_match 가 채점한 0~10 (async build 에서 주입).
+            None = 미해소 → theme_match_neutral fallback (순수성 위해 LLM 호출은 build 가 담당).
+        theme_match_theme: 분류된 테마 key (md 표기).
+        theme_match_source: manual | llm | neutral_fallback.
+        theme_match_neutral: theme_match 미해소 시 중립값.
     """
     reasons: list[str] = []
     n = len(rows)
-    sums = {k: 0 for k in _NET_KEYS}
-    for r in rows:
-        for k in _NET_KEYS:
-            sums[k] += _row_get(r, k)
+    sums = _sum_net(rows)
 
     if n == 0:
         reasons.append("수급 60일 데이터 부재")
@@ -111,6 +127,7 @@ def compute_flow_inputs(
             momentum_raw=None, inflow_speed_raw=None, agreement=0.0,
             momentum_score=None, inflow_score=None, theme_match_score=None,
             advisory_f_score=None, reasons=reasons, source=source, cutoff_date=cutoff_date,
+            theme_match_theme=theme_match_theme, theme_match_source=theme_match_source,
         )
 
     # 1) agreement (재사용)
@@ -138,20 +155,28 @@ def compute_flow_inputs(
     # 4) 축 매핑
     momentum_score = _map(momentum_raw, _bps(breakpoints, "momentum"))
     inflow_score = _map(inflow_speed_raw, _bps(breakpoints, "inflow_speed"))
-    theme_match_score = theme_match_neutral
-    reasons.append("theme_match 직관축 미배선 → 중립 (SLOT S1, 2-Stage 하이브리드)")
+
+    # theme_match (SLOT S1) — build 가 resolve_theme_match 로 채점해 주입. None = 미해소 중립.
+    if theme_match_score is None:
+        resolved_theme_match = theme_match_neutral
+        reasons.append("theme_match 미해소 → 중립 (SLOT S1 fallback)")
+    else:
+        resolved_theme_match = theme_match_score
+        label = theme_match_theme or "?"
+        reasons.append(f"theme_match: {label} ({theme_match_source}) → {resolved_theme_match:.1f}")
 
     # 5) advisory f_score (참고선) — SPEC v2 가중 (theme 0.4 + mom 0.3 + inflow 0.2 + agree 0.1)
     mom_axis = momentum_score if momentum_score is not None else 5.0
     inflow_axis = inflow_score if inflow_score is not None else 5.0
-    advisory_f_score = f_score(theme_match_score, mom_axis, inflow_axis, agreement)
+    advisory_f_score = f_score(resolved_theme_match, mom_axis, inflow_axis, agreement)
 
     return FlowInputs(
         ticker=ticker, market=market, actual_days=n, net_sums=sums,
         momentum_raw=momentum_raw, inflow_speed_raw=inflow_speed_raw, agreement=agreement,
         momentum_score=momentum_score, inflow_score=inflow_score,
-        theme_match_score=theme_match_score, advisory_f_score=advisory_f_score,
+        theme_match_score=resolved_theme_match, advisory_f_score=advisory_f_score,
         reasons=reasons, source=source, cutoff_date=cutoff_date,
+        theme_match_theme=theme_match_theme, theme_match_source=theme_match_source,
     )
 
 
@@ -176,9 +201,25 @@ async def build_flow_inputs(
     rows = load_supply_window(market, days=60)
     if cutoff_date:
         rows = [r for r in rows if r.date <= cutoff_date]
+
+    # SLOT S1 — theme_match 해소 (2-Stage LLM). 실패 시 크래시 금지 → 중립 fallback.
+    tm_score: float | None = None
+    tm_theme: str | None = None
+    tm_source = "neutral_fallback"
+    if ticker and ticker.strip():
+        try:
+            from collectors.theme_match import resolve_theme_match
+
+            tm_score, tm_theme, tm_source = await resolve_theme_match(
+                ticker.strip(), _sum_net(rows), cutoff_date=cutoff_date
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("theme_match_resolve_failed", ticker=ticker, error=str(e))
+
     return compute_flow_inputs(
         rows, market_cap=market_cap, ticker=ticker, market=market,
         source=f"db@{cutoff_date}" if cutoff_date else "db", cutoff_date=cutoff_date,
+        theme_match_score=tm_score, theme_match_theme=tm_theme, theme_match_source=tm_source,
     )
 
 
@@ -239,6 +280,12 @@ def render_flow_inputs_md(fi: FlowInputs, *, name: str | None = None) -> str:
         f"| 자금 유입 속도 (시총 정규화 bp) | {_fmt(fi.inflow_speed_raw, 'bp', plus=True) if fi.inflow_speed_raw is not None else 'null'} |"
     )
     lines.append(f"| 5주체 부호 일치도 (agreement) | {fi.agreement:.1f} / 10 |")
+    if fi.theme_match_source == "neutral_fallback":
+        tm_cell = "미해소 → 중립 5.0"
+    else:
+        tm_score = "null" if fi.theme_match_score is None else f"{fi.theme_match_score:.1f}"
+        tm_cell = f"{fi.theme_match_theme or '?'} ({fi.theme_match_source}) → {tm_score} / 10"
+    lines.append(f"| 테마-주체 매칭 (theme_match) | {tm_cell} |")
     lines.append("")
     lines.append("### 60일 누적 5주체 net")
     lines.append("| 주체 | 60일 누적 |")
@@ -252,8 +299,8 @@ def render_flow_inputs_md(fi: FlowInputs, *, name: str | None = None) -> str:
     lines.append("")
     adv = "null" if fi.advisory_f_score is None else f"{fi.advisory_f_score:.1f}"
     lines.append(
-        f"> **advisory F-Score: {adv}** — 참고선일 뿐이며 권위 아님 "
-        f"(theme_match 직관축 미배선=중립). 위 원시 수급 지표로 **본인이 직접 판단**하고 override 가능."
+        f"> **advisory F-Score: {adv}** — 참고선일 뿐이며 권위 아님. "
+        f"위 원시 수급 지표로 **본인이 직접 판단**하고 override 가능."
     )
     if fi.reasons:
         lines.append("")

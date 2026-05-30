@@ -9,9 +9,11 @@ owner: trader, flow_analyzer
 generates:
   - collectors/technicals.py        # T-Score 원시 지표 (이격도·MACD·거래량비·R/R) compute + render_technicals_md (anchors.py 패턴)
   - collectors/flow_inputs.py       # F-Score 원시 지표 (60일 수급 momentum·inflow_speed) compute + render_flow_inputs_md (agreement 은 supply_demand_history 재사용)
-  - config/score_inputs.yaml        # 원시 지표 → 0~10 축 매핑 임계 + advisory 가중 외부화 (하드코딩 금지, watchdog 반영)
+  - collectors/theme_match.py       # SLOT S1 — theme_match 2-Stage 하이브리드 (classify_theme 결정론 후보+LLM+캐싱 / score_theme_match 결정론 / resolve_theme_match). anchors.py 패턴 mirror
+  - config/score_inputs.yaml        # 원시 지표 → 0~10 축 매핑 임계 + advisory 가중 외부화 + flow.theme_authority/taxonomy/manual (하드코딩 금지, watchdog 반영)
   - tests/test_technicals.py        # 결정론 검증 (cutoff_date + 같은 입력 → 같은 출력 ±0)
   - tests/test_flow_inputs.py       # 결정론 검증
+  - tests/test_theme_match.py       # theme_match 2-Stage 검증 (manual/LLM-mock/fallback + score 결정론 + 캐싱)
 modifies:
   - core/inference/run_analyst.py   # _maybe_build_technicals_md (trader) + _maybe_build_flow_inputs_md (flow_analyzer) hook — _maybe_build_alpha_3tf_md mirror
   - core/knowledge/compose.py       # build_pipeline_prompt 에 technicals_md / flow_inputs_md 파라미터 신규 ([5] α block 인접)
@@ -112,7 +114,7 @@ ANALYST-PERSONAS-001 v2 는 "결정론 채점이 권위"(옵션 b)였으나, 본
 - **inflow_speed(자금 유입 속도)**: 순매수 금액 / 시가총액 — 시총 정규화 속도.
 - **agreement(5주체 부호 일치도)**: `supply_demand_history.agreement_score` 재사용 (신설 X).
 
-> **SLOT S1 (theme_match 직관축 — 2-Stage)**: 종목 테마 ↔ 권위 주체 매수 일치도. 결정론 candidate(섹터·테마 태그) + LLM 선택 + llm_call_cache. MVP 는 neutral(5.0) fallback + "직관축 미배선" 명시. (feedback_llm_intuition_distribution)
+> **SLOT S1 (theme_match 직관축 — 2-Stage)** ✅ 구현됨 (2026-05-30, `collectors/theme_match.py`): 종목 테마 ↔ 권위 주체 매수 일치도. classify_theme = manual override → Stage1 결정론 후보(config theme_taxonomy 키) → Stage2 LLM 선택(`llm_call_cache` type='theme_match', TTL 30일, cache_key=`theme|ticker|taxonomy_ver`) → 실패/미분류 시 neutral fallback. score_theme_match = 권위 주체 net/(5주체 abs 합+1) → breakpoints 0~10. 사전 = `config/score_inputs.yaml` flow.theme_authority/taxonomy/manual. **⚠️ MVP 한계: net_sums 가 시장 레벨 프록시 — 종목 레벨 수급 collector 도입 후 입력만 교체(골격 재사용).** (feedback_llm_intuition_distribution)
 <!-- SPEC:INTERVIEW-SLOT role="theme-match-2stage" -->
 
 ## advisory 점수 (collapse — 강등)

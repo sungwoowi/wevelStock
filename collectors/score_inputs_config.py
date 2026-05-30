@@ -90,6 +90,35 @@ def get_rr_rule() -> dict[str, Any]:
     return rule
 
 
+def get_theme_authority() -> dict[str, list[str]]:
+    """테마 → 권위 주체 매핑 (SLOT S1/S8). flow.theme_authority 블록. 부재 시 빈 dict."""
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("flow") or {}).get("theme_authority") or {}
+    out: dict[str, list[str]] = {}
+    for k, v in raw.items():
+        if isinstance(v, list):
+            out[str(k)] = [str(x) for x in v]
+    return out
+
+
+def get_theme_taxonomy() -> dict[str, str]:
+    """테마 key → 한국어 라벨 (LLM Stage 2 분류 후보). flow.theme_taxonomy. 부재 시 빈 dict."""
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("flow") or {}).get("theme_taxonomy") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def get_manual_theme() -> dict[str, str]:
+    """수동 override (ticker → theme key). flow.manual_theme. 부재 시 빈 dict."""
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("flow") or {}).get("manual_theme") or {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
 def get_advisory_constant(key: str, default: float) -> float:
     """advisory 상수 (예: theme_match_neutral). 부재 시 default."""
     cfg = load_score_inputs_config()

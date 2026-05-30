@@ -61,11 +61,23 @@ class TestComputeFlowInputs:
         fi = compute_flow_inputs(rows, market_cap=1_000_000, breakpoints=_BPS)
         assert fi.inflow_speed_raw is not None
 
-    def test_theme_match_neutral_mvp(self) -> None:
-        # MVP theme_match 미배선 → 중립
+    def test_theme_match_unresolved_neutral(self) -> None:
+        # theme_match_score 미주입(None) → 중립 fallback (SLOT S1)
         fi = compute_flow_inputs(_rows_buy_turnaround(), breakpoints=_BPS, theme_match_neutral=5.0)
         assert fi.theme_match_score == 5.0
+        assert fi.theme_match_source == "neutral_fallback"
         assert any("theme" in r.lower() or "테마" in r for r in fi.reasons)
+
+    def test_theme_match_resolved_injected(self) -> None:
+        # build 가 resolve_theme_match 로 채점한 score 주입 → 그대로 반영
+        fi = compute_flow_inputs(
+            _rows_buy_turnaround(), breakpoints=_BPS,
+            theme_match_score=8.0, theme_match_theme="cosmetics", theme_match_source="llm",
+        )
+        assert fi.theme_match_score == 8.0
+        assert fi.theme_match_theme == "cosmetics"
+        assert fi.theme_match_source == "llm"
+        assert any("cosmetics" in r for r in fi.reasons)
 
     def test_advisory_f_score_present(self) -> None:
         fi = compute_flow_inputs(_rows_buy_turnaround(), breakpoints=_BPS)
@@ -94,3 +106,14 @@ class TestRenderFlowInputsMd:
         assert "advisory" in md.lower() or "참고선" in md
         # 일치도 raw 노출
         assert "일치도" in md or "agreement" in md.lower()
+        # theme_match 행 노출
+        assert "theme_match" in md or "테마" in md
+
+    def test_md_shows_resolved_theme(self) -> None:
+        fi = compute_flow_inputs(
+            _rows_buy_turnaround(), breakpoints=_BPS, market="KOSPI",
+            theme_match_score=7.5, theme_match_theme="cosmetics", theme_match_source="llm",
+        )
+        md = render_flow_inputs_md(fi)
+        assert "cosmetics" in md
+        assert "llm" in md
