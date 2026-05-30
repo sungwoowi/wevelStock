@@ -25,6 +25,8 @@ import yaml
 
 from collectors.anchors import alpha_3tf_metadata, compute_alpha_3tf, render_alpha_3tf_md
 from collectors.charts import build_chart_data, render_chart_data_md
+from collectors.flow_inputs import build_flow_inputs, render_flow_inputs_md
+from collectors.technicals import build_technicals, render_technicals_md
 from collectors.fundamentals import get_fundamentals, render_fundamental_data_md
 from collectors.snapshot import MarketSnapshot, build_market_snapshot, render_snapshot_md
 from collectors.supply_demand_history import get_supply_latest_age_days
@@ -85,6 +87,8 @@ class AnalystSpec:
     response_rules: str | None
     reads_chart_data: bool = False  # INFRA-CHART-DATA-001 — stock_analyst 만 True
     reads_fundamental_data: bool = False  # INFRA-FUNDAMENTAL-DATA-001 — stock_analyst 만 True
+    reads_technicals: bool = False  # INFRA-SCORE-INPUTS-001 T-Score — trader 만 True
+    reads_flow_inputs: bool = False  # INFRA-SCORE-INPUTS-001 F-Score — flow_analyzer 만 True
 
 
 @dataclass
@@ -125,6 +129,8 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         response_rules=raw.get("response_rules"),
         reads_chart_data=bool(raw.get("reads_chart_data", False)),
         reads_fundamental_data=bool(raw.get("reads_fundamental_data", False)),
+        reads_technicals=bool(raw.get("reads_technicals", False)),
+        reads_flow_inputs=bool(raw.get("reads_flow_inputs", False)),
     )
 
 
@@ -466,6 +472,85 @@ async def _maybe_build_fundamental_data_md(
     }
 
 
+async def _maybe_build_technicals_md(
+    spec: AnalystSpec, target_ticker: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """INFRA-SCORE-INPUTS-001 — reads_technicals + target_ticker 충족 시 T-Score 원시 지표 md.
+
+    trader 만 활성 (reads_technicals=True). 원시 지표(이격도·MACD·거래량비·R/R)가 권위,
+    advisory T-Score 는 참고선 (LLM override). md=None 이면 metadata 만.
+    """
+    base_meta: dict[str, Any] = {
+        "technicals_failures": [],
+        "technicals_ticker_used": None,
+        "advisory_t_score": None,
+    }
+    if not spec.reads_technicals:
+        return None, base_meta
+    if not target_ticker or not target_ticker.strip():
+        base_meta["technicals_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    resolved_ticker, display_name = resolve_ticker(target_ticker)
+    if resolved_ticker is None:
+        base_meta["technicals_ticker_used"] = target_ticker
+        base_meta["technicals_failures"] = [f"ticker_resolve_failed:{target_ticker}"]
+        return None, base_meta
+
+    try:
+        ti = await build_technicals(resolved_ticker)
+    except Exception as e:  # noqa: BLE001
+        log.warning("technicals_inject_failed", ticker=resolved_ticker, error=str(e))
+        base_meta["technicals_ticker_used"] = resolved_ticker
+        base_meta["technicals_failures"] = [f"build_technicals:{type(e).__name__}"]
+        return None, base_meta
+
+    md = render_technicals_md(ti, name=display_name)
+    return md, {
+        "technicals_failures": list(ti.reasons),
+        "technicals_ticker_used": resolved_ticker,
+        "advisory_t_score": ti.advisory_t_score,
+    }
+
+
+async def _maybe_build_flow_inputs_md(
+    spec: AnalystSpec, target_ticker: str | None
+) -> tuple[str | None, dict[str, Any]]:
+    """INFRA-SCORE-INPUTS-001 — reads_flow_inputs 충족 시 F-Score 원시 수급 지표 md.
+
+    flow_analyzer 만 활성. MVP = 시장 레벨 5주체 60일 수급 (target_ticker 의 시장으로 분기,
+    없으면 KOSPI). 원시 수급 지표가 권위, advisory F-Score 는 참고선.
+    """
+    base_meta: dict[str, Any] = {
+        "flow_inputs_failures": [],
+        "flow_inputs_market": None,
+        "advisory_f_score": None,
+    }
+    if not spec.reads_flow_inputs:
+        return None, base_meta
+
+    market = "KOSPI"
+    if target_ticker and target_ticker.strip():
+        resolved_ticker, _ = resolve_ticker(target_ticker)
+        if resolved_ticker is not None and market_for_ticker(resolved_ticker) == "KQ":
+            market = "KOSDAQ"
+
+    try:
+        fi = await build_flow_inputs(market=market, ticker=target_ticker or "")
+    except Exception as e:  # noqa: BLE001
+        log.warning("flow_inputs_inject_failed", market=market, error=str(e))
+        base_meta["flow_inputs_market"] = market
+        base_meta["flow_inputs_failures"] = [f"build_flow_inputs:{type(e).__name__}"]
+        return None, base_meta
+
+    md = render_flow_inputs_md(fi)
+    return md, {
+        "flow_inputs_failures": list(fi.reasons),
+        "flow_inputs_market": market,
+        "advisory_f_score": fi.advisory_f_score,
+    }
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -514,6 +599,8 @@ async def run_analyst(
     fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
         spec, target_ticker
     )
+    technicals_md, technicals_meta = await _maybe_build_technicals_md(spec, target_ticker)
+    flow_inputs_md, flow_inputs_meta = await _maybe_build_flow_inputs_md(spec, target_ticker)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -528,6 +615,8 @@ async def run_analyst(
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
+        technicals_md=technicals_md,
+        flow_inputs_md=flow_inputs_md,
         response_rules=spec.response_rules,
     )
 
@@ -590,6 +679,8 @@ async def run_analyst(
         **chart_meta,
         **alpha_meta,
         **fundamental_meta,
+        **technicals_meta,
+        **flow_inputs_meta,
     }
 
     log.info(
@@ -649,6 +740,8 @@ async def run_analyst_stream(
     fundamental_data_md, fundamental_meta = await _maybe_build_fundamental_data_md(
         spec, target_ticker
     )
+    technicals_md, technicals_meta = await _maybe_build_technicals_md(spec, target_ticker)
+    flow_inputs_md, flow_inputs_meta = await _maybe_build_flow_inputs_md(spec, target_ticker)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -663,6 +756,8 @@ async def run_analyst_stream(
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
+        technicals_md=technicals_md,
+        flow_inputs_md=flow_inputs_md,
         response_rules=spec.response_rules,
     )
 
@@ -749,6 +844,8 @@ async def run_analyst_stream(
         **chart_meta,
         **alpha_meta,
         **fundamental_meta,
+        **technicals_meta,
+        **flow_inputs_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 

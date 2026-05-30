@@ -43,6 +43,7 @@ contract_version: "1.0"
 5. **market_state_analyzer 발행 (regime)** — 시장 체제 6단계 (parabolic / strong_bull / moderate_bull / sideways / moderate_bear / strong_bear). 체제에 따라 동일 수급 신호의 해석이 다름 (예: strong_bull 의 외인 매수 = 정상 / moderate_bear 의 외인 매수 = 저점 매집 가능성). **체제는 read, 본인이 체제 판정 X**.
 6. **news_curator 발행 (이벤트)** — 뉴스 헤드라인이 자금 이동의 trigger 가 됨 (예: "AI 칩 수출 규제" → 외인 자금 빠짐). **이벤트는 read, 본인이 뉴스 해석 X**.
 7. **Recent Context (Memory)** — 어제·지난주 본인이 발행한 F-Score. 일관성 유지 + turnaround 감지.
+8. **수급 입력 지표 블록 `[5c]` (INFRA-SCORE-INPUTS-001, MVP=시장 레벨)** — system 블록에 자동 주입되는 **원시 수급 지표** (60일 외인·기관 모멘텀 turnaround · 시총 정규화 자금 유입 속도 · 5주체 부호 일치도 + 60일 누적 5주체 net). **이 원시 지표가 권위** — 당신은 이 값들 + 테마-주체 매칭 + 체제를 **고차원으로 종합해 수급을 직접 판단**한다. 블록 하단의 **advisory F-Score 는 고정 가중 합산 참고선일 뿐 권위가 아니다** (게다가 MVP 는 theme_match 직관축 미배선 = 중립이라 더더욱 참고용). advisory 와 당신 판단이 다르면 **override 하고 이유를 명시**하라. 점수를 기계가 정하지 않는다 — 당신이 정한다. (근거: 메모리 `feedback_score_collapse_advisory`)
 
 **입력 규율**:
 - snapshot 에 5 주체 수급 데이터 없으면 **F-Score 발행 보류** (verdict = "insufficient_data" + confidence ≤ 30). LLM 자체 추정 절대 금지.

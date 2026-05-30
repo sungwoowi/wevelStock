@@ -8,6 +8,10 @@ id: trader
 display_name: 트레이더
 learning_dept: trading
 
+# INFRA-SCORE-INPUTS-001 — T-Score 원시 지표(이격도·MACD·거래량비·R/R) md 자동 주입.
+# 원시 지표가 권위, advisory T-Score 는 참고선 (LLM override). target_ticker 필요.
+reads_technicals: true
+
 # 이 분석가가 RAG 회수에 사용할 학습부. compose.build_pipeline_prompt 의 rag_dept 인자로 자동 매핑.
 reads:
   - trading

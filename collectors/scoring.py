@@ -66,6 +66,55 @@ def _validate_unit_score(name: str, value: float) -> None:
         raise ValueError(f"{name} must be in [0, 10], got {value}")
 
 
+# ============================================================
+# raw 지표 → 0~10 축 매핑 (INFRA-SCORE-INPUTS-001 — advisory collapse 입력용)
+# ============================================================
+
+
+def map_to_axis(
+    value: float | None,
+    breakpoints: list[tuple[float, float]],
+) -> float | None:
+    """raw 지표값 → 0~10 축 점수. 구간 선형보간 + [0,10] clamp + 0.5 단위.
+
+    모든 판단(임계·곡선 모양)은 breakpoints(config, SLOT S2)에 위임 — 함수는 보간만.
+    breakpoints 의 y(점수)는 비단조 허용 → V자(적정 이격 최고, 양극단 저점) 표현 가능.
+    advisory collapse 점수(t_score/f_score)의 축 입력 용도 — 권위 X (LLM override).
+
+    Args:
+        value: raw 지표값 (예: 이격도 % / 거래량 배율 / R/R). None 이면 None 전파.
+        breakpoints: (raw_x, score_y) 쌍 리스트. raw_x 오름차순 가정.
+
+    Returns:
+        0~10, 0.5 단위 float. value None → None.
+
+    Raises:
+        ValueError: breakpoints 빈 리스트.
+    """
+    if not breakpoints:
+        raise ValueError("breakpoints must be non-empty")
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+
+    pts = sorted(breakpoints, key=lambda p: p[0])
+    x = float(value)
+    # 범위 밖 → 끝점 clamp
+    if x <= pts[0][0]:
+        return _clamp(_round_to_half(pts[0][1]))
+    if x >= pts[-1][0]:
+        return _clamp(_round_to_half(pts[-1][1]))
+    # 구간 선형보간
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if x0 <= x <= x1:
+            if x1 == x0:
+                return _clamp(_round_to_half(y1))
+            frac = (x - x0) / (x1 - x0)
+            interp = y0 + frac * (y1 - y0)
+            return _clamp(_round_to_half(interp))
+    # 도달 불가 (위 clamp 가 커버)
+    return _clamp(_round_to_half(pts[-1][1]))
+
+
 def s_score(rs: float, supply_chain: float, alignment: float) -> float:
     """주도주 점수 — stock_picker 발행, principles/stock_selection framework 권위.
 
@@ -92,7 +141,12 @@ def t_score(
     rr: float,
     alpha: float,
 ) -> float:
-    """타점 점수 — trader 발행, trading/entry_exit framework 권위.
+    """타점 점수 (advisory 참고선) — trading/entry_exit framework.
+
+    ⚠️ INFRA-SCORE-INPUTS-001 정련 (메모리 feedback_score_collapse_advisory):
+    이 고정 가중 collapse 점수는 **advisory 베이스라인**으로 강등됨 — 게이트키핑 X.
+    권위는 원시 지표(이격도·MACD·거래량비·R/R) + trader LLM 의 고차원 종합이며, trader 는
+    이 값을 override 할 수 있다. 백테스팅·일관성 비교용 결정론 base 로만 유지.
 
     α 가속계수 오버라이드 (STRATEGY-TRACK-001):
         α  < 1.3       → 기본 (4축 균등 평균)
@@ -296,7 +350,12 @@ def f_score(
     inflow_speed: float,
     agreement: float,
 ) -> float:
-    """수급 점수 — flow_analyzer 발행, flow_analysis/sector_flow + stock_flow framework.
+    """수급 점수 (advisory 참고선) — flow_analysis/sector_flow + stock_flow framework.
+
+    ⚠️ INFRA-SCORE-INPUTS-001 정련 (메모리 feedback_score_collapse_advisory):
+    이 고정 가중 collapse 점수는 **advisory 베이스라인**으로 강등됨 — 게이트키핑 X.
+    권위는 원시 수급 지표(60일 모멘텀·자금 속도·5주체 일치도) + flow_analyzer LLM 의 종합이며,
+    flow_analyzer 는 override 할 수 있다. theme_match 직관축은 SLOT S1 (2-Stage) 까지 중립.
 
     SPEC v2 명시 공식:
         F = round(2 × (0.4·theme + 0.3·momentum + 0.2·inflow + 0.1·agreement)) / 2

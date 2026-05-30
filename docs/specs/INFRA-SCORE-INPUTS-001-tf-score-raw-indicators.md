@@ -3,7 +3,7 @@ spec_id: INFRA-SCORE-INPUTS-001
 title: 점수 입력 배선 (T-Score / F-Score 원시 지표) — 결정론 지표 계산 → LLM 고차원 종합. collapse 점수는 advisory 강등
 team: shared
 type: feature
-status: draft
+status: implementing
 version: 1
 owner: trader, flow_analyzer
 generates:

@@ -1,0 +1,37 @@
+# INFRA-SCORE-INPUTS-001 — raw 지표 → 0~10 축 매핑 breakpoints
+#
+# 본질(메모리 feedback_score_collapse_advisory): collector 가 원시 지표를 결정론 계산해
+# LLM 에 주입하고, LLM 이 고차원 종합(판단=권위). 여기 breakpoints 는 *advisory* collapse
+# 점수(t_score/f_score 참고선)의 축 입력 용도일 뿐 — 게이트키핑 X, LLM override 가능.
+#
+# 각 축 breakpoints = (raw_x, score_y) 쌍, raw_x 오름차순. score_y 비단조 허용(V자).
+# scoring.map_to_axis 가 구간 선형보간 + [0,10] clamp + 0.5 단위.
+#
+# ⚠️ SLOT S2: 아래 값은 placeholder. production 분포 + 백테스팅으로 정정 (watchdog 즉시 반영).
+
+technicals:
+  # 이격도 % = (close - ma20) / ma20 * 100.
+  # 적정 이격(약한 눌림~소폭 위) = 좋은 타점, 과대 이격(±) = 과열/이탈 → 저점 (V자).
+  divergence:
+    breakpoints: [[-20.0, 2.0], [-8.0, 6.0], [-2.0, 9.0], [3.0, 8.0], [12.0, 4.0], [25.0, 1.0]]
+  # MACD histogram 정규화 = histogram / close * 1000 (per-mille). 음→양 전환 가점.
+  macd:
+    breakpoints: [[-3.0, 2.0], [-0.5, 4.0], [0.0, 5.0], [0.5, 7.0], [3.0, 9.0]]
+  # 거래량 배율 = today / ma20. 1배 보통, 1.5~3배 건강한 동반, 6배+ 과열.
+  volume:
+    breakpoints: [[0.5, 3.0], [1.0, 5.0], [1.8, 8.0], [3.0, 9.0], [6.0, 4.0]]
+  # R/R 비율 = (목표 - 진입) / (진입 - 손절). 1.5+ 양호, 3+ 우수 (STRATEGY-TRACK-001 floor 1.5).
+  rr:
+    breakpoints: [[0.5, 1.0], [1.5, 6.0], [2.0, 7.5], [3.0, 9.0], [5.0, 10.0]]
+
+flow:
+  # 60일 수급 모멘텀 turnaround, collector 가 -1.0~+1.0 정규화 (직전 30일 대비 최근 30일 부호·가속).
+  momentum:
+    breakpoints: [[-1.0, 1.0], [-0.3, 4.0], [0.0, 5.0], [0.3, 7.0], [1.0, 9.0]]
+  # 시총 정규화 자금 유입 속도 = 외인+기관 60일 순매수액 / 시총 * 10000 (bp).
+  inflow_speed:
+    breakpoints: [[-50.0, 1.0], [0.0, 5.0], [50.0, 8.0], [150.0, 10.0]]
+
+advisory:
+  # MVP theme_match 직관축 미배선 시 중립값 (SLOT S1 = 2-Stage 하이브리드 후 대체).
+  theme_match_neutral: 5.0

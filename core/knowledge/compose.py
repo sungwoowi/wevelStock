@@ -182,6 +182,8 @@ async def build_pipeline_prompt(
     chart_data_md: str | None = None,
     alpha_3tf_md: str | None = None,
     fundamental_data_md: str | None = None,
+    technicals_md: str | None = None,
+    flow_inputs_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
     """Assemble system prompt for a pipeline stage.
@@ -270,6 +272,22 @@ async def build_pipeline_prompt(
             "type": "text",
             "text": fundamental_data_md if fundamental_data_md.lstrip().startswith("##")
                 else f"## Fundamental Data\n{fundamental_data_md}",
+        })
+
+    # [6b] 타점 입력 지표 (not cached — INFRA-SCORE-INPUTS-001 T-Score, trader 한정)
+    if technicals_md:
+        blocks.append({
+            "type": "text",
+            "text": technicals_md if technicals_md.lstrip().startswith("##")
+                else f"## 타점 입력 지표\n{technicals_md}",
+        })
+
+    # [6c] 수급 입력 지표 (not cached — INFRA-SCORE-INPUTS-001 F-Score, flow_analyzer 한정)
+    if flow_inputs_md:
+        blocks.append({
+            "type": "text",
+            "text": flow_inputs_md if flow_inputs_md.lstrip().startswith("##")
+                else f"## 수급 입력 지표\n{flow_inputs_md}",
         })
 
     # [6] RAG chunks (not cached — query-dependent)
