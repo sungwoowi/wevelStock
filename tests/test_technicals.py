@@ -6,9 +6,18 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
+import pandas as pd
 import pytest
 
-from collectors.technicals import compute_technical_inputs, render_technicals_md
+from collectors.anchors import extract_swing_candidates
+from collectors.technicals import (
+    _atr,
+    compute_rr,
+    compute_technical_inputs,
+    render_technicals_md,
+)
 
 # T-Score 매핑 breakpoints (테스트용 명시 — DI)
 _BPS = {
@@ -103,3 +112,104 @@ class TestRenderTechnicalsMd:
         md = render_technicals_md(ti)
         assert isinstance(md, str)
         assert "000660" in md
+
+
+# ---------------------------------------------------------------------------
+# R/R 산출 (SLOT S3 — 스윙+ATR 하이브리드)
+# ---------------------------------------------------------------------------
+
+
+def _df(closes: list[float], *, start: date | None = None) -> pd.DataFrame:
+    """합성 일봉 OHLCV — high/low 는 종가 ±1% (anchors 테스트 패턴 mirror)."""
+    base = start or date(2024, 1, 1)
+    idx = pd.DatetimeIndex([pd.Timestamp(base + timedelta(days=i)) for i in range(len(closes))])
+    return pd.DataFrame(
+        {
+            "open": closes,
+            "high": [c * 1.01 for c in closes],
+            "low": [c * 0.99 for c in closes],
+            "close": closes,
+            "volume": [1_000_000] * len(closes),
+        },
+        index=idx,
+    )
+
+
+def _zigzag_df() -> pd.DataFrame:
+    """뚜렷한 골짜기(~90)·봉우리(~150) 가 중앙에 있는 지그재그 — 스윙 검출 보장."""
+    down = [130 - i * 2 for i in range(21)]      # 130 → 90 (valley)
+    up = [90 + i * 3 for i in range(1, 21)]      # 90 → 147 (peak)
+    tail = [147 - i * 2 for i in range(1, 21)]   # 147 → 109 (current 영역)
+    return _df([float(x) for x in down + up + tail])
+
+
+class TestAtr:
+    def test_atr_positive(self) -> None:
+        atr = _atr(_df([100.0, 102.0, 99.0, 103.0, 101.0]), period=14)
+        assert atr is not None and atr > 0
+
+    def test_atr_too_short_none(self) -> None:
+        assert _atr(_df([100.0]), period=14) is None
+        assert _atr(pd.DataFrame(), period=14) is None
+
+
+class TestComputeRr:
+    def test_swing_clamped_into_atr_band(self) -> None:
+        """스윙저점을 [floor, cap]×ATR risk 밴드로 clamp + 인근 스윙고점 → R/R. 로직 정합."""
+        df = _zigzag_df()
+        entry = 110.0
+        swings = extract_swing_candidates(df, "daily")
+        lows_below = [p for _, p, k in swings if k == "low" and p < entry]
+        highs_above = [p for _, p, k in swings if k == "high" and p > entry]
+        # 픽스처가 실제로 스윙을 제공하는지 보장 (테스트 유의미성)
+        assert lows_below and highs_above
+        atr = _atr(df, 14)
+        lo, hi = entry - 3.0 * atr, entry - 1.5 * atr
+        expected_stop = min(max(max(lows_below), lo), hi)  # clamp
+        expected_target = min(highs_above)
+        expected_rr = round((expected_target - entry) / (entry - expected_stop), 2)
+
+        rr, meta = compute_rr(df, entry, atr_k_floor=1.5, atr_k_cap=3.0, atr_period=14)
+        assert meta["stop"] == pytest.approx(expected_stop)
+        assert meta["target"] == pytest.approx(expected_target)
+        assert rr == expected_rr
+
+    def test_far_swing_capped_to_atr_cap(self) -> None:
+        """수직급등주 모사 — 스윙저점이 cap 보다 멀면 risk 가 cap×ATR 로 제한(폭발 방지)."""
+        df = _zigzag_df()
+        entry = 110.0
+        atr = _atr(df, 14)
+        # 스윙저점(~90)이 cap(110-3×ATR)보다 멀다고 가정 → stop 은 cap 가격으로 제한
+        rr, meta = compute_rr(df, entry, atr_k_floor=1.5, atr_k_cap=3.0)
+        # risk 는 절대 cap×ATR 를 넘지 않는다
+        assert (entry - meta["stop"]) <= 3.0 * atr + 1e-6
+        # 동시에 floor×ATR 미만으로 타이트하지도 않다
+        assert (entry - meta["stop"]) >= 1.5 * atr - 1e-6
+
+    def test_atr_band_when_no_swings(self) -> None:
+        """짧은 df = 스윙 없음 → 손절은 floor risk, 목표는 52주 고가 fallback."""
+        df = _df([100.0, 101.0, 99.0, 102.0, 100.0])
+        entry = 100.0
+        atr = _atr(df, 14)
+        rr, meta = compute_rr(df, entry, fallback_high=130.0, atr_k_floor=1.5, atr_k_cap=3.0)
+        assert meta["stop"] == pytest.approx(entry - 1.5 * atr)
+        assert meta["target"] == 130.0
+        assert rr == round((130.0 - entry) / (entry - (entry - 1.5 * atr)), 2)
+
+    def test_new_high_no_target_none(self) -> None:
+        """신고가권(목표 저항 부재) → rr None + 정직한 사유."""
+        df = _df([100.0, 101.0, 99.0, 102.0, 100.0])
+        rr, meta = compute_rr(df, 100.0, fallback_high=90.0)  # fallback 이 진입 아래
+        assert rr is None
+        assert "목표" in (meta["reason"] or "")
+
+    def test_no_price_or_empty_none(self) -> None:
+        assert compute_rr(_df([100.0, 101.0]), None)[0] is None
+        assert compute_rr(pd.DataFrame(), 100.0)[0] is None
+
+    def test_deterministic(self) -> None:
+        df = _zigzag_df()
+        a = compute_rr(df, 110.0)
+        b = compute_rr(df, 110.0)
+        assert a[0] == b[0]
+        assert a[1]["stop"] == b[1]["stop"]

@@ -23,6 +23,16 @@ technicals:
   # R/R 비율 = (목표 - 진입) / (진입 - 손절). 1.5+ 양호, 3+ 우수 (STRATEGY-TRACK-001 floor 1.5).
   rr:
     breakpoints: [[0.5, 1.0], [1.5, 6.0], [2.0, 7.5], [3.0, 9.0], [5.0, 10.0]]
+  # R/R 산출 규칙 (SLOT S3 — 스윙+ATR 하이브리드, 사용자 결단 2026-05-30 / risk-cap 2026-05-30).
+  #   진입=현재가, 손절=직전 스윙저점을 [atr_k_floor, atr_k_cap]×ATR risk 밴드로 clamp,
+  #   목표=인근 스윙고점(없으면 52주 고가). 목표 부재(신고가)·risk≤0 → null(정직).
+  #   floor=너무 타이트한 손절(잔파동 털림) 방지, cap=수직급등주 손절 폭발(risk -47%) 방지.
+  #   advisory 참고선일 뿐 — trader/전략가 출력이 권위. ⚠️ production 분포로 floor/cap 튜닝.
+  rr_rule:
+    atr_period: 14          # ATR 평균 기간 (영업일)
+    atr_k_floor: 1.5        # 최소 위험 = 진입 - 1.5×ATR (잔파동 털림 방지)
+    atr_k_cap: 3.0          # 최대 위험 = 진입 - 3.0×ATR (수직급등주 손절 폭발 방지)
+    swing_timeframe: daily  # 스윙 추출 timeframe (anchors.extract_swing_candidates)
 
 flow:
   # 60일 수급 모멘텀 turnaround, collector 가 -1.0~+1.0 정규화 (직전 30일 대비 최근 30일 부호·가속).

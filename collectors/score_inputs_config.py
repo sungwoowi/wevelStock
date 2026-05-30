@@ -59,6 +59,37 @@ def get_breakpoints(group: str, axis: str) -> list[tuple[float, float]]:
     return [(float(x), float(y)) for x, y in raw]
 
 
+_RR_RULE_DEFAULTS: dict[str, Any] = {
+    "atr_period": 14,
+    "atr_k_floor": 1.5,
+    "atr_k_cap": 3.0,
+    "swing_timeframe": "daily",
+}
+
+
+def get_rr_rule() -> dict[str, Any]:
+    """R/R 산출 규칙 파라미터 (SLOT S3). technicals.rr_rule 블록 + 결측 키 default 병합.
+
+    하드코딩 금지(CLAUDE.md #9) — atr_period/atr_k/swing_timeframe 는 config 가 권위.
+    부재·타입 오류 키는 default 로 메움 (collector 가 항상 완전한 dict 수용).
+    """
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("technicals") or {}).get("rr_rule") or {}
+    rule = dict(_RR_RULE_DEFAULTS)
+    for key, default in _RR_RULE_DEFAULTS.items():
+        val = raw.get(key)
+        if val is None:
+            continue
+        if isinstance(default, str):
+            rule[key] = str(val)
+        else:
+            try:
+                rule[key] = type(default)(val)
+            except (TypeError, ValueError):
+                rule[key] = default
+    return rule
+
+
 def get_advisory_constant(key: str, default: float) -> float:
     """advisory 상수 (예: theme_match_neutral). 부재 시 default."""
     cfg = load_score_inputs_config()

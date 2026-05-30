@@ -152,6 +152,107 @@ def compute_technical_inputs(
 
 
 # ---------------------------------------------------------------------------
+# R/R 산출 (SLOT S3 — 스윙+ATR 하이브리드, 사용자 결단 2026-05-30)
+# ---------------------------------------------------------------------------
+
+
+def _atr(ohlcv: pd.DataFrame, period: int = 14) -> float | None:
+    """평균 진폭(ATR) — 최근 period 일 True Range 단순 평균. 데이터 부족 시 None.
+
+    True Range = max(high-low, |high-prev_close|, |low-prev_close|). 변동성 측정자로
+    손절폭 floor 산출에 사용 (스윙저점이 코앞이라 손절이 비현실적으로 좁아지는 것 방지).
+    """
+    if ohlcv is None or len(ohlcv) < 2:
+        return None
+    high, low, close = ohlcv["high"], ohlcv["low"], ohlcv["close"]
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [(high - low), (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1).dropna()
+    if len(tr) == 0:
+        return None
+    window = min(period, len(tr))
+    val = float(tr.tail(window).mean())
+    return val if val > 0 else None
+
+
+def compute_rr(
+    ohlcv: pd.DataFrame,
+    current_price: float | None,
+    *,
+    fallback_high: float | None = None,
+    atr_period: int = 14,
+    atr_k_floor: float = 1.5,
+    atr_k_cap: float = 3.0,
+    swing_timeframe: str = "daily",
+) -> tuple[float | None, dict[str, Any]]:
+    """R/R advisory baseline (롱) — 스윙+ATR 하이브리드. 순수·결정론.
+
+    진입=현재가, 손절=직전 스윙저점을 `[atr_k_floor, atr_k_cap]×ATR` risk 밴드로 clamp
+    (floor=너무 타이트한 손절[잔파동 털림] 방지, cap=수직급등주 손절 폭발[risk -47%] 방지).
+    목표=인근 스윙고점(없으면 52주 고가). 목표 부재(신고가)·risk≤0·reward≤0 → rr=None + 사유.
+
+    Returns:
+        (rr, meta) — rr=R/R 비율(round 2) 또는 None. meta = entry/stop/target/atr/reason 투명성.
+    """
+    meta: dict[str, Any] = {
+        "entry": current_price, "stop": None, "target": None, "atr": None, "reason": None,
+    }
+    if current_price is None or current_price <= 0 or ohlcv is None or len(ohlcv) == 0:
+        meta["reason"] = "현재가 또는 OHLCV 부재"
+        return None, meta
+
+    from collectors.anchors import extract_swing_candidates
+
+    try:
+        swings = extract_swing_candidates(ohlcv, swing_timeframe)
+    except Exception as e:  # noqa: BLE001
+        swings = []
+        meta["reason"] = f"스윙 추출 실패: {e}"
+
+    # 직전 스윙저점 = 진입 아래 중 가장 가까운(=가장 높은 가격) 저점
+    lows_below = [p for _, p, k in swings if k == "low" and p < current_price]
+    swing_low = max(lows_below) if lows_below else None
+    # 인근 스윙고점 = 진입 위 중 가장 가까운(=가장 낮은 가격) 고점
+    highs_above = [p for _, p, k in swings if k == "high" and p > current_price]
+    swing_high = min(highs_above) if highs_above else None
+
+    atr = _atr(ohlcv, atr_period)
+    meta["atr"] = atr
+
+    # 손절 = 스윙저점을 [floor, cap]×ATR risk 밴드로 clamp. ATR 부재 시 스윙저점 그대로.
+    if atr is not None:
+        # 허용 가격 밴드: lo(가장 멈=cap risk) ≤ stop ≤ hi(가장 가까움=floor risk)
+        lo = current_price - atr_k_cap * atr
+        hi = current_price - atr_k_floor * atr
+        if swing_low is not None:
+            stop = min(max(swing_low, lo), hi)
+        else:
+            stop = hi  # 지지선 부재 → floor risk (최소한의 sane 손절)
+    else:
+        stop = swing_low  # ATR 미산출 → 스윙저점 그대로 (clamp 불가)
+
+    # 목표 = 인근 스윙고점 → 없으면 52주 고가 (진입 위일 때만)
+    target = swing_high
+    if target is None and fallback_high is not None and fallback_high > current_price:
+        target = fallback_high
+
+    meta["stop"], meta["target"] = stop, target
+
+    if stop is None:
+        meta["reason"] = "손절 레벨 부재 (스윙저점·ATR 미산출)"
+        return None, meta
+    if target is None:
+        meta["reason"] = "목표 저항 부재 (신고가권 — 상단 열림)"
+        return None, meta
+    risk, reward = current_price - stop, target - current_price
+    if risk <= 0 or reward <= 0:
+        meta["reason"] = "risk 또는 reward ≤ 0"
+        return None, meta
+    return round(reward / risk, 2), meta
+
+
+# ---------------------------------------------------------------------------
 # Async builder — charts DB-first 재사용 (+ cutoff_date 백테스팅)
 # ---------------------------------------------------------------------------
 
@@ -167,9 +268,10 @@ async def build_technicals(
 
     cutoff_date(YYYY-MM-DD) 지정 시 그 시점까지 DB OHLCV 만 사용 (백테스팅 재현).
     미지정 시 charts.build_chart_data (DB-first + KIS fallback + on-demand snapshot).
-    R/R 은 SLOT S3 미배선 → None (advisory 중립). α 는 호출부가 주입 (override 입력).
+    R/R 은 스윙+ATR 하이브리드(SLOT S3)로 산출 (advisory). α 는 호출부가 주입 (override 입력).
     """
     from collectors import charts
+    from collectors.score_inputs_config import get_rr_rule
 
     if cutoff_date:
         df = charts.load_ohlcv_from_db(ticker)
@@ -183,9 +285,23 @@ async def build_technicals(
         indicators = chart.indicators
         price = (chart.snapshot or {}).get("current_price") or indicators.get("current_close")
         source = chart.source
+        # ChartData 는 raw df 미보유 → R/R 스윙·ATR 산출 위해 DB 에서 별도 로드
+        df = charts.load_ohlcv_from_db(ticker)
+
+    rr_rule = get_rr_rule()
+    rr, rr_meta = compute_rr(
+        df, price,
+        fallback_high=(indicators.get("fifty_two_week") or {}).get("high"),
+        atr_period=int(rr_rule["atr_period"]),
+        atr_k_floor=float(rr_rule["atr_k_floor"]),
+        atr_k_cap=float(rr_rule["atr_k_cap"]),
+        swing_timeframe=str(rr_rule["swing_timeframe"]),
+    )
+    if rr is None:
+        log.debug("rr_not_computed", ticker=ticker, reason=rr_meta.get("reason"))
 
     return compute_technical_inputs(
-        indicators, price, alpha=alpha, ticker=ticker, source=source, cutoff_date=cutoff_date,
+        indicators, price, alpha=alpha, rr=rr, ticker=ticker, source=source, cutoff_date=cutoff_date,
     )
 
 
@@ -234,7 +350,7 @@ def render_technicals_md(ti: TechnicalInputs, *, name: str | None = None) -> str
     lines.append(
         f"| 거래량 배율 (20일 이평) | {_fmt(ti.volume_ratio, '×') if ti.volume_ratio is not None else 'null'} |"
     )
-    lines.append(f"| R/R 비율 | {_fmt(ti.rr) if ti.rr is not None else 'null (SLOT S3)'} |")
+    lines.append(f"| R/R 비율 | {_fmt(ti.rr) if ti.rr is not None else 'null (목표·손절 미산출)'} |")
     if ti.alpha is not None:
         lines.append(f"| α 가속계수 | {_fmt(ti.alpha)} |")
     lines.append("")
