@@ -9,16 +9,16 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **하이브리드 임원 PoC main 정식 승격 + INFRA-SCORE-INPUTS-001 SPEC 작성 ✨ (2026-05-30)**. `feature/hybrid-executive-poc` → **main FF 머지 + push 완료** (8커밋, +2188/-61). 이제 main 이 임원 종합 레이어(`agents/executive/` + `core/executive/synthesize.py`) + Flash 스크러버 + prism v2.13.0 을 정식 보유. 이어서 "데이터 미배선" 해소 시작 = INFRA-SCORE-INPUTS-001 SPEC draft 작성 (T/F-Score 원시 지표 배선, 코드 구현은 다음 세션).
+**현재 위치**: **INFRA-SCORE-INPUTS-001 MVP 구현 완료 ✨ (2026-05-30)**. 같은 날: main 승격 머지 → SPEC 작성 → **MVP 코드 구현(T/F-Score 원시 지표 배선)** 까지 한 사이클. trader·flow_analyzer 가 이제 원시 기술·수급 지표를 system 블록으로 받아 **직접 고차원 판단**하고, 기존 collapse 점수는 advisory 참고선으로만 주입. TDD 6 마일스톤, 코드 = `be56c13` (main, push 완료).
 
-**본 세션 산출 (머지 push `389fd98` + SPEC + wrap-up commit)**:
-- **main 머지** = 잡티 빈 파일 제거(`389fd98`) + FF 머지 + push. PoC 정식 승격.
-- **INFRA-SCORE-INPUTS-001 SPEC** = `docs/specs/INFRA-SCORE-INPUTS-001-tf-score-raw-indicators.md` (draft). MVP=T+F / SCREEN-RS 분리 / 직관축 2-Stage SLOT / generates `collectors/technicals.py`·`flow_inputs.py`·`config/score_inputs.yaml`·run_analyst hook(α mirror).
-- **검증**: pytest **629 passed** (회귀 0). validate.py 0 errors.
+**본 세션 산출 (`be56c13` 구현 + wrap-up commit)**:
+- **collector 신규 3** = `collectors/technicals.py`(이격도·MACD·거래량비·R/R) + `flow_inputs.py`(60일 모멘텀·자금속도·agreement 재사용) + `score_inputs_config.py`(config 로더). `scoring.map_to_axis()` 순수 매핑 + `config/score_inputs.yaml`(breakpoints 외부화, SLOT S2).
+- **배선** = `run_analyst` 2 hook(`reads_technicals`/`reads_flow_inputs` 플래그, α 패턴 mirror) + `compose` technicals_md/flow_inputs_md 파라미터([6b]/[6c]) + trader/flow_analyzer persona doctrine("원시 지표 권위, advisory override").
+- **검증**: pytest **629 → 667** (+38, 회귀 0). validate.py 0 errors.
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **점수 collapse 게이트키핑 금지 → advisory 강등** (사용자 직관 "정량 매기면 LLM 고차원 기회 X" + prism repo 확인 + 임원 PoC): 결정론 점수를 고정 가중 collapse 해 매수/관망 가르지 말 것. collector=원시 지표 결정론 계산 → md 주입 → **LLM 종합(판단=권위)**. 기존 `t_score`/`f_score` collapse 함수는 삭제 X, **advisory 베이스라인 강등**(참고선·override 가능·백테스팅 base). 단 스크리닝·트리거·α 권위 지표는 결정론 유지. = `feedback_score_collapse_advisory`. ANALYST-PERSONAS-001 옵션 b 의 T/F 한정 정련.
-- **INFRA-SCORE-INPUTS-001 = T/F MVP + SCREEN-RS 분리**: rs 축(S-Score)·L 축(buy_score)은 SCREEN-RS 담당(겹침 0), T/F 원시 지표는 본 SPEC. = `f-s-buy-t-score-input-collectors` 갱신본.
+- **점수 collapse 게이트키핑 금지 → advisory 강등** (사용자 직관 "정량 매기면 LLM 고차원 기회 X" + prism repo 확인 + 임원 PoC): collector=원시 지표 결정론 계산 → md 주입 → **LLM 종합(판단=권위)**. 기존 `t_score`/`f_score` collapse 는 삭제 X, **advisory 참고선 강등**(override 가능). 단 스크리닝·트리거·α 권위 지표는 결정론 유지. = `feedback_score_collapse_advisory`. **이번 세션에 코드로 구현됨** (technicals/flow_inputs md 주입 + persona doctrine).
+- **새 축 배선 패턴 = α mirror 3단**: compute(순수) / render md / build async + run_analyst hook(manifest 플래그 게이트). 매핑 임계 조정은 `config/score_inputs.yaml` 만 수정(코드 무판단, watchdog).
 
 **직전 세션 판단 (2026-05-29)**:
 - **옵션 2(하이브리드 임원) 확정**: 종합 레이어를 "점수 합산"→"doctrine 통합 추론 임원". 같은 데이터로 prism 수준 = 병목은 데이터 아닌 종합. (이번 세션 main 승격.)
@@ -47,33 +47,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: **INFRA-SCORE-INPUTS-001 코드 미구현** (✅ 2026-05-30 SPEC draft 작성, T/F MVP — collector·hook·config·tests 구현은 다음 세션) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-30 MVP 구현 완료 `be56c13`, pytest 667. **잔여 = SLOT S1 theme_match 2-Stage / S2 매핑 임계 production 튜닝 / S3 R/R 산출 규칙 / 라이브 smoke / buy_score·S-Score 후속 배선**) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐** (커밋 메시지에 "pytest" 단어 있으면 차단 — 훅 정규식을 명령 시작 토큰만 보도록 좁히면 됨, 여유 시) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
 
-**마지막 작업일**: 2026-05-30 (하이브리드 임원 PoC main 승격 머지 + INFRA-SCORE-INPUTS-001 SPEC)
-**마지막 세션 로그**: [2026-05-30_main-merge-and-score-inputs-spec.md](c_worked/2026-05-30_main-merge-and-score-inputs-spec.md). 직전 = [2026-05-29_prism-v2130-borrowing.md](c_worked/2026-05-29_prism-v2130-borrowing.md).
-**산출**: main 정식 승격(임원 레이어+스크러버+prism) + `docs/specs/INFRA-SCORE-INPUTS-001-tf-score-raw-indicators.md` (draft).
-**Git**: **main = `389fd98`** (FF 머지 + push 완료, PoC 승격). 본 wrap-up = SPEC + docs 커밋·push 예정. `feature/hybrid-executive-poc` 브랜치는 main 과 동일 tip (유지/삭제 자유).
+**마지막 작업일**: 2026-05-30 (INFRA-SCORE-INPUTS-001 MVP 구현 — T/F-Score 원시 지표 배선)
+**마지막 세션 로그**: [2026-05-30_score-inputs-impl-2.md](c_worked/2026-05-30_score-inputs-impl-2.md). 직전(같은 날) = [2026-05-30_main-merge-and-score-inputs-spec.md](c_worked/2026-05-30_main-merge-and-score-inputs-spec.md).
+**산출**: `collectors/{technicals,flow_inputs,score_inputs_config}.py` + `scoring.map_to_axis` + `config/score_inputs.yaml` + run_analyst 2 hook + compose 파라미터 + trader/flow_analyzer persona doctrine. SPEC status implementing.
+**Git**: **main = `be56c13`** (구현 + push 완료). 본 wrap-up = docs 커밋·push (main 직접, 솔로 프로젝트). 오늘 main 흐름: `389fd98`(PoC 승격) → `04deff1`(SPEC) → `be56c13`(MVP 구현).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — INFRA-SCORE-INPUTS 구현 + 임원 후속
+## 🎯 다음에 할 일 (Top 3) — INFRA-SCORE-INPUTS 마감 + 임원 후속
 
-우선순위 순. main 승격 + SPEC 작성 완료 직후. **SPEC frozen → 코드 구현이 다음 큰 단위.**
+우선순위 순. MVP 구현 완료 직후. **MVP 배선은 됐고, 라이브 검증 + SLOT 채우기가 다음 단위.**
 
-### 1. INFRA-SCORE-INPUTS-001 코드 구현 ⭐
-- **왜**: SPEC draft 작성 완료 (T/F MVP, advisory 강등 doctrine). 원시 지표 배선으로 trader·flow_analyzer 가 LLM 고차원 종합할 입력 확보. PoC 가 증명한 "데이터 미배선(원인 1)" 해소 시작
-- **범위**: `collectors/technicals.py`(이격도·MACD·거래량비·R/R) + `collectors/flow_inputs.py`(momentum·inflow_speed·agreement 재사용) + `config/score_inputs.yaml` + `core/inference/run_analyst.py` 2 hook(α mirror) + `core/knowledge/compose.py` 파라미터 + scoring.py raw→축 매핑 helper + tests. SLOT S1(theme_match 2-Stage)·S2(매핑 임계)·S3(R/R 산출)은 위치만
-- **예상 산출**: trader/flow_analyzer 프롬프트에 원시 지표 + advisory 점수 md 블록 주입 (smoke 1종목)
+### 1. 라이브 smoke + SLOT S3 (R/R 산출) ⭐
+- **왜**: MVP 배선은 단위·hook 테스트로만 검증. 실제 webapp 에서 원시 지표 주입·advisory override 체감 + R/R 4번째 축 완성 필요 (현재 None=중립, 정직한 placeholder)
+- **범위**: 005930 webapp `swing:` 호출로 [5b]/[5c] 블록 주입 육안 확인 + `collectors/technicals.py` R/R 산출 규칙 1개 구현 (ATR vs 직전 스윙, STRATEGY-TRACK-001 R/R floor 1.5 정합) + `config/score_inputs.yaml` rr breakpoints 정합
+- **예상 산출**: webapp 임원/분석가 응답에 원시 지표 반영 체감 + R/R 실값
 
-### 2. Pro 발동 라우팅(SLOT S7) + 다종목 검증
-- **왜**: 하이브리드 "주요 트리거/이벤트만 Pro" 판정 기준 미확정 (사용자 "추후 검토"). + doctrine 견고성을 005930 외 종목으로 확인 필요
-- **범위**: Pro override 트리거 규칙 설계 + 중소형·테마·거시 변곡점 종목 smoke (박종훈 변곡점 분기가 실제 발동하는 케이스 1개 확인)
-- **예상 산출**: Pro 라우팅 규칙 + 다종목 비교 표
+### 2. SLOT S1 theme_match 2-Stage 하이브리드
+- **왜**: F-Score 최대 가중 축(0.4)이 현재 중립 — theme_match 가 채워져야 수급 점수 변별력. `feedback_llm_intuition_distribution` 패턴 첫 적용
+- **범위**: 종목 테마↔권위 주체 결정론 candidate(섹터·테마 태그) + LLM 선택 + `llm_call_cache` 캐싱 + manual override. `collectors/flow_inputs.py` theme_match 축 배선
+- **예상 산출**: flow_analyzer F-Score 4축 풀 활성
 
-### 3. 임원 frame_mode 결정론 배선(SLOT S1)
-- **왜**: Pro "분할 진입" 의견이 7계명·손절선 가드 안에 머무는지 점검 (가드 우회 합리화 차단). advisory 비결정성 하드닝
-- **범위**: 임원 advisory frame_mode 결정론 배선 + 가드 점검 단위
-- **현재 상태**: 임원 PoC main 승격 후 후속 트랙
+### 3. SLOT S2 매핑 임계 튜닝 + buy_score/S-Score 후속 배선
+- **왜**: `config/score_inputs.yaml` breakpoints 는 placeholder — production 분포로 정정 필요. + 나머지 점수(buy_score 7축, S-Score rs는 SCREEN-RS)도 같은 패턴으로 배선
+- **범위**: 실 분포 수집 후 breakpoints 정정 + `INFRA-SCORE-INPUTS-002`(가칭) 또는 SCREEN-RS-EXTENSION-001 구현
+- **현재 상태**: MVP(T/F) 완료 후 후속
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
