@@ -9,15 +9,20 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **market_breadth KIS 업종지수 소스로 복구 ✨ (2026-05-31)**. RESUME Top 1(KRX 5주체)을 조사하다 **KRX STAT 통계 전체가 Akamai Bot Manager 차단**임을 실증 확정(getJsonData STAT "400 LOGOUT" / OTP→download 403 / MAIN bld만 무방비) → 5주체는 실익≈0이라 포기, 대신 같은 벽에 막혀있던 market_breadth를 **KIS `inquire-index-price`의 `*_issu_cnt`(전체 시장 등락종목수)**로 복구. 라이브 GREEN: KOSPI 206↑/688↓, KOSDAQ 309↑/1392↓ (source=kis_index). pytest 719, 회귀 0.
+**현재 위치**: **S-Score 라이브 배선 완료 ✨ (2026-06-01)**. 5점수 체계(S/T/α/buy/F) 중 S-Score가 마지막 빈칸이었음(collapse 순수 함수만 있고 입력 collector·hook 부재) → 2단계로 닫음. ① **SCREEN-RS-EXTENSION-001 풀세트**(scoring.py 순수 함수 3개 + screening.py rank_candidates + config/screening.yaml) = rs/L 축 결정론 base. ② **S-Score 원시 지표 collector**(screening_inputs.py rs/supply_chain/alignment 3축, flow_inputs 패턴 mirror) + stock_picker run_analyst hook(`[5d]` 블록). 실데이터 smoke 005930: advisory_s_score=8.0, rs=9.0(screening), alignment=10.0. **이제 S·T·α·F 배선 완료, buy_score만 남음.**
 
-**본 세션 산출**:
-- `connectors/kis/client.py` `market_breadth(market)` 신규 + `collectors/market_macro.py` `_fetch_breadth` KIS-index 1순위 재배선(KRX 제거) + `connectors/krx/client.py` market_breadth·BLD_STOCK_INVESTOR **Akamai 폐기 주석**(휴면) + `tests/test_market_macro.py` +5.
-- pykrx add→remove(투자자 STAT 못 뚫고 OHLCV만 네이버 우회=무용). **pytest 714→719, 회귀 0.**
+**본 세션 산출** (커밋 `24cffde` SCREEN-RS + `b39856a` S-Score):
+- `collectors/scoring.py` 순수 함수 3개(`stock_rs_score`/`extension_score`/`screening_score`) + `config/screening.yaml`(regime 6단계 가중치 외부화) + `collectors/screening.py`(`rank_candidates` lazy compute, cutoff_date 백테스팅 친화).
+- `collectors/screening_inputs.py` 신규(3축 + advisory_s_score) + `compose.py` `[6d]` 블록 + `run_analyst.py` `reads_screening` hook(run_analyst·stream 양쪽) + `_leading_pool_tickers`(snapshot 주도주→풀) + manifest `reads_screening: true`.
+- INFRA-SCORE-INPUTS-001 v1→v2 frontmatter 확장(SPEC 매핑 부채 선처리) + SCREEN-RS status draft→implementing + 테스트 +39. **719→758, 회귀 0, validate 0 errors.**
 
-**이번 세션에 굳힌 판단 (영구 권위)**:
-- **KRX `STAT/standard/*`는 Akamai 봇차단 = 영구 불가**: getJsonData STAT(투자자 02303/02401·OHLCV 01701·breadth 04302) 전부 "400 LOGOUT", OTP→download.cmd 403 Akamai, pykrx도 못 뚫음(OHLCV만 네이버 우회), **devtools도 무의미**(Akamai 토큰=브라우저 센서 바인딩). MAIN bld(선물)만 무방비 → 새 KRX 데이터는 MAIN만 가능.
-- **market_breadth = KIS `inquire-index-price` `*_issu_cnt`**(전체 시장 정확값, source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(financial_inv/pension 실익≈0, theme_authority institution 우회 유지).
+**이번 세션에 굳힌 판단**:
+- **새 점수 배선 패턴 = α/flow_inputs mirror 3단**: compute 순수 → build async(graceful fallback) → render_md + run_analyst `_maybe_build_*` hook(manifest `reads_*` 플래그) + compose `[6x]` 블록. S-Score는 풀 필요 → hook이 snapshot 주도주에서 추출.
+- **rs 축 = `stock_rs_score`(풀 percentile, S-Score) / L 축 = `screening_score`(RS+과열도 합성, buy_score)** — 둘 다 `rank_candidates` 한 호출에서. SCREEN-RS SLOT R1/R2/R3 = config/screening.yaml 외부화(production 분포로 튜닝).
+- **pytest_safety hook 오탐 재발**: git here-string 커밋 본문의 "pytest" 단어 → PreToolUse 차단(`884a5b4` 수정은 인용 argv만, heredoc 본문 미처리). 우회=메시지 단어 회피. 근본=hook heredoc 본문도 strip(별 작업).
+
+**직전 세션 판단 (2026-05-31 market_breadth)**:
+- **KRX `STAT/standard/*`는 Akamai 봇차단 = 영구 불가**(getJsonData STAT 전부 "400 LOGOUT", OTP→download 403, pykrx도 OHLCV만 네이버 우회, devtools 무의미). MAIN bld(선물)만 가능. **market_breadth = KIS `inquire-index-price` `*_issu_cnt`**, **종목 5주체 = KIS 3주체 영구 확정**(실익≈0).
 
 **직전 세션 판단 (2026-05-31 SLOT S2)**:
 - **inflow_speed "결함" = floor clamp 압축**(코드 버그 아님): `map_to_axis` `x≤pts[0][0]`→끝점 고정. 새 KIS 금액축 breakpoint는 관측 폭부터(flow_distribution.py) 후 floor 정할 것.
@@ -49,31 +54,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / buy_score·S-Score 후속 배선**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / ~~pytest_safety hook 오탐~~ (✅ 2026-05-31 해소 — 검사 전 따옴표/here-string 인자 제거해 커밋 메시지 안의 "pytest" 단어 무시, 보호 로직 유지) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01 v2 — SCREEN-RS rs/L 토대 + screening_inputs.py 3축, 758) / buy_score 후속 배선(S/I/M cross-agent 경계)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
 
-**마지막 작업일**: 2026-05-31 (KRX 5주체 Akamai 벽 확정 → market_breadth KIS 업종지수 복구)
-**마지막 세션 로그**: [2026-05-31_market-breadth-kis-recovery-5.md](c_worked/2026-05-31_market-breadth-kis-recovery-5.md). 직전 = [2026-05-31_flow-score-s2-tuning-4.md](c_worked/2026-05-31_flow-score-s2-tuning-4.md).
-**산출**: KIS `market_breadth` 신규 + `_fetch_breadth` KIS-index 재배선 + KRX Akamai 폐기 주석 + tests +5. **라이브 GREEN**(KOSPI 206↑/688↓ source=kis_index). pytest 719, 회귀 0.
-**Git**: main 직접 커밋·push (코드 feat + wrap-up docs, 솔로 프로젝트).
+**마지막 작업일**: 2026-06-01 (S-Score 라이브 배선 — SCREEN-RS 토대 + 원시 지표 collector)
+**마지막 세션 로그**: [2026-06-01_s-score-wiring-screen-rs.md](c_worked/2026-06-01_s-score-wiring-screen-rs.md). 직전 = [2026-05-31_market-breadth-kis-recovery-5.md](c_worked/2026-05-31_market-breadth-kis-recovery-5.md).
+**산출**: scoring.py 순수 함수 3개 + screening.py `rank_candidates` + config/screening.yaml + screening_inputs.py 3축 + run_analyst `reads_screening` hook + manifest. 실데이터 smoke 005930 advisory_s_score=8.0. **719→758, 회귀 0, validate 0 errors.**
+**Git**: main 직접 커밋(`24cffde`+`b39856a`+wrap-up docs)·push (코드 feat + wrap-up docs, 솔로 프로젝트).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — buy/S-Score 배선 + breakpoint 재튜닝
+## 🎯 다음에 할 일 (Top 3) — buy_score 배선 + S-Score SLOT 정밀화
 
-우선순위 순. market_breadth KIS 복구 완료 직후(KRX 5주체는 Akamai 종결). **다음 = 점수 체계 완성.**
+우선순위 순. S-Score 배선 완료 직후. **5점수 중 buy_score만 남음 = 점수 체계 마지막 1칸.**
 
-### 1. buy_score·S-Score 후속 배선 ⭐
-- **왜**: F/T-Score 인프라는 라이브까지 도달, buy_score(stock_picker)·S-Score 는 아직 미배선. scoring.py 정식 가중치(SLOT S7)와 함께
-- **범위**: `collectors/scoring.py` s_score·buy_score 순수 함수 + SCREEN-RS-EXTENSION-001(rs 축, prism #289 draft) 같이 + run_analyst hook
-- **예상 산출**: 5점수 체계 완전 (S/T/α/buy/F) 라이브
+### 1. buy_score CAN SLIM 7축 배선 ⭐
+- **왜**: 5점수(S/T/α/buy/F) 중 마지막. S·T·α·F 배선 완료, buy_score만 미배선
+- **범위**: `collectors/screening_inputs.py` 확장 또는 buy_score_inputs 신설. C/A(EPS=fundamentals)·N(52주신고가)·L(SCREEN-RS) 자체 산출 + **S/I/M cross-agent 경계 결정**(inline 재계산 vs team_outputs DB read, CLAUDE.md 절대원칙 1) + run_analyst hook + manifest `reads_buyscore`
+- **예상 산출**: 5점수 체계 완전 라이브
 
-### 2. F-Score breakpoint 운용 재튜닝 (누적 후)
+### 2. S-Score SLOT 정밀화 + RS production 튜닝
+- **왜**: 이번 배선은 supply_chain=MVP 중립 / RS percentile·k·regime 가중치 placeholder. 라이브 분포로 정합 필요
+- **범위**: `screening_inputs.py` supply_chain theme/sector 매핑(중립 탈피) + alignment weekly/monthly 위계 정밀 + `config/screening.yaml` R1/R2/R3 production 분포 튜닝(`scripts/flow_distribution.py` 같은 진단)
+- **예상 산출**: S-Score 3축 실측화 + RS 캘리브레이션
+
+### 3. F-Score breakpoint 운용 재튜닝 (누적 후)
 - **왜**: 직전 S2는 13종 1일 스냅샷 1차 캘리브레이션. 앵커·floor는 robust하나 중간점은 다일·다종목 누적 후 수렴 필요
 - **범위**: `scripts/flow_distribution.py` 재실행으로 분포 재수집 → flow 3축 중간점 정밀화 (회고분석가 합의, watchdog 즉시 반영)
 - **예상 산출**: F-Score 캘리브레이션 시계열 검증
-
-### 3. KIS/KRX 날짜 정합 점검
-- **왜**: 시스템 날짜 2026-05-31이 실제 KRX 날짜(MAIN bld가 20260529 실데이터)임을 이번에 확인 — KIS 모의계좌가 sim 미래일 수 있어 snapshot/breadth 시점 혼선 가능
 - **범위**: KIS(모의?) vs KRX 실날짜 비교 → snapshot/breadth/수급 시점 일관성 확인, 필요 시 시점 라벨 보정
 - **예상 산출**: 5-Layer 단방향 시점 정합 확인
 
