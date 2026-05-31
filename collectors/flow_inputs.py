@@ -192,33 +192,63 @@ async def build_flow_inputs(
     cutoff_date: str | None = None,
     ticker: str = "",
 ) -> FlowInputs:
-    """supply_demand_history 60일 로드 → F-Score 원시 지표.
+    """F-Score 원시 지표 — 종목 레벨 수급 우선(INFRA-STOCK-SUPPLY-001), 미가용 시 시장 프록시.
 
-    MVP = 시장 레벨. cutoff_date 지정 시 그 시점까지만 (백테스팅).
+    ticker 지정 시 stock_supply_history(KRX) 종목 수급 + 종목 시총 사용 → F-Score 세 축 실측.
+    종목 수급 미가용(KRX 실패·신규·미장) 시 시장 supply_demand_history 로 graceful fallback.
+    cutoff_date 지정 시 live fetch X (백테스팅 재현).
     """
     from collectors.supply_demand_history import load_supply_window
 
-    rows = load_supply_window(market, days=60)
-    if cutoff_date:
-        rows = [r for r in rows if r.date <= cutoff_date]
+    ticker_s = (ticker or "").strip()
+    rows: list[Any] = []
+    source = ""
+    resolved_cap = market_cap
 
-    # SLOT S1 — theme_match 해소 (2-Stage LLM). 실패 시 크래시 금지 → 중립 fallback.
+    # 1) 종목 레벨 우선 (INFRA-STOCK-SUPPLY-001)
+    if ticker_s:
+        try:
+            from collectors.stock_supply import (
+                ensure_stock_supply_series,
+                get_stock_market_cap,
+            )
+
+            stock_rows = await ensure_stock_supply_series(ticker_s, cutoff_date=cutoff_date)
+            if stock_rows:
+                rows = stock_rows
+                source = f"stock_krx@{cutoff_date}" if cutoff_date else "stock_krx"
+                if resolved_cap is None and not cutoff_date:
+                    resolved_cap = await get_stock_market_cap(ticker_s)
+        except Exception as e:  # noqa: BLE001 — 미가용 시 시장 프록시로 graceful fallback
+            log.warning("stock_supply_resolve_failed", ticker=ticker_s, error=str(e))
+
+    # 2) 종목 수급 미가용 → 시장 프록시 fallback
+    if not rows:
+        rows = load_supply_window(market, days=60)
+        if cutoff_date:
+            rows = [r for r in rows if r.date <= cutoff_date]
+        if ticker_s:
+            source = f"market_proxy@{cutoff_date}" if cutoff_date else "market_proxy"
+        else:
+            source = f"db@{cutoff_date}" if cutoff_date else "db"
+
+    # 3) theme_match 해소 (2-Stage LLM, net_sums = 선택된 rows 합). 실패 시 중립 fallback.
     tm_score: float | None = None
     tm_theme: str | None = None
     tm_source = "neutral_fallback"
-    if ticker and ticker.strip():
+    if ticker_s:
         try:
             from collectors.theme_match import resolve_theme_match
 
             tm_score, tm_theme, tm_source = await resolve_theme_match(
-                ticker.strip(), _sum_net(rows), cutoff_date=cutoff_date
+                ticker_s, _sum_net(rows), cutoff_date=cutoff_date
             )
         except Exception as e:  # noqa: BLE001
-            log.warning("theme_match_resolve_failed", ticker=ticker, error=str(e))
+            log.warning("theme_match_resolve_failed", ticker=ticker_s, error=str(e))
 
     return compute_flow_inputs(
-        rows, market_cap=market_cap, ticker=ticker, market=market,
-        source=f"db@{cutoff_date}" if cutoff_date else "db", cutoff_date=cutoff_date,
+        rows, market_cap=resolved_cap, ticker=ticker, market=market,
+        source=source, cutoff_date=cutoff_date,
         theme_match_score=tm_score, theme_match_theme=tm_theme, theme_match_source=tm_source,
     )
 
@@ -263,7 +293,8 @@ def render_flow_inputs_md(fi: FlowInputs, *, name: str | None = None) -> str:
     name_part = f" ({name})" if name else ""
     cutoff = f" | cutoff: {fi.cutoff_date}" if fi.cutoff_date else ""
     lines: list[str] = []
-    lines.append("## [5c] 수급 입력 지표 (INFRA-SCORE-INPUTS-001 · F-Score, 시장 레벨)")
+    _level = "종목 레벨" if str(fi.source).startswith("stock_krx") else "시장 프록시"
+    lines.append(f"## [5c] 수급 입력 지표 (INFRA-SCORE-INPUTS-001 · F-Score, {_level})")
     lines.append("")
     lines.append(
         f"**시장**: {fi.market}{name_part} | **출처**: {fi.source}{cutoff} | "

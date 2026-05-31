@@ -33,6 +33,23 @@ BLD_MARKET_BREADTH = "dbms/MDC/STAT/standard/MDCSTAT04302"
 MKTID_KOSPI = "STK"   # 코스피
 MKTID_KOSDAQ = "KSQ"  # 코스닥
 
+# 개별종목 투자자별 거래실적 (일별추이, 순매수 거래대금) — INFRA-STOCK-SUPPLY-001
+# ⚠️ INTERVIEW-SLOT: 아래 bld+params 는 2026-05-31 smoke 에서 400 Bad Request. 유력 가설 =
+#   isuCd 에 풀 ISIN(KR7005930003) 요구 + bld 일별추이=MDCSTAT02403 + mktId/inqTpCd params.
+#   data.krx.co.kr 개별종목 투자자별 거래실적 페이지 devtools 로 실 POST 검증 필요 (pykrx 참고).
+#   미해소 동안 collector 는 빈 결과 → flow_inputs 시장 프록시 fallback (비차단).
+# 응답 단위는 원(₩) 가정 → 백만원으로 정규화. 컬럼 부재/오류 시 collector 가 시장 프록시 fallback.
+BLD_STOCK_INVESTOR = "dbms/MDC/STAT/standard/MDCSTAT02401"
+# KRX 응답 row 의 (5주체 → 순매수 거래대금 컬럼명) best-guess 맵. smoke 시 정정 지점.
+_STOCK_INVESTOR_COLS = {
+    "foreign_net": "FORN_NETBID_TRDVAL",        # 외국인
+    "institution_net": "ORGN_NETBID_TRDVAL",    # 기관합계
+    "individual_net": "PRSN_NETBID_TRDVAL",     # 개인
+    "financial_inv_net": "FININV_NETBID_TRDVAL",  # 금융투자
+    "pension_net": "PNST_NETBID_TRDVAL",        # 연기금등
+}
+_STOCK_DATE_KEYS = ("TRD_DD", "trd_dd")
+
 
 def _parse_signed_int(s: str) -> int:
     """KRX 응답의 콤마 포함 부호 정수 → int. 빈 값/오류 시 0."""
@@ -42,6 +59,16 @@ def _parse_signed_int(s: str) -> int:
         return int(s.replace(",", "").replace(" ", ""))
     except (ValueError, AttributeError):
         return 0
+
+
+def _krx_date_to_iso(raw: str) -> str | None:
+    """KRX 날짜("2026/05/31" | "20260531" | "2026.05.31") → "2026-05-31". 실패 시 None."""
+    if not raw:
+        return None
+    digits = "".join(ch for ch in str(raw) if ch.isdigit())
+    if len(digits) != 8:
+        return None
+    return f"{digits[0:4]}-{digits[4:6]}-{digits[6:8]}"
 
 
 class KRXClient:
@@ -109,6 +136,56 @@ class KRXClient:
                 result["trade_date"] = row.get("TRD_DD", "")
 
         return result
+
+    async def stock_investor_supply(
+        self, ticker: str, *, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
+        """개별종목 투자자별 순매수 거래대금 일별추이 (5주체). INFRA-STOCK-SUPPLY-001.
+
+        Args:
+            ticker: "005930" (6자리)
+            start_date / end_date: "YYYYMMDD" (KRX 형식)
+
+        Returns:
+            per-date 행 리스트 (정순 보장 X — 호출부 정렬). 각 행:
+            {"date": "2026-05-31", "foreign_net": int(백만원), "institution_net": ...,
+             "individual_net": ..., "financial_inv_net": ..., "pension_net": ...}
+            오류·빈 응답 시 [] (collector 가 시장 프록시 fallback).
+
+        bld·컬럼명은 INTERVIEW-SLOT (production smoke 시 검증). 단위 원→백만원 정규화.
+        """
+        try:
+            data = await self._post_json({
+                "bld": BLD_STOCK_INVESTOR,
+                "isuCd": ticker,
+                "isuCd2": ticker,
+                "strtDd": start_date,
+                "endDd": end_date,
+                "trdVolVal": "2",   # 2 = 거래대금 (1 = 거래량)
+                "askBid": "3",      # 3 = 순매수
+            })
+        except Exception:  # noqa: BLE001 — 네트워크/HTTP 오류 → fallback 위해 빈 결과
+            return []
+
+        rows = data.get("output") or data.get("block1") or []
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            raw_date = ""
+            for k in _STOCK_DATE_KEYS:
+                if row.get(k):
+                    raw_date = str(row[k])
+                    break
+            if not raw_date:
+                continue
+            iso = _krx_date_to_iso(raw_date)
+            if iso is None:
+                continue
+            rec: dict[str, Any] = {"date": iso}
+            for key, col in _STOCK_INVESTOR_COLS.items():
+                won = _parse_signed_int(row.get(col, ""))
+                rec[key] = won // 1_000_000  # 원 → 백만원
+            out.append(rec)
+        return out
 
     async def market_breadth(self, market: str = "KOSPI") -> dict[str, Any]:
         """시장 등락 종목 수 (상승/하락/보합/상한/하한). INFRA-SNAPSHOT-EXTEND-001.

@@ -370,6 +370,25 @@ CREATE TABLE IF NOT EXISTS supply_demand_history (
 CREATE INDEX IF NOT EXISTS idx_supply_history_date ON supply_demand_history(date);
 
 -- ============================================================
+-- v9: 종목 레벨 5주체 수급 — INFRA-STOCK-SUPPLY-001
+-- ============================================================
+-- F-Score 세 축(theme_match·momentum·inflow_speed)을 시장 프록시 → 종목 실측 승급.
+-- KRX 종목별 투자자별 거래실적 (5주체) on-demand 수집. (ticker, date) PK + REPLACE 멱등.
+-- 시장 레벨 supply_demand_history 와 동일 5주체 스키마 (ticker 축만 추가) → 정합.
+CREATE TABLE IF NOT EXISTS stock_supply_history (
+    ticker          TEXT NOT NULL,           -- "005930"
+    date            TEXT NOT NULL,           -- "2026-05-31" (KST)
+    foreign_net     INTEGER NOT NULL,        -- 백만원 (음수 = 순매도)
+    institution_net INTEGER NOT NULL,
+    individual_net  INTEGER NOT NULL,
+    financial_inv_net INTEGER NOT NULL,
+    pension_net     INTEGER NOT NULL,
+    source          TEXT NOT NULL DEFAULT 'krx',
+    PRIMARY KEY (ticker, date)
+);
+CREATE INDEX IF NOT EXISTS idx_stock_supply_ticker_date ON stock_supply_history(ticker, date);
+
+-- ============================================================
 -- manual_anchors (v8) — 사용자 직접 박은 anchor (WAVE-ALPHA-001)
 -- Stage 1+2 (결정론 candidate + LLM Haiku 직관) 보다 우선
 -- ============================================================
@@ -405,3 +424,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (5);
 INSERT OR IGNORE INTO schema_version (version) VALUES (6);
 INSERT OR IGNORE INTO schema_version (version) VALUES (7);
 INSERT OR IGNORE INTO schema_version (version) VALUES (8);
+INSERT OR IGNORE INTO schema_version (version) VALUES (9);

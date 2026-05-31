@@ -80,7 +80,8 @@ collectors/stock_supply.py
 ## 판단 로직 / 엣지 케이스
 
 <!-- SPEC:INTERVIEW-SLOT
-- KRX getJsonData.cmd 종목별 투자자별 거래실적 정확한 bld 코드 + POST params (날짜 range, ISU_CD) + 응답 5주체 컬럼 매핑 + 단위 정규화(원/천원 → 백만원). connectors/krx/client.py 기존 getJsonData helper 재사용.
+- ⚠️ KRX bld 미해소 (2026-05-31 구현 smoke): `MDCSTAT02401` + {isuCd:6자리, strtDd, endDd, trdVolVal, askBid} → **400 Bad Request**. 유력 가설 = (1) KRX 는 `isuCd` 에 **풀 ISIN**(KR7005930003) 요구(6자리 X — ticker→ISIN 매핑 필요) (2) bld 는 일별추이 = `MDCSTAT02403`(기간합계는 02401) (3) params 에 `mktId`(STK/KSQ) + `inqTpCd` 누락. **다음: data.krx.co.kr [개별종목 투자자별 거래실적] 페이지 devtools 로 실 POST 검증** (pykrx 소스 참고 가능). 현재 graceful market_proxy fallback 로 비차단.
+- 응답 5주체 컬럼 매핑(`_STOCK_INVESTOR_COLS`) + 단위 정규화(원→백만원, 현재 //1e6) 도 실 응답으로 정정. connectors/krx/client.py 기존 getJsonData helper 재사용.
 - KRX 5주체 ↔ 시장 테이블 5주체 key 정합 (financial_inv=금융투자, institution=기관계 정의 일치 검증 — KRX 는 금융투자/보험/투신/사모/은행/연기금 등 세분, 5주체로 집계하는 규칙 명시).
 - KIS 단건 market_cap: 기존 market_cap_rank(top-N) 외 단건 시총 조회 API(현재가 시세 inquire-price 의 시총 필드 등) 확정 + 단위(억→백만원) 정규화.
 - 당일 재-fetch 판정: load 결과의 MAX(date) == today_kst 면 today row 만 재요청, 아니면 60일 백필.
