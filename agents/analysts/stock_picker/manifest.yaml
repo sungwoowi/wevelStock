@@ -20,6 +20,10 @@ canon_categories:
   - stock_selection/theme_play            # 테마 분류 + 권위 주체 (S-Score supply_chain 축 권위)
   - stock_selection/swing_candidates      # 1 파 사이클 후보군 (buy_score N·S 축 권위)
 
+# INFRA-SCORE-INPUTS-001 v2 — S-Score 원시 지표 주입 활성 (rs=SCREEN-RS rank / alignment).
+# target_ticker 지정 호출 시 _maybe_build_s_score_inputs_md 가 [5d] 주도주 입력 지표 블록 생성.
+reads_screening: true
+
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 # 결정론 강화 위해 temperature 낮춤 (0.4) — 점수 산출 + verdict 매핑 안정성 우선.
 # max_tokens 4000 → 6000 (2026-05-21 cycle 11 정정) — 격자 + 후보 listing + 자연어 본문 합계

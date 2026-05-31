@@ -26,8 +26,23 @@ def _fake_snapshot() -> MarketSnapshot:
         fetched_at=time.time(),
         fetched_at_iso="2026-05-30T20:00:00+09:00",
         overnight={}, fear_greed={}, kr_indices={}, kr_supply={},
-        kr_futures_supply={}, kr_sectors={}, kr_leading={},
+        kr_futures_supply={}, kr_sectors={},
+        kr_leading={
+            "kospi": [{"ticker": "005930"}, {"ticker": "000660"}],
+            "kosdaq": [{"ticker": "247540"}],
+        },
         failures=[], source_map={}, db_run_ids={},
+    )
+
+
+def _fake_si():
+    from collectors.screening_inputs import ScreeningInputs
+
+    return ScreeningInputs(
+        ticker="005930", rs_return_60d=12.3, pool_size=3,
+        alignment_detail={"monthly_7ma": True, "weekly_stack": True, "daily_stack": True},
+        rs_score=8.5, supply_chain_score=5.0, alignment_score=10.0,
+        advisory_s_score=7.5, reasons=[], source="db", rs_source="screening",
     )
 
 
@@ -127,8 +142,48 @@ async def test_flow_analyzer_injects_flow_inputs_md(monkeypatch: pytest.MonkeyPa
     assert resp.metadata["flow_inputs_market"] == "KOSPI"
 
 
+async def test_stock_picker_injects_s_score_inputs_md(monkeypatch: pytest.MonkeyPatch) -> None:
+    received = {"ticker": None, "pool": None}
+
+    async def _fake_build(*, ticker: str, pool_tickers=None, **_kw: Any):
+        received["ticker"] = ticker
+        received["pool"] = pool_tickers
+        return _fake_si()
+
+    monkeypatch.setattr(ra_mod, "build_s_score_inputs", _fake_build)
+
+    resp = await ra_mod.run_analyst(
+        "stock_picker", [{"role": "user", "content": "삼성전자 주도주?"}], target_ticker="005930",
+    )
+    assert received["ticker"] == "005930"
+    # 풀 = snapshot 주도주 (kospi 2 + kosdaq 1)
+    assert received["pool"] == ["005930", "000660", "247540"]
+    blocks = ra_mod._captured["system"]
+    assert any(b.get("text", "").lstrip().startswith("## [5d] 주도주 입력 지표") for b in blocks)
+    assert resp.metadata["advisory_s_score"] == 7.5
+    assert resp.metadata["screening_ticker_used"] == "005930"
+
+
+async def test_stock_picker_without_ticker_skips(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"n": 0}
+
+    async def _fake_build(**_kw: Any):
+        called["n"] += 1
+        return _fake_si()
+
+    monkeypatch.setattr(ra_mod, "build_s_score_inputs", _fake_build)
+
+    resp = await ra_mod.run_analyst(
+        "stock_picker", [{"role": "user", "content": "주도주 뭐 있어?"}], target_ticker=None,
+    )
+    assert called["n"] == 0
+    blocks = ra_mod._captured["system"]
+    assert not any(b.get("text", "").lstrip().startswith("## [5d]") for b in blocks)
+    assert resp.metadata["screening_failures"] == ["target_ticker_absent"]
+
+
 async def test_other_analyst_no_score_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"t": 0, "f": 0}
+    called = {"t": 0, "f": 0, "s": 0}
 
     async def _ft(ticker: str, **_kw: Any) -> TechnicalInputs:
         called["t"] += 1
@@ -138,13 +193,19 @@ async def test_other_analyst_no_score_inputs(monkeypatch: pytest.MonkeyPatch) ->
         called["f"] += 1
         return _fake_fi()
 
+    async def _fs(**_kw: Any):
+        called["s"] += 1
+        return _fake_si()
+
     monkeypatch.setattr(ra_mod, "build_technicals", _ft)
     monkeypatch.setattr(ra_mod, "build_flow_inputs", _ff)
+    monkeypatch.setattr(ra_mod, "build_s_score_inputs", _fs)
 
     await ra_mod.run_analyst(
         "principle_guardian", [{"role": "user", "content": "7계명"}], target_ticker="005930",
     )
-    assert called["t"] == 0 and called["f"] == 0
+    assert called["t"] == 0 and called["f"] == 0 and called["s"] == 0
     blocks = ra_mod._captured["system"]
     assert not any(b.get("text", "").lstrip().startswith("## [5b]") for b in blocks)
     assert not any(b.get("text", "").lstrip().startswith("## [5c]") for b in blocks)
+    assert not any(b.get("text", "").lstrip().startswith("## [5d]") for b in blocks)

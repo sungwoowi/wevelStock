@@ -26,6 +26,7 @@ import yaml
 from collectors.anchors import alpha_3tf_metadata, compute_alpha_3tf, render_alpha_3tf_md
 from collectors.charts import build_chart_data, render_chart_data_md
 from collectors.flow_inputs import build_flow_inputs, render_flow_inputs_md
+from collectors.screening_inputs import build_s_score_inputs, render_s_score_inputs_md
 from collectors.technicals import build_technicals, render_technicals_md
 from collectors.fundamentals import get_fundamentals, render_fundamental_data_md
 from collectors.snapshot import MarketSnapshot, build_market_snapshot, render_snapshot_md
@@ -89,6 +90,7 @@ class AnalystSpec:
     reads_fundamental_data: bool = False  # INFRA-FUNDAMENTAL-DATA-001 — stock_analyst 만 True
     reads_technicals: bool = False  # INFRA-SCORE-INPUTS-001 T-Score — trader 만 True
     reads_flow_inputs: bool = False  # INFRA-SCORE-INPUTS-001 F-Score — flow_analyzer 만 True
+    reads_screening: bool = False  # INFRA-SCORE-INPUTS-001 v2 S-Score — stock_picker 만 True
 
 
 @dataclass
@@ -131,6 +133,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         reads_fundamental_data=bool(raw.get("reads_fundamental_data", False)),
         reads_technicals=bool(raw.get("reads_technicals", False)),
         reads_flow_inputs=bool(raw.get("reads_flow_inputs", False)),
+        reads_screening=bool(raw.get("reads_screening", False)),
     )
 
 
@@ -551,6 +554,65 @@ async def _maybe_build_flow_inputs_md(
     }
 
 
+def _leading_pool_tickers(snapshot: MarketSnapshot) -> list[str]:
+    """snapshot 주도주(KOSPI+KOSDAQ) → rs 정규화용 후보 풀 ticker 리스트.
+
+    kr_leading = {"kospi": [{ticker, ...}], "kosdaq": [...]}. 부재·에러 시 빈 리스트.
+    """
+    leading = snapshot.kr_leading if isinstance(snapshot.kr_leading, dict) else {}
+    if "error" in leading:
+        return []
+    tickers: list[str] = []
+    for market_key in ("kospi", "kosdaq"):
+        for row in leading.get(market_key) or []:
+            t = str(row.get("ticker") or "").strip()
+            if t:
+                tickers.append(t)
+    return list(dict.fromkeys(tickers))
+
+
+async def _maybe_build_s_score_inputs_md(
+    spec: AnalystSpec, target_ticker: str | None, snapshot: MarketSnapshot
+) -> tuple[str | None, dict[str, Any]]:
+    """INFRA-SCORE-INPUTS-001 v2 — reads_screening + target_ticker 충족 시 S-Score 원시 지표 md.
+
+    stock_picker 만 활성. 원시 지표(rs 후보 풀 정규화·정배열 위계)가 권위,
+    advisory S-Score 는 참고선 (LLM override). 후보 풀 = snapshot 주도주.
+    """
+    base_meta: dict[str, Any] = {
+        "screening_failures": [],
+        "screening_ticker_used": None,
+        "advisory_s_score": None,
+    }
+    if not spec.reads_screening:
+        return None, base_meta
+    if not target_ticker or not target_ticker.strip():
+        base_meta["screening_failures"] = ["target_ticker_absent"]
+        return None, base_meta
+
+    resolved_ticker, display_name = resolve_ticker(target_ticker)
+    if resolved_ticker is None:
+        base_meta["screening_ticker_used"] = target_ticker
+        base_meta["screening_failures"] = [f"ticker_resolve_failed:{target_ticker}"]
+        return None, base_meta
+
+    pool = _leading_pool_tickers(snapshot)
+    try:
+        si = await build_s_score_inputs(ticker=resolved_ticker, pool_tickers=pool)
+    except Exception as e:  # noqa: BLE001
+        log.warning("s_score_inputs_inject_failed", ticker=resolved_ticker, error=str(e))
+        base_meta["screening_ticker_used"] = resolved_ticker
+        base_meta["screening_failures"] = [f"build_s_score_inputs:{type(e).__name__}"]
+        return None, base_meta
+
+    md = render_s_score_inputs_md(si, name=display_name)
+    return md, {
+        "screening_failures": list(si.reasons),
+        "screening_ticker_used": resolved_ticker,
+        "advisory_s_score": si.advisory_s_score,
+    }
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -601,6 +663,9 @@ async def run_analyst(
     )
     technicals_md, technicals_meta = await _maybe_build_technicals_md(spec, target_ticker)
     flow_inputs_md, flow_inputs_meta = await _maybe_build_flow_inputs_md(spec, target_ticker)
+    s_score_inputs_md, screening_meta = await _maybe_build_s_score_inputs_md(
+        spec, target_ticker, snapshot
+    )
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -617,6 +682,7 @@ async def run_analyst(
         fundamental_data_md=fundamental_data_md,
         technicals_md=technicals_md,
         flow_inputs_md=flow_inputs_md,
+        s_score_inputs_md=s_score_inputs_md,
         response_rules=spec.response_rules,
     )
 
@@ -681,6 +747,7 @@ async def run_analyst(
         **fundamental_meta,
         **technicals_meta,
         **flow_inputs_meta,
+        **screening_meta,
     }
 
     log.info(
@@ -742,6 +809,9 @@ async def run_analyst_stream(
     )
     technicals_md, technicals_meta = await _maybe_build_technicals_md(spec, target_ticker)
     flow_inputs_md, flow_inputs_meta = await _maybe_build_flow_inputs_md(spec, target_ticker)
+    s_score_inputs_md, screening_meta = await _maybe_build_s_score_inputs_md(
+        spec, target_ticker, snapshot
+    )
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -758,6 +828,7 @@ async def run_analyst_stream(
         fundamental_data_md=fundamental_data_md,
         technicals_md=technicals_md,
         flow_inputs_md=flow_inputs_md,
+        s_score_inputs_md=s_score_inputs_md,
         response_rules=spec.response_rules,
     )
 
@@ -846,6 +917,7 @@ async def run_analyst_stream(
         **fundamental_meta,
         **technicals_meta,
         **flow_inputs_meta,
+        **screening_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 
