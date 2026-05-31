@@ -184,7 +184,7 @@ cited: []
 
 | 축 | 정의 | 산출 데이터 |
 |----|------|------------|
-| **rs (Relative Strength)** | 섹터 상대강도 — 시장 (KOSPI / NASDAQ) 대비 종목·섹터 누적 수익률 비. RS = 10 → Top 1 섹터, RS = 5 → 평균, RS = 0 → 최하위. | snapshot.sector_rs (실시간) |
+| **rs (Relative Strength)** | 상대강도 — **종목 레벨** 오닐식 후보 풀 정규화 (`collectors/scoring.py:stock_rs_score` + `collectors/screening.py:rank_candidates`, SCREEN-RS-EXTENSION-001). 풀 최강 = 10, 중앙값 = 5, 최약 = 0. 섹터 레벨 RS 는 snapshot.sector_rs 보조. | screening.rank_candidates(종목 풀) + snapshot.sector_rs |
 | **supply_chain** | 수급망 일치도 — 종목이 강세 산업 (AI·반도체·방산·원전 등) 의 공급망 중심에 있는가. 단순 종목 단가 X, **산업 트렌드 정합** 측정. | snapshot.theme_classification + supply_chain canon (자료 들어오면) |
 | **alignment** | 정배열 — 월봉 (7월선 위) + 주봉 (MFI) + 일봉 (Vol Osc) 위계 정합. 월봉 종가 7월선 위 = 4점 + 주봉 MFI 정배열 = 3점 + 일봉 Vol Osc 양의 영역 = 3점. | snapshot.price_alignment (3 시간축) |
 
@@ -207,7 +207,7 @@ cited: []
 | **A** | Annual earnings | 연간 EPS 가속 — 3년 연속 +25%+ = 10, 안정 +10% = 6, 단년 부진 = 3. snapshot.eps_annual_3yr. |
 | **N** | New | 신제품·신경영진·신가격대 — 52주 신고가 + 분기 내 신제품 발표 = 10. snapshot.new_high_52w + news_curator 발행 (자료 들어오면). |
 | **S** | Supply & demand | 수급·발행주식 — 자사주 매입·낮은 유통주식수·외인 매수 누적 = 10. flow_analyzer 발행 read (F-Score 인접). |
-| **L** | Leader or laggard | 업종 선도주 vs 후발주 — RS Top 1 = 10, Top 5 = 7, Top 20 = 5, 그 외 = 0-3. snapshot.industry_rs_rank. |
+| **L** | Leader or laggard | 업종 선도주 vs 후발주 — **종목 RS + 과열도** 합성 (`collectors/screening.py:rank_candidates` screening_score, SCREEN-RS-EXTENSION-001). RS Top = 10, 과열(막판 불꽃) 페널티 반영. snapshot.industry_rs_rank 보조. |
 | **I** | Institutional sponsorship | 기관 매수 — 분기 보유 기관 수 증가 + 5주체 일치 = 10. flow_analyzer 발행 read. |
 | **M** | Market direction | 시장 방향 — market_state_analyzer 발행 6단계 매핑 (parabolic·strong_bull = 10 / moderate_bull = 7 / sideways = 4 / bear = 0). |
 

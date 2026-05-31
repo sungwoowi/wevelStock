@@ -378,3 +378,132 @@ def f_score(
         _validate_unit_score(name, val)
     raw = 0.4 * theme_match + 0.3 * momentum + 0.2 * inflow_speed + 0.1 * agreement
     return _clamp(_round_to_half(raw))
+
+
+# ============================================================
+# SCREEN-RS-EXTENSION-001 — 종목 스크리닝 RS + 과열도 (오닐식, prism v2.13.0 #289 차용)
+# ============================================================
+#
+# stock_picker S-Score `rs` 축 + buy_score `L`(Leader) 축의 결정론 base.
+# 모두 순수 (LLM 호출 X, 같은 입력 → 같은 출력 ±0). 0~10, 0.5 단위.
+# SLOT R1 (rs 정규화): percentile_rank(오닐 truest) placeholder — production 검증 시 정정.
+# SLOT R2 (extension k / ADR 윈도우 N): k=1.0 / N=14 placeholder, config/screening.yaml 외부화.
+# SLOT R3 (regime 가중치): prism 초기값, config/screening.yaml 외부화.
+
+
+def _validate_number(name: str, value: float) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise TypeError(f"{name} must be int or float, got {type(value).__name__}")
+    return float(value)
+
+
+def _percentile_rank(value: float, pool: list[float]) -> float:
+    """value 가 pool 내에서 차지하는 백분위 [0.0, 1.0].
+
+    (pool 중 value 보다 작은 수 + 0.5 × 같은 수) / len(pool).
+    중앙값 → 0.5, 풀 최강 → ~1.0, 최약 → ~0.0. 빈 풀 → 0.5 (중립).
+    """
+    n = len(pool)
+    if n == 0:
+        return 0.5
+    below = sum(1 for v in pool if v < value)
+    equal = sum(1 for v in pool if v == value)
+    return (below + 0.5 * equal) / n
+
+
+def stock_rs_score(stock_return_60d: float, pool_returns_60d: list[float]) -> float:
+    """상대강도 점수 (후보 풀 정규화) — stock_picker S-Score rs / buy_score L 축 base.
+
+    오닐식 RS = 절대 수익률 X, **같은 시점 후보 풀 내 상대 순위**.
+
+        rs_score = 10 × percentile_rank(stock_return_60d, pool_returns_60d)
+
+    Args:
+        stock_return_60d: 종목 60거래일 수익률 (%).
+        pool_returns_60d: 같은 시점 후보 풀 전 종목의 60일 수익률 (%). 종목 자신 포함 가능.
+
+    Returns:
+        0~10, 0.5 단위. 풀 1종목(=자신) 또는 빈 풀 → 5.0 (중립, SPEC 엣지).
+
+    SLOT R1 — percentile_rank(오닐 truest) placeholder.
+    """
+    x = _validate_number("stock_return_60d", stock_return_60d)
+    pool = [_validate_number("pool_returns_60d[i]", v) for v in pool_returns_60d]
+    pct = _percentile_rank(x, pool)
+    return _clamp(_round_to_half(10.0 * pct))
+
+
+def extension_score(
+    price: float,
+    ma20: float | None,
+    adr: float | None,
+    *,
+    k: float = 1.0,
+) -> float | None:
+    """과열도 점수 (ADR 정규화) — 높을수록 건강(덜 과열), 낮을수록 과열(막판 불꽃).
+
+        extension = (price - ma20) / ma20
+        extension_score = clamp(10 - k × (extension / ADR), 0, 10)
+
+    ADR(평균 일중 변동폭) 단위 정규화 → 종목별 변동성 차이 흡수.
+    RS Score 와 합성 시 부호 일관성 위해 **건강도 방향**(높을수록 좋음).
+
+    Args:
+        price: 현재가.
+        ma20: 20일 이평. None → None (MA 산출 불가, 랭킹 제외).
+        adr: 평균 일중 변동폭 (비율). None/0/음 → 5.0 (중립, division-by-zero 가드).
+        k: 스케일 계수 (config 권위, SLOT R2).
+
+    Returns:
+        0~10, 0.5 단위 또는 None (ma20 부재·이상).
+    """
+    p = _validate_number("price", price)
+    kk = _validate_number("k", k)
+    if ma20 is None:
+        return None
+    m = _validate_number("ma20", ma20)
+    if m <= 0:
+        return None
+    if adr is None:
+        return _clamp(_round_to_half(5.0))
+    a = _validate_number("adr", adr)
+    if a <= 0:
+        return _clamp(_round_to_half(5.0))
+    extension = (p - m) / m
+    normalized = extension / a
+    return _clamp(_round_to_half(10.0 - kk * normalized))
+
+
+def screening_score(
+    rs_score: float,
+    extension_score: float,
+    regime: str,
+    weights: dict[str, dict[str, float]],
+) -> float:
+    """regime 가중 합성 — RS(주도주) vs 과열도 페널티 균형.
+
+        screening_score = (w_rs × rs_score + w_ext × extension_score) / (w_rs + w_ext)
+
+    강세장 = RS 강조·과열 허용, 횡보·약세 = 과열 페널티 강조 (prism #289).
+
+    Args:
+        rs_score: 상대강도 점수 (0-10).
+        extension_score: 과열도 점수 (0-10, 건강도 방향).
+        regime: 시장 체제 (parabolic|strong_bull|moderate_bull|sideways|moderate_bear|strong_bear).
+        weights: regime → {"w_rs": float, "w_ext": float}. config/screening.yaml 권위 (SLOT R3).
+
+    Returns:
+        0~10, 0.5 단위. regime 미정의 또는 가중치 합 ≤ 0 → 균등 가중 (0.5/0.5) fallback.
+    """
+    _validate_unit_score("rs_score", rs_score)
+    _validate_unit_score("extension_score", extension_score)
+    w = weights.get(regime) if isinstance(weights, dict) else None
+    w = w if isinstance(w, dict) else {}
+    w_rs = _validate_number("w_rs", w.get("w_rs", 0.5))
+    w_ext = _validate_number("w_ext", w.get("w_ext", 0.5))
+    denom = w_rs + w_ext
+    if denom <= 0:
+        w_rs = w_ext = 0.5
+        denom = 1.0
+    raw = (w_rs * rs_score + w_ext * extension_score) / denom
+    return _clamp(_round_to_half(raw))

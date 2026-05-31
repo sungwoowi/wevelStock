@@ -1,0 +1,30 @@
+# SCREEN-RS-EXTENSION-001 — 종목 스크리닝 RS + 과열도 파라미터 (오닐식, prism v2.13.0 #289 차용)
+#
+# 본질: 후보 선정을 "당일 급등률" 단일 기준에서 "상대강도(RS) + 과열도(extension)" 합성으로 전환.
+#   꾸준히 강한 진짜 주도주 ↑, 이미 고점까지 치솟은 과열(막판 불꽃) 종목 ↓.
+#
+# 하드코딩 금지(CLAUDE.md #8·#9) — 모든 임계·가중치는 여기 외부화, watchdog hot reload 반영.
+# 아래 값은 SLOT(production 분포 + 백테스팅 후 확정). 현재 = prism 차용 초기값.
+#   SLOT R1 — rs 정규화 방식: percentile_rank(오닐 truest) 채택 (코드 고정, 추후 PROPOSAL).
+#   SLOT R2 — extension 스케일 계수 k + ADR 윈도우 N: 아래 k / adr_window placeholder.
+#   SLOT R3 — regime 가중치: 아래 regime_weights placeholder.
+
+# RS 윈도우 (거래일). 종목 60일 수익률 산출 + MA20·ADR 입력 봉 수 기준.
+rs_window: 60
+
+# 과열도 스케일 계수 k (extension_score = clamp(10 - k × extension/ADR)). 클수록 과열 페널티 강함.
+k: 1.0
+
+# ADR(평균 일중 변동폭) 윈도우 N (거래일). mean((high-low)/close) 최근 N봉.
+adr_window: 14
+
+# regime(시장 체제 6단계, market_state_analyzer 발행)별 RS vs 과열도 가중.
+#   강세장 = RS(주도주) 강조·과열 허용 / 횡보·약세 = 과열 페널티 강조 (막판 불꽃 회피).
+#   regime 미정의 시 scoring.screening_score 가 균등 가중(0.5/0.5) fallback.
+regime_weights:
+  parabolic:      { w_rs: 0.30, w_ext: 0.15 }   # 폭주 강세 — RS 강조, 과열 어느 정도 허용
+  strong_bull:    { w_rs: 0.30, w_ext: 0.15 }   # 강한 강세
+  moderate_bull:  { w_rs: 0.25, w_ext: 0.20 }   # 완만한 강세 — 균형
+  sideways:       { w_rs: 0.15, w_ext: 0.30 }   # 횡보 — 과열 페널티 강조
+  moderate_bear:  { w_rs: 0.15, w_ext: 0.30 }   # 완만한 약세 — 과열 페널티 강조
+  strong_bear:    { w_rs: 0.15, w_ext: 0.30 }   # 강한 약세 — 과열 페널티 강조 (또는 매매 중단)

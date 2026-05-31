@@ -3,7 +3,7 @@ spec_id: SCREEN-RS-EXTENSION-001
 title: 종목 스크리닝 RS + 과열도 — 오닐식 상대강도(후보 풀 정규화) + 과열도(ADR 정규화) + regime 가중 (prism v2.13.0 #289 차용)
 team: shared
 type: feature
-status: draft
+status: implementing
 version: 1
 owner: stock_picker
 generates:
