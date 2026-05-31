@@ -11,13 +11,15 @@
 
 **현재 위치**: **5점수 체계 완성 🎉 (2026-06-01 3세션)**. 마지막 빈칸 buy_score(CAN SLIM 7축) 배선 → **S·T·α·buy·F 5점수 전부 실측 라이브**. cross-agent 축(S/I/M)은 **collector 직접 호출 + M regime 분류기 신설**(사용자 결정, team_outputs DB read 기각). ① `classify_market_regime`(market_macro 4축→6단계, 보너스로 rank_candidates 가중 활성) ② `buy_score_inputs.py` 7축 collector. smoke 005930: regime=moderate_bull(narrow breadth 0.35 강등)·N 9.0·S 3.5·I 7.0·L 7.5·M 7.0 실측·C/A 공백 중립 → advisory 6.5. **점수 인프라 완성, 잔여는 전부 튜닝·데이터 확장.**
 
-**본 세션 산출** (3세션 = 커밋 `1e7ce98` regime + `e5bed44` buy_score):
-- `collectors/market_macro.py` `classify_market_regime`(4축→6단계, narrow breadth→moderate_bull 보수)+`regime_to_score` / `config/screening.yaml` regime_thresholds / `collectors/buy_score_inputs.py` 신규(7축 graceful) / `config/score_inputs.yaml` buyscore C/N/I breakpoints / run_analyst `reads_buyscore` hook + `[6e]` 블록 + manifest/persona 정합 / INFRA-SCORE-INPUTS-001 v2→v3 / 테스트 +31. **769→800, 회귀 0, validate 0 errors.**
+**본 세션 산출** (3세션 = 커밋 `1e7ce98` regime + `e5bed44` buy_score + `5d083c4` S축 이벤트 fix):
+- `collectors/market_macro.py` `classify_market_regime`(4축→6단계, narrow breadth→moderate_bull 보수)+`regime_to_score` / `collectors/buy_score_inputs.py` 신규(7축 graceful) / `config/score_inputs.yaml` buyscore breakpoints / run_analyst `reads_buyscore` hook + `[6e]` 블록 + manifest/persona / INFRA-SCORE-INPUTS-001 v2→v3.
+- **S축 이벤트 fix**(NAVER 젠슨황 발견): S = 최근 momentum + 누적 inflow + 거래량 동반 demand 블렌드(`compute_demand_score`). 누적 level 단독이 하루짜리 대량 수급 전환 놓치던 결함 해소. NAVER S 1.0→7.5. **769→804, 회귀 0, validate 0 errors.**
 
 **이번 세션에 굳힌 판단**:
 - **cross-agent 축은 collector 직접 호출**: `build_flow_inputs`(S/I)는 분석가가 아니라 collector → import 금지(절대원칙 1) 위반 아님. team_outputs DB read는 단일 호출 시 stale → 기각. regime은 결정론 분류기 신설.
 - **regime 분류기 = 현재 상태 분류(예측 X)**: 장기 골격(position)→중기 방향(trend)→강도·천장(breadth·분산일). **narrow breadth(시총 상위 쏠림)→moderate_bull 보수 라벨**, "구조적 주도 vs 천장 디버전스" 해석은 breadth·분산일 [5e] 원시값 보고 LLM(사용자 옵션 3).
 - **데이터 공백은 advisory 철학대로 중립+정직 표기**: A(연간 EPS 3년·fundamentals 5분기만)·N 뉴스부(0시드)는 중립 5.0 + reason. 점수 라벨로 가르지 않고 원시 지표 주입.
+- **결정론 점수는 본질적으로 느린 지표**(누적 수급·60일 상대강도) — 하루짜리 이벤트 급등/순환매 초입은 momentum·거래량 *흔적*만 잡고, **이벤트 원인·내러티브(예: 젠슨황 독대→소프트웨어 순환매)는 news_curator+market_state_analyzer LLM 영역**(뉴스부 0시드 + 소프트웨어 테마 미등록 = 현재 공백, 백로그). NAVER 2026-05-29 사례에서 확인.
 
 **직전 세션 판단 (2026-06-01 2세션 S-Score 정밀화)**:
 - **supply_chain = theme→섹터 RS 실측**(`classify_theme`→`theme_sector_mapping`→`snapshot.sector_rs` 최강). **alignment 정규화 = 품질 측정**(결측 위계 평가 제외). 새 테마 추가 시 taxonomy+authority+sector_mapping 3곳 정합.

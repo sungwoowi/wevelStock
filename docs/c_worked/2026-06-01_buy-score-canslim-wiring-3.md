@@ -30,9 +30,16 @@ DB read 기각, 단일 호출 시 stale). 사용자 추가 질문(시총 상위 
 - `docs/specs/INFRA-SCORE-INPUTS-001` v2→v3(buy_score_inputs generates + market_macro modifies).
 - `tests/{test_buy_score_inputs.py(15),test_run_analyst_score_inputs.py(+3)}`.
 
+### 단계 3 — S축 이벤트 fix (커밋 `5d083c4`, NAVER 사용자 피드백)
+NAVER(035420) 젠슨황 독대(2026-05-29) 외인 대량수급·거래량 폭발이 점수에 미반영 → 진단 결과 **S축을 inflow_score(누적 level)로만 배선한 결함**. 누적은 외인 순매도(-140bp)지만 최근 momentum 10.0(이벤트)·거래량 5.6배 동반이었음.
+- `collectors/buy_score_inputs.py` `compute_demand_score`(순수) — S = 최근 momentum(0.45)+누적 inflow(0.30)+거래량 동반(0.25) 가중 블렌드(결측 재정규화). N블록 거래량 spike 추출 + render S 3컴포넌트 분해.
+- `config/score_inputs.yaml` buyscore.s_weights + s_volume_confirm breakpoints + `score_inputs_config.get_buyscore_s_weights()`. 테스트 +4.
+- 라이브 NAVER 재산출: **S 1.0→7.5, buy_score 4.0→5.0**.
+
 ## 검증 결과
-- ✅ 테스트 **769 → 800 (+31, 회귀 0, TESTING=1)**. validate.py **0 errors**.
-- ✅ 실데이터 smoke(005930 + 합성 macro breadth 0.35): **regime=moderate_bull(narrow breadth 강등 정확)** / N=9.0(52주 신고가 실측)·S=3.5·I=7.0(flow stock_kis 실측)·L=7.5(screening)·M=7.0(regime) / C·A=5.0(EPS 공백 중립) → advisory_buy_score 6.5. **[5e] 블록 narrow breadth 디버전스 경고 렌더 확인.**
+- ✅ 테스트 **769 → 804 (+35, 회귀 0, TESTING=1)**. validate.py **0 errors**.
+- ✅ 실데이터 smoke(005930): regime=moderate_bull(breadth 0.35)·N 9.0·S 3.5·I 7.0·L 7.5·M 7.0 / C·A 공백 중립 → advisory 6.5.
+- ✅ 라이브 NAVER(035420): S-Score 2.0·buy_score(S축 fix 후) 5.0. 비주도이나 이벤트 수급(momentum 10·거래량 5.6배) 점수 반영 확인.
 
 ## 의도적으로 안 한 것
 - **A 축(연간 EPS 3년) 실측 보류** — fundamentals 5분기(~1.25년)만 → 중립 5.0. KIS/별도 소스 확장은 후속 SLOT.
@@ -42,6 +49,7 @@ DB read 기각, 단일 호출 시 stale). 사용자 추가 질문(시총 상위 
 
 ## 기술 부채/미완
 - **5점수 체계 배선은 완성**, 잔여는 전부 *튜닝·데이터 확장*: A축 EPS 3년 소스 / N 뉴스부 / regime·buyscore·RS 임계 production 캘리브레이션.
+- **이벤트·순환매 내러티브 미반영(NAVER 발견)**: 결정론 점수는 느린 지표(누적 수급·60일 RS). 거래량·momentum *흔적*은 S축 fix로 반영됐으나, "젠슨황 독대→소프트웨어 순환매" 같은 *원인·내러티브*는 news_curator(이벤트 뉴스)+market_state_analyzer(순환매 국면) LLM 영역 — 뉴스부 0시드+소프트웨어 테마 미등록=공백.
 - buy_score collector가 단일 호출에 fundamentals(yfinance)+flow(KIS)+screening(DB)+regime 다중 호출 → 지연 가능(graceful, 비차단). 캐시는 각 collector 자체 TTL 의존.
 
 ## 맥락 재진입 힌트
