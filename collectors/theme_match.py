@@ -216,8 +216,11 @@ async def classify_theme(
             system="You are a deterministic stock theme classifier. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
             model=_STAGE2_MODEL_DEFAULT,
-            max_tokens=200,
+            max_tokens=512,
             temperature=0.0,
+            # Gemini-2.5 thinking 비활성 — thinking 토큰이 max_output 예산을 잠식해
+            # JSON 이 잘리는 사고 방지 (라이브 검증 2026-05-31, anchors 와 동일 결함).
+            thinking_budget=0,
         )
         result = parse_json_response(resp.get("content", ""))
     except Exception as e:  # noqa: BLE001

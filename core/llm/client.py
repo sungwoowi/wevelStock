@@ -142,8 +142,16 @@ async def _call_gemini_real(
     model: str,
     max_tokens: int,
     temperature: float,
+    thinking_budget: int | None = None,
 ) -> dict:
-    """Call Google Gemini via google-genai SDK."""
+    """Call Google Gemini via google-genai SDK.
+
+    thinking_budget: Gemini 2.5 reasoning 모델의 thinking 토큰 예산.
+        - None  → 미설정 (모델 기본 thinking, 분석가 등 긴 추론에 유리).
+        - 0     → thinking 비활성 (flash). 결정론 분류/선택 호출용 — thinking 토큰이
+                  max_output_tokens 예산을 잠식해 JSON 출력이 잘리는 사고 방지.
+        - N>0   → 명시 budget.
+    """
     from google import genai
     from google.genai import types
 
@@ -155,11 +163,14 @@ async def _call_gemini_real(
     system_text = _anthropic_blocks_to_gemini_system(system)
     contents = _anthropic_messages_to_gemini_contents(messages)
 
-    config = types.GenerateContentConfig(
+    config_kwargs: dict = dict(
         system_instruction=system_text if system_text else None,
         max_output_tokens=max_tokens,
         temperature=temperature,
     )
+    if thinking_budget is not None:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=thinking_budget)
+    config = types.GenerateContentConfig(**config_kwargs)
 
     # google-genai is sync; wrap in asyncio.to_thread
     import asyncio as _asyncio
@@ -243,6 +254,7 @@ async def call_llm(
     json_schema: dict | None = None,
     provider: str | None = None,
     mock_fallback_allowed: bool = True,
+    thinking_budget: int | None = None,
 ) -> dict:
     """Call the configured LLM with optional cache lookup.
 
@@ -260,6 +272,9 @@ async def call_llm(
             providers fail. Set to False on user-facing paths (production-chat)
             so that errors propagate to the caller instead of returning a fake
             response. Default True preserves legacy dev/CI behaviour.
+        thinking_budget: Gemini-only thinking 토큰 예산. None=모델 기본, 0=비활성
+            (flash, 결정론 JSON 호출용 — thinking 의 예산 잠식 잘림 방지), N=명시.
+            anthropic/claude_code/mock 백엔드에서는 무시(no-op).
 
     Returns:
         dict with content, tokens_in, tokens_out, model, cost_usd, raw.
@@ -298,6 +313,7 @@ async def call_llm(
         json_schema=json_schema,
         allow_fallback=allow_fallback,
         mock_fallback_allowed=mock_fallback_allowed,
+        thinking_budget=thinking_budget,
     )
 
     # Persist only genuine (non-mock) responses so the cache stays meaningful.
@@ -355,6 +371,7 @@ async def _dispatch_provider(
     json_schema: dict | None = None,
     allow_fallback: bool = True,
     mock_fallback_allowed: bool = True,
+    thinking_budget: int | None = None,
 ) -> dict:
     """Dispatch to a backend.
 
@@ -430,7 +447,8 @@ async def _dispatch_provider(
             ) or "gemini-2.5-flash"
         try:
             return await _call_gemini_real(
-                system, messages, gemini_model, max_tokens, temperature
+                system, messages, gemini_model, max_tokens, temperature,
+                thinking_budget=thinking_budget,
             )
         except Exception as gemini_error:  # noqa: BLE001
             log.error("llm_call_failed", provider="gemini", error=str(gemini_error))

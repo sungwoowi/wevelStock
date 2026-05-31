@@ -303,6 +303,18 @@ class TestSelectAnchorsViaLLM:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_disables_gemini_thinking(self, candidates, fresh_db) -> None:
+        """Stage 2 호출이 thinking_budget=0 으로 나가는지 (Gemini 잘림→fallback 회귀 방지)."""
+        mock_resp = {
+            "content": '{"A_idx": 0, "B_idx": 2, "C_idx": 3, "reasoning": "ok"}',
+            "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "model": "x", "raw": {},
+        }
+        with patch("collectors.anchors.call_llm", return_value=mock_resp) as mock_llm:
+            await select_anchors_via_llm("X", "daily", candidates, skip_cache=True)
+        mock_llm.assert_called_once()
+        assert mock_llm.call_args.kwargs["thinking_budget"] == 0
+
+    @pytest.mark.asyncio
     async def test_malformed_json_returns_none(self, candidates, fresh_db) -> None:
         mock_resp = {
             "content": "not json at all", "tokens_in": 0, "tokens_out": 0,

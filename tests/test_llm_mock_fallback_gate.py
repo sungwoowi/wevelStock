@@ -113,3 +113,32 @@ class TestCallLLMNoMockOnFailure:
         assert "-mock" in resp.get("model", "")
         raw = resp.get("raw") or {}
         assert raw.get("mock") is True
+
+
+class TestThinkingBudgetForwarding:
+    """call_llm(thinking_budget=) 가 Gemini 백엔드까지 전달되는지 (2026-05-31 잘림 fix)."""
+
+    def test_forwarded_to_gemini(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GOOGLE_AI_API_KEY", "test-key")
+        captured: dict[str, Any] = {}
+
+        async def _fake_gemini(system, messages, model, max_tokens, temperature,
+                               thinking_budget=None):
+            captured["thinking_budget"] = thinking_budget
+            return {"content": "{}", "tokens_in": 0, "tokens_out": 0,
+                    "model": model, "cost_usd": 0.0, "raw": {}}
+
+        from core.llm import client as llm_client
+
+        monkeypatch.setattr(llm_client, "_call_gemini_real", _fake_gemini)
+
+        async def _go() -> dict:
+            return await call_llm(
+                system="x",
+                messages=[{"role": "user", "content": "ping"}],
+                provider="gemini",
+                thinking_budget=0,
+            )
+
+        asyncio.run(_go())
+        assert captured["thinking_budget"] == 0

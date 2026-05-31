@@ -364,8 +364,11 @@ async def select_anchors_via_llm(
             system="You are a deterministic anchor selector. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
             model=model,
-            max_tokens=400,
+            max_tokens=512,
             temperature=0.0,
+            # Gemini-2.5 thinking 비활성 — thinking 토큰의 max_output 예산 잠식으로
+            # JSON 이 잘려 deterministic_fallback 으로 떨어지던 결함 해소 (2026-05-31).
+            thinking_budget=0,
         )
         content = resp.get("content", "")
         result = parse_json_response(content)

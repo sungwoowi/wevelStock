@@ -177,6 +177,19 @@ class TestClassifyTheme:
         assert res.theme == "cosmetics"
         assert res.source == "llm"
 
+    @pytest.mark.asyncio
+    async def test_disables_gemini_thinking(self, fresh_db) -> None:
+        """Stage 2 호출이 thinking_budget=0 + 넉넉한 max_tokens 로 나가는지 (잘림 회귀 방지)."""
+        with patch("collectors.score_inputs_config.get_manual_theme", return_value={}), \
+             patch("collectors.score_inputs_config.get_theme_taxonomy", return_value=_TAXONOMY), \
+             patch("collectors.theme_match.call_llm",
+                   return_value=_llm('{"theme": "cosmetics", "reasoning": "ok"}')) as mock_llm:
+            await classify_theme("X", skip_cache=True)
+        mock_llm.assert_called_once()
+        kwargs = mock_llm.call_args.kwargs
+        assert kwargs["thinking_budget"] == 0
+        assert kwargs["max_tokens"] >= 512
+
 
 # ---------------------------------------------------------------------------
 # 3. resolve_theme_match — 결합 진입점
