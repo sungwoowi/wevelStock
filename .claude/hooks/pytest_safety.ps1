@@ -7,10 +7,18 @@ try { $data = $raw | ConvertFrom-Json } catch { exit 0 }
 $cmd = $data.tool_input.command
 if (-not $cmd) { exit 0 }
 
-# pytest 호출 감지: bare pytest / python -m pytest / uv run pytest
-$is_pytest = ($cmd -match '(^|[\s;&|])pytest(\s|$)') `
-          -or ($cmd -match '\bpython\s+(-\S+\s+)*-m\s+pytest\b') `
-          -or ($cmd -match '\buv\s+run\s+(?:[^|;&]+\s+)?pytest\b')
+# 따옴표/here-string 인자 제거 후 검사 — 커밋 메시지 등 인용 문자열 안의 "pytest" 단어를
+# 명령으로 오인하던 오탐 방지. (TESTING 확인은 아래에서 원본 $cmd 로 — '1' 따옴표 보존)
+$scan = $cmd
+$scan = [regex]::Replace($scan, "@'[\s\S]*?'@", ' ')   # PS here-string @'...'@
+$scan = [regex]::Replace($scan, '@"[\s\S]*?"@', ' ')   # PS here-string @"..."@
+$scan = [regex]::Replace($scan, "'[^']*'", ' ')        # 작은따옴표 인자
+$scan = [regex]::Replace($scan, '"[^"]*"', ' ')        # 큰따옴표 인자
+
+# pytest 호출 감지: bare pytest / python -m pytest / uv run pytest (인용 제거된 $scan 기준)
+$is_pytest = ($scan -match '(^|[\s;&|])pytest(\s|$)') `
+          -or ($scan -match '\bpython\s+(-\S+\s+)*-m\s+pytest\b') `
+          -or ($scan -match '\buv\s+run\s+(?:[^|;&]+\s+)?pytest\b')
 if (-not $is_pytest) { exit 0 }
 
 # TESTING=1 acknowledgment 검사 (POSIX 'TESTING=1 ...' 또는 PS '$env:TESTING=''1''; ...')
