@@ -185,6 +185,7 @@ async def build_pipeline_prompt(
     technicals_md: str | None = None,
     flow_inputs_md: str | None = None,
     s_score_inputs_md: str | None = None,
+    buy_score_inputs_md: str | None = None,
     response_rules: str | None = None,
 ) -> SystemPromptBundle:
     """Assemble system prompt for a pipeline stage.
@@ -297,6 +298,14 @@ async def build_pipeline_prompt(
             "type": "text",
             "text": s_score_inputs_md if s_score_inputs_md.lstrip().startswith("##")
                 else f"## 주도주 입력 지표\n{s_score_inputs_md}",
+        })
+
+    # [6e] 매수 입력 지표 (not cached — INFRA-SCORE-INPUTS-001 buy_score, stock_picker 한정)
+    if buy_score_inputs_md:
+        blocks.append({
+            "type": "text",
+            "text": buy_score_inputs_md if buy_score_inputs_md.lstrip().startswith("##")
+                else f"## 매수 입력 지표\n{buy_score_inputs_md}",
         })
 
     # [6] RAG chunks (not cached — query-dependent)

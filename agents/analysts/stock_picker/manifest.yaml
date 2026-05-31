@@ -24,6 +24,11 @@ canon_categories:
 # target_ticker 지정 호출 시 _maybe_build_s_score_inputs_md 가 [5d] 주도주 입력 지표 블록 생성.
 reads_screening: true
 
+# INFRA-SCORE-INPUTS-001 v3 — buy_score CAN SLIM 7축 원시 지표 주입 활성.
+# _maybe_build_buy_score_inputs_md 가 [5e] 매수 입력 지표 블록 생성 (C=EPS YoY / A=공백 중립 /
+# N=52주 / S·I=flow collector / L=SCREEN-RS / M=regime). cross-agent 축은 collector 직접 호출.
+reads_buyscore: true
+
 # LLM 호출 설정. null 이면 config/defaults.yaml 의 llm.anthropic.* 사용.
 # 결정론 강화 위해 temperature 낮춤 (0.4) — 점수 산출 + verdict 매핑 안정성 우선.
 # max_tokens 4000 → 6000 (2026-05-21 cycle 11 정정) — 격자 + 후보 listing + 자연어 본문 합계

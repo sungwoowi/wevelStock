@@ -37,6 +37,20 @@ technicals:
     atr_k_cap: 3.0          # 최대 위험 = 진입 - 3.0×ATR (수직급등주 손절 폭발 방지)
     swing_timeframe: daily  # 스윙 추출 timeframe (anchors.extract_swing_candidates)
 
+buyscore:
+  # buy_score CAN SLIM 원시 지표 → 0~10 축 매핑 (INFRA-SCORE-INPUTS-001 v3, advisory base).
+  # C/N/I 만 breakpoint 매핑 (S=flow.inflow_speed 재사용 / A=데이터 공백 중립 / L=screening_score / M=regime).
+  # SLOT — production 분포로 튜닝. 절대 앵커(EPS 0%=3점·신고가=10점·기관 균형=5점) 보존.
+  # C: 분기 EPS YoY % (전년 동기 대비). persona = +25%→10 / +10%→6 / 0%→3 / 음→0.
+  c_eps_yoy:
+    breakpoints: [[-50.0, 0.0], [0.0, 3.0], [10.0, 6.0], [25.0, 10.0], [60.0, 10.0]]
+  # N: 52주 고가 대비 이격 % (pct_from_high, 0=신고가·음수=미달). 신고가 근접일수록 강함.
+  n_high_proximity:
+    breakpoints: [[-30.0, 2.0], [-15.0, 4.0], [-5.0, 7.0], [0.0, 10.0]]
+  # I: 기관 비중 = institution_net / (|foreign|+|institution|+1) = -1..+1. 기관 매수 우위일수록 강함.
+  i_institution_ratio:
+    breakpoints: [[-1.0, 1.0], [-0.3, 3.5], [0.0, 5.0], [0.3, 7.0], [0.6, 9.0], [1.0, 10.0]]
+
 flow:
   # 60일 수급 모멘텀 turnaround, collector 가 -1.0~+1.0 정규화 (직전 30일 대비 최근 30일 부호·가속).
   # [-1,1] 유계 + 부호 turnaround 라 양극단 집중(bimodal). 0=균형 5점, ±1 saturate 1/10.

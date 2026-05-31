@@ -4,25 +4,28 @@ title: 점수 입력 배선 (T-Score / F-Score 원시 지표) — 결정론 지�
 team: shared
 type: feature
 status: implementing
-version: 2
+version: 3
 owner: trader, flow_analyzer, stock_picker
 generates:
   - collectors/technicals.py        # T-Score 원시 지표 (이격도·MACD·거래량비·R/R) compute + render_technicals_md (anchors.py 패턴)
   - collectors/flow_inputs.py       # F-Score 원시 지표 (60일 수급 momentum·inflow_speed) compute + render_flow_inputs_md (agreement 은 supply_demand_history 재사용)
   - collectors/theme_match.py       # SLOT S1 — theme_match 2-Stage 하이브리드 (classify_theme 결정론 후보+LLM+캐싱 / score_theme_match 결정론 / resolve_theme_match). anchors.py 패턴 mirror
   - collectors/screening_inputs.py  # v2 — S-Score 원시 지표 (rs=SCREEN-RS rank / supply_chain·alignment) compute + render_s_score_inputs_md (flow_inputs.py 패턴 mirror). stock_picker 발행
+  - collectors/buy_score_inputs.py  # v3 — buy_score CAN SLIM 7축 (C=EPS YoY / A=공백 중립 / N=52주 / S·I=flow / L=SCREEN-RS / M=regime) compute + render_buy_score_inputs_md. stock_picker 발행
   - config/score_inputs.yaml        # 원시 지표 → 0~10 축 매핑 임계 + advisory 가중 외부화 + flow.theme_authority/taxonomy/manual (하드코딩 금지, watchdog 반영)
   - tests/test_technicals.py        # 결정론 검증 (cutoff_date + 같은 입력 → 같은 출력 ±0)
   - tests/test_flow_inputs.py       # 결정론 검증
   - tests/test_theme_match.py       # theme_match 2-Stage 검증 (manual/LLM-mock/fallback + score 결정론 + 캐싱)
   - tests/test_screening_inputs.py  # v2 — S-Score collector compute 순수성 + build graceful fallback + run_analyst hook 활성 조건
+  - tests/test_buy_score_inputs.py  # v3 — buy_score collector compute 순수성 + build graceful(공백축 중립) + hook 활성
 modifies:
-  - core/inference/run_analyst.py   # _maybe_build_technicals_md (trader) + _maybe_build_flow_inputs_md (flow_analyzer) + _maybe_build_s_score_inputs_md (stock_picker, v2) hook — _maybe_build_alpha_3tf_md mirror
-  - core/knowledge/compose.py       # build_pipeline_prompt 에 technicals_md / flow_inputs_md / s_score_inputs_md (v2) 파라미터 신규 ([5] α block 인접)
+  - core/inference/run_analyst.py   # _maybe_build_technicals_md (trader) + _maybe_build_flow_inputs_md (flow_analyzer) + _maybe_build_s_score_inputs_md + _maybe_build_buy_score_inputs_md (stock_picker, v2/v3) hook — _maybe_build_alpha_3tf_md mirror
+  - core/knowledge/compose.py       # build_pipeline_prompt 에 technicals_md / flow_inputs_md / s_score_inputs_md / buy_score_inputs_md (v2/v3) 파라미터 신규 ([5] α block 인접)
   - collectors/scoring.py           # raw→축 0~10 매핑 helper 신설 (advisory base 용) + t_score/f_score docstring "advisory 강등" 명시
+  - collectors/market_macro.py      # v3 — classify_market_regime (4축→6단계, buy_score M축 + rank_candidates regime) + regime_to_score
   - agents/analysts/trader/persona.md         # Inputs 에 원시 지표 + advisory T-Score 주입 / Doctrine "지표로 네가 판단, advisory override 가능"
   - agents/analysts/flow_analyzer/persona.md  # Inputs 에 원시 수급 지표 + advisory F-Score 주입 / 동일 doctrine
-  - agents/analysts/stock_picker/manifest.yaml  # v2 — reads_screening: true (S-Score 원시 지표 주입 활성)
+  - agents/analysts/stock_picker/manifest.yaml  # v2/v3 — reads_screening + reads_buyscore: true (S/buy-Score 원시 지표 주입 활성)
 depends_on:
   - INFRA-CHART-DATA-001 (chart_ohlcv 종목 일봉 60+거래일 — T-Score 이격도/MACD/거래량비/R/R 산출 입력)
   - INFRA-SNAPSHOT-EXTEND-001 v1 (supply_demand_history 5주체 60일 + agreement_score — F-Score momentum/agreement 입력)

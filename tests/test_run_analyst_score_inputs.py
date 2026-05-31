@@ -46,6 +46,18 @@ def _fake_si():
     )
 
 
+def _fake_bi():
+    from collectors.buy_score_inputs import BuyScoreInputs
+
+    return BuyScoreInputs(
+        ticker="005930", eps_yoy_pct=30.0, high_proximity_pct=-2.0,
+        inflow_speed_raw=80.0, institution_ratio=0.6, regime="strong_bull",
+        breadth_ratio=0.55, distribution_count=0, screening_score=8.0,
+        c=10.0, a=5.0, n=8.0, s=9.0, l=8.0, i=8.0, m=10.0,
+        advisory_buy_score=8.5, reasons=[], source="db",
+    )
+
+
 def _fake_ti() -> TechnicalInputs:
     return TechnicalInputs(
         ticker="005930", divergence_pct=10.0, macd={"histogram": 254, "signal": 980, "norm": 3.1},
@@ -182,8 +194,27 @@ async def test_stock_picker_without_ticker_skips(monkeypatch: pytest.MonkeyPatch
     assert resp.metadata["screening_failures"] == ["target_ticker_absent"]
 
 
+async def test_stock_picker_injects_buy_score_inputs_md(monkeypatch: pytest.MonkeyPatch) -> None:
+    received = {"ticker": None}
+
+    async def _fake_build(*, ticker: str, **_kw: Any):
+        received["ticker"] = ticker
+        return _fake_bi()
+
+    monkeypatch.setattr(ra_mod, "build_buy_score_inputs", _fake_build)
+
+    resp = await ra_mod.run_analyst(
+        "stock_picker", [{"role": "user", "content": "삼성전자 매수?"}], target_ticker="005930",
+    )
+    assert received["ticker"] == "005930"
+    blocks = ra_mod._captured["system"]
+    assert any(b.get("text", "").lstrip().startswith("## [5e] 매수 입력 지표") for b in blocks)
+    assert resp.metadata["advisory_buy_score"] == 8.5
+    assert resp.metadata["buyscore_ticker_used"] == "005930"
+
+
 async def test_other_analyst_no_score_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"t": 0, "f": 0, "s": 0}
+    called = {"t": 0, "f": 0, "s": 0, "b": 0}
 
     async def _ft(ticker: str, **_kw: Any) -> TechnicalInputs:
         called["t"] += 1
@@ -197,15 +228,21 @@ async def test_other_analyst_no_score_inputs(monkeypatch: pytest.MonkeyPatch) ->
         called["s"] += 1
         return _fake_si()
 
+    async def _fb(**_kw: Any):
+        called["b"] += 1
+        return _fake_bi()
+
     monkeypatch.setattr(ra_mod, "build_technicals", _ft)
     monkeypatch.setattr(ra_mod, "build_flow_inputs", _ff)
     monkeypatch.setattr(ra_mod, "build_s_score_inputs", _fs)
+    monkeypatch.setattr(ra_mod, "build_buy_score_inputs", _fb)
 
     await ra_mod.run_analyst(
         "principle_guardian", [{"role": "user", "content": "7계명"}], target_ticker="005930",
     )
-    assert called["t"] == 0 and called["f"] == 0 and called["s"] == 0
+    assert called["t"] == 0 and called["f"] == 0 and called["s"] == 0 and called["b"] == 0
     blocks = ra_mod._captured["system"]
     assert not any(b.get("text", "").lstrip().startswith("## [5b]") for b in blocks)
     assert not any(b.get("text", "").lstrip().startswith("## [5c]") for b in blocks)
     assert not any(b.get("text", "").lstrip().startswith("## [5d]") for b in blocks)
+    assert not any(b.get("text", "").lstrip().startswith("## [5e]") for b in blocks)

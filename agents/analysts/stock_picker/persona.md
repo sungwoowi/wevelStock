@@ -201,15 +201,17 @@ cited: []
 
 **CAN SLIM 7축 정의** (각 0~10, 0.5 단위):
 
-| 축 | 약어 의미 | 정의 |
+실 산출(INFRA-SCORE-INPUTS-001 v3 `collectors/buy_score_inputs.py`): cross-agent 축(S/I/M)은 collector 직접 호출(분석가 import 아님). `[5e] 매수 입력 지표` 블록으로 원시값 주입.
+
+| 축 | 약어 의미 | 정의 · 실 산출 소스 |
 |----|----------|------|
-| **C** | Current quarterly earnings | 현재 분기 EPS — 전년 동기 대비 +25%+ = 10, +10% = 6, 0% = 3, 음 = 0. snapshot.eps_quarterly_yoy. |
-| **A** | Annual earnings | 연간 EPS 가속 — 3년 연속 +25%+ = 10, 안정 +10% = 6, 단년 부진 = 3. snapshot.eps_annual_3yr. |
-| **N** | New | 신제품·신경영진·신가격대 — 52주 신고가 + 분기 내 신제품 발표 = 10. snapshot.new_high_52w + news_curator 발행 (자료 들어오면). |
-| **S** | Supply & demand | 수급·발행주식 — 자사주 매입·낮은 유통주식수·외인 매수 누적 = 10. flow_analyzer 발행 read (F-Score 인접). |
-| **L** | Leader or laggard | 업종 선도주 vs 후발주 — **종목 RS + 과열도** 합성 (`collectors/screening.py:rank_candidates` screening_score, SCREEN-RS-EXTENSION-001). RS Top = 10, 과열(막판 불꽃) 페널티 반영. snapshot.industry_rs_rank 보조. |
-| **I** | Institutional sponsorship | 기관 매수 — 분기 보유 기관 수 증가 + 5주체 일치 = 10. flow_analyzer 발행 read. |
-| **M** | Market direction | 시장 방향 — market_state_analyzer 발행 6단계 매핑 (parabolic·strong_bull = 10 / moderate_bull = 7 / sideways = 4 / bear = 0). |
+| **C** | Current quarterly earnings | 현재 분기 EPS YoY — +25%+ = 10, +10% = 6, 0% = 3, 음 = 0. **`fundamentals.quarterly_eps[0] vs [4]` 실측**. |
+| **A** | Annual earnings | 연간 EPS 3년 가속 — **데이터 공백(fundamentals 5분기만) → 중립 5.0** (SLOT: KIS/별도 소스). |
+| **N** | New | 신고가 + 신제품 — **52주 신고가 이격(`charts.fifty_two_week.pct_from_high`) 실측**. 뉴스부(신제품) 0시드 (SLOT: NEWS-SOURCE-001). |
+| **S** | Supply & demand | 수급·자금 유입 — **`build_flow_inputs` inflow_score(외인·기관 자금 유입, collector 직접 호출)**. |
+| **L** | Leader or laggard | 업종 선도주 — **종목 RS + 과열도** 합성 (`screening.rank_candidates` screening_score, SCREEN-RS). 과열(막판 불꽃) 페널티 반영. |
+| **I** | Institutional sponsorship | 기관 매수 — **`build_flow_inputs` net_sums 기관 비중(institution/(|foreign|+|institution|), collector 직접 호출)**. |
+| **M** | Market direction | 시장 방향 — **`market_macro.classify_market_regime` 6단계** (parabolic·strong_bull = 10 / moderate_bull = 7 / sideways = 4 / moderate_bear = 2 / strong_bear = 0). **narrow breadth(시총 상위 쏠림)는 moderate_bull 보수 라벨 + breadth·분산일 원시값 노출 → 구조적 주도 vs 천장 디버전스는 본인 판단**. |
 
 **verdict 매핑** (buy_score + 시장 체제 매핑):
 
