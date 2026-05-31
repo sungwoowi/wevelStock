@@ -7,13 +7,13 @@ status: approved
 version: 1
 owner: flow_analyzer
 generates:
-  - collectors/stock_supply.py        # 종목별 5주체 수급 collector (fetch_stock_supply KRX + upsert + load_stock_supply_window + get_stock_supply_60d). supply_demand_history.py 1:1 mirror + ticker 축
-  - tests/test_stock_supply.py        # 멱등 upsert + load window 정순 + 60일 백필 + 당일 재-fetch + agreement 재사용 + cutoff_date 결정론
+  - collectors/stock_supply.py        # 종목 수급 collector (fetch_stock_supply KIS + upsert + load_stock_supply_window + ensure_stock_supply_series + get_stock_supply_60d + get_stock_market_cap). supply_demand_history.py mirror + ticker 축
+  - tests/test_stock_supply.py        # 멱등 upsert + load 정순 + fetch(KIS mock) + cutoff 결정론 + market_cap 변환 + fallback
 modifies:
-  - core/db/schema.sql                # stock_supply_history 테이블 신설 (PK (ticker, date), 5주체 net + source) + schema_version bump + 멱등 migration
-  - connectors/krx/client.py          # 종목별 투자자별 거래실적 backend helper (getJsonData.cmd) — 5주체 net + 단위 정규화(→백만원)
-  - connectors/kis/client.py          # 단일 종목 market_cap helper (inflow_speed 분모) — 기존 market_cap_rank 는 top-N 이라 단건 조회 신설/재사용
-  - collectors/flow_inputs.py         # build_flow_inputs 의 net_sums 소스 = 종목 우선 → 미가용 시 시장 supply_demand_history fallback(source 라벨) + market_cap 주입 배선
+  - core/db/schema.sql                # stock_supply_history 테이블 신설 (PK (ticker, date), 5주체 net + source) + schema v9
+  - connectors/kis/client.py          # stock_investor_history(ticker) 종목 투자자 3주체 일별 시계열 (inquire-investor, 원→백만원). market_cap 은 기존 stock_price(hts_avls 억) 재사용
+  - connectors/krx/client.py          # stock_investor_supply 종목별 5주체 helper (휴면 — 로그인 벽으로 보류, 5주체 복귀 시 활성)
+  - collectors/flow_inputs.py         # build_flow_inputs 의 net_sums 소스 = 종목(KIS) 우선 → 미가용 시 시장 supply_demand_history fallback(source 라벨) + market_cap 주입 배선
 depends_on:
   - INFRA-SCORE-INPUTS-001 (flow_inputs F-Score 원시 지표 배선 + theme_match 2-Stage 골격 — net_sums 입력만 교체하면 score_theme_match 무수정 재사용)
   - INFRA-SNAPSHOT-EXTEND-001 v1 (supply_demand_history 시장 레벨 5주체 + agreement_score 순수 함수 — fallback 소스 + 재사용)
@@ -25,7 +25,7 @@ related:
 contracts:
   - name: stock-supply-v1
     version: "1.0"
-    description: "get_stock_supply_60d(ticker, cutoff_date=None) → {ticker, actual_days, foreign_net_60d, institution_net_60d, individual_net_60d, financial_inv_net_60d, pension_net_60d, agreement_score_60d, market_cap, source}. build_flow_inputs(ticker=) 가 이 net 을 theme_match/momentum/inflow_speed 입력으로 사용. 종목 미가용 시 source='market_proxy' 로 시장 레벨 fallback. team_outputs 저장 X (flow_analyzer StandardOutput 이 판단)."
+    description: "get_stock_supply_60d(ticker, cutoff_date=None) → {ticker, actual_days, foreign/institution/individual/financial_inv/pension_net_60d, agreement_score_60d, market_cap, source}. 소스=KIS 3주체(financial_inv/pension=0). build_flow_inputs(ticker=) 가 net 을 theme_match/momentum/inflow_speed 입력으로 사용. 종목 미가용 시 source='market_proxy' 시장 레벨 fallback, 종목 적재 시 source='stock_kis'. team_outputs 저장 X (flow_analyzer StandardOutput 이 판단)."
 ---
 
 # INFRA-STOCK-SUPPLY-001 — 종목 레벨 5주체 수급 collector
@@ -42,7 +42,7 @@ theme_match 골격(`score_theme_match`)은 설계 때부터 **분류(LLM 직관)
 
 | # | 결단 | 근거 |
 |---|---|---|
-| R1-a | **데이터 소스 = KRX 풀 5주체** (getJsonData.cmd 종목별 투자자별 거래실적) | 시장 테이블 5주체와 정합 → `theme_authority` 의 pension·financial_inv 매핑 테마(예 defense_nuclear)도 살아남 + `score_theme_match` 무수정 재사용. KIS `investor_trend` 는 3주체뿐이라 탈락 |
+| R1-a | ~~KRX 풀 5주체~~ → **KIS 3주체 (외인·기관·개인)** 로 전환 (2026-05-31 구현 중 결단) | KRX getJsonData 통계가 **로그인(회원) 벽 + 안티봇("LOGOUT")** 으로 차단 (기존 market_breadth 도 동일 잠복 고장). KIS `stock_investor_history`(inquire-investor)는 이미 통합·무로그인·즉시 작동. **theme_authority 영향 거의 0**: pension 은 defense_nuclear 1개 테마(institution 동반)뿐, financial_inv 는 0개 테마 → 종목 레벨 financial_inv/pension=0 이어도 momentum/inflow_speed(외인+기관)·theme_match 9/10 그대로. KRX 5주체는 로그인 해소 시 후속(connectors/krx.stock_investor_supply 휴면 보존) |
 | R1-b | **수집 트리거 = 질의 종목 on-demand + 캐시** | API 부하 최소 + 백테스팅 친화. theme_match 캐시 패턴과 동일 철학. flow_inputs 흐름에 자연 결합 |
 | R1-c | **백필 = 최초 질의 시 60일 1회** | momentum(60일)·inflow_speed 즉시 산출. 이후 당일분만 증분 |
 | R2-a | **미가용 시(KRX 실패·신규·미장) 시장 프록시 fallback** | 크래시 0 + 시장 신호 보존. source='market_proxy' 라벨로 정직 표기 |
@@ -80,7 +80,12 @@ collectors/stock_supply.py
 ## 판단 로직 / 엣지 케이스
 
 <!-- SPEC:INTERVIEW-SLOT
-- ⚠️ KRX bld 미해소 (2026-05-31 구현 smoke): `MDCSTAT02401` + {isuCd:6자리, strtDd, endDd, trdVolVal, askBid} → **400 Bad Request**. 유력 가설 = (1) KRX 는 `isuCd` 에 **풀 ISIN**(KR7005930003) 요구(6자리 X — ticker→ISIN 매핑 필요) (2) bld 는 일별추이 = `MDCSTAT02403`(기간합계는 02401) (3) params 에 `mktId`(STK/KSQ) + `inqTpCd` 누락. **다음: data.krx.co.kr [개별종목 투자자별 거래실적] 페이지 devtools 로 실 POST 검증** (pykrx 소스 참고 가능). 현재 graceful market_proxy fallback 로 비차단.
+- ⚠️ KRX bld 미해소 (2026-05-31 방법 B 진단 완료, 모두 400):
+  · `MDCSTAT02401`/`MDCSTAT02403` × {6자리 | 풀 ISIN(KR7005930003)} × {±locale=ko_KR} → 전부 **400**.
+  · **핵심 발견 = 시스템 이슈**: `MDCMAIN00103`(k200_futures, MAIN 위젯) 은 **작동**하나 `STAT/standard/MDCSTAT*` 는 전부 400 — **기존 `market_breadth`(MDCSTAT04302, INFRA-SNAPSHOT-EXTEND-001) 도 동일하게 깨져 있음**(latent debt, fallback 중).
+  · 세션 prime(GET 통계로더 → JSESSIONID 확보 후 POST) → **400 body "LOGOUT"** = KRX 안티봇 거부. 단순 param/쿠키 문제 아님.
+  · **결론**: 블라인드 추측으로 수렴 X. **방법 A 필수** = data.krx.co.kr [개별종목 투자자별 거래실적] 페이지 devtools 로 실 getJsonData 요청(정확한 bld·params·헤더·요청순서) 캡처. pykrx 최신 소스(KrxWebIo)도 참고. STAT 계열 전체 복구 = market_breadth 동반 해결.
+  · 현재 graceful market_proxy fallback 로 비차단.
 - 응답 5주체 컬럼 매핑(`_STOCK_INVESTOR_COLS`) + 단위 정규화(원→백만원, 현재 //1e6) 도 실 응답으로 정정. connectors/krx/client.py 기존 getJsonData helper 재사용.
 - KRX 5주체 ↔ 시장 테이블 5주체 key 정합 (financial_inv=금융투자, institution=기관계 정의 일치 검증 — KRX 는 금융투자/보험/투신/사모/은행/연기금 등 세분, 5주체로 집계하는 규칙 명시).
 - KIS 단건 market_cap: 기존 market_cap_rank(top-N) 외 단건 시총 조회 API(현재가 시세 inquire-price 의 시총 필드 등) 확정 + 단위(억→백만원) 정규화.

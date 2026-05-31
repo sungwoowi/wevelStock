@@ -38,21 +38,18 @@ def _row(ticker: str, date: str, f=0, i=0, ind=0, fin=0, p=0) -> StockSupplyRow:
     )
 
 
-class _FakeKRX:
-    """stock_investor_supply mock — 호출 캡처 + 고정 rows 반환."""
-
-    def __init__(self, rows: list[dict]) -> None:
-        self._rows = rows
-        self.calls: list[tuple[str, str, str]] = []
-
-    async def stock_investor_supply(self, ticker, *, start_date, end_date):
-        self.calls.append((ticker, start_date, end_date))
-        return self._rows
-
-
 class _FakeKIS:
-    def __init__(self, market_cap_eok: int | None) -> None:
+    """KIS mock — stock_investor_history(3주체 시계열) + stock_price(시총) 동시 제공."""
+
+    def __init__(self, history_rows: list[dict] | None = None,
+                 market_cap_eok: int | None = None) -> None:
+        self._rows = history_rows or []
         self._cap = market_cap_eok
+        self.history_calls = 0
+
+    async def stock_investor_history(self, ticker):
+        self.history_calls += 1
+        return self._rows
 
     async def stock_price(self, ticker):
         if self._cap is None:
@@ -60,10 +57,10 @@ class _FakeKIS:
         return {"ticker": ticker, "market_cap": self._cap}
 
 
-def _krx_rows(dates: list[str]) -> list[dict]:
+def _kis_rows(dates: list[str]) -> list[dict]:
+    # KIS 3주체 (financial_inv/pension 은 collector 가 0 으로 채움)
     return [
-        {"date": d, "foreign_net": 100, "institution_net": 50,
-         "individual_net": -120, "financial_inv_net": 30, "pension_net": 20}
+        {"date": d, "foreign_net": 100, "institution_net": 50, "individual_net": -120}
         for d in dates
     ]
 
@@ -121,25 +118,27 @@ class TestDB:
 class TestFetch:
     @pytest.mark.asyncio
     async def test_fetch_upserts(self, fresh_db) -> None:
-        krx = _FakeKRX(_krx_rows(["2026-05-01", "2026-05-02"]))
-        n = await fetch_stock_supply("005930", krx=krx)
+        kis = _FakeKIS(history_rows=_kis_rows(["2026-05-01", "2026-05-02"]))
+        n = await fetch_stock_supply("005930", kis=kis)
         assert n == 2
-        assert len(load_stock_supply_window("005930")) == 2
-        assert len(krx.calls) == 1
+        rows = load_stock_supply_window("005930")
+        assert len(rows) == 2
+        assert kis.history_calls == 1
+        assert rows[0].financial_inv_net == 0 and rows[0].pension_net == 0  # KIS 3주체
 
     @pytest.mark.asyncio
     async def test_fetch_cutoff_excludes_future(self, fresh_db) -> None:
-        krx = _FakeKRX(_krx_rows(["2026-05-01", "2026-05-31"]))
-        n = await fetch_stock_supply("X", cutoff_date="2026-05-15", krx=krx)
+        kis = _FakeKIS(history_rows=_kis_rows(["2026-05-01", "2026-05-31"]))
+        n = await fetch_stock_supply("X", cutoff_date="2026-05-15", kis=kis)
         assert n == 1  # 05-31 제외
         assert [r.date for r in load_stock_supply_window("X")] == ["2026-05-01"]
 
     @pytest.mark.asyncio
     async def test_fetch_empty_on_error(self, fresh_db) -> None:
         class _Boom:
-            async def stock_investor_supply(self, *a, **k):
-                raise RuntimeError("krx down")
-        n = await fetch_stock_supply("X", krx=_Boom())
+            async def stock_investor_history(self, *a, **k):
+                raise RuntimeError("kis down")
+        n = await fetch_stock_supply("X", kis=_Boom())
         assert n == 0
 
 
@@ -150,24 +149,24 @@ class TestFetch:
 
 class TestEnsure:
     @pytest.mark.asyncio
-    async def test_sparse_triggers_backfill(self, fresh_db) -> None:
-        krx = _FakeKRX(_krx_rows([f"2026-05-{d:02d}" for d in range(1, 21)]))
-        rows = await ensure_stock_supply_series("X", days=60, krx=krx)
-        assert len(krx.calls) == 1
+    async def test_fetch_populates(self, fresh_db) -> None:
+        kis = _FakeKIS(history_rows=_kis_rows([f"2026-05-{d:02d}" for d in range(1, 21)]))
+        rows = await ensure_stock_supply_series("X", days=60, kis=kis)
+        assert kis.history_calls == 1
         assert len(rows) == 20
 
     @pytest.mark.asyncio
     async def test_cutoff_no_live_fetch(self, fresh_db) -> None:
         upsert_stock_supply_row(_row("X", "2026-05-01", f=1))
         upsert_stock_supply_row(_row("X", "2026-05-20", f=2))  # cutoff 이후
-        krx = _FakeKRX([])
-        rows = await ensure_stock_supply_series("X", cutoff_date="2026-05-10", krx=krx)
-        assert krx.calls == []  # 백테스팅 = live fetch 금지
+        kis = _FakeKIS(history_rows=[])
+        rows = await ensure_stock_supply_series("X", cutoff_date="2026-05-10", kis=kis)
+        assert kis.history_calls == 0  # 백테스팅 = live fetch 금지
         assert [r.date for r in rows] == ["2026-05-01"]
 
     @pytest.mark.asyncio
     async def test_empty_ticker(self, fresh_db) -> None:
-        assert await ensure_stock_supply_series("  ", krx=_FakeKRX([])) == []
+        assert await ensure_stock_supply_series("  ", kis=_FakeKIS()) == []
 
 
 # ---------------------------------------------------------------------------
@@ -178,23 +177,23 @@ class TestEnsure:
 class TestGet60d:
     @pytest.mark.asyncio
     async def test_stock_source_and_market_cap(self, fresh_db) -> None:
-        krx = _FakeKRX(_krx_rows(["2026-05-01", "2026-05-02"]))
-        res = await get_stock_supply_60d("005930", krx=krx, kis=_FakeKIS(4000))
-        assert res["source"] == "stock_krx"
+        kis = _FakeKIS(history_rows=_kis_rows(["2026-05-01", "2026-05-02"]), market_cap_eok=4000)
+        res = await get_stock_supply_60d("005930", kis=kis)
+        assert res["source"] == "stock_kis"
         assert res["actual_days"] == 2
         assert res["foreign_net_60d"] == 200
         assert res["market_cap"] == 400000.0  # 4000억 → 400,000 백만원
 
     @pytest.mark.asyncio
     async def test_unavailable_when_empty(self, fresh_db) -> None:
-        res = await get_stock_supply_60d("X", krx=_FakeKRX([]), kis=_FakeKIS(None))
+        res = await get_stock_supply_60d("X", kis=_FakeKIS(history_rows=[], market_cap_eok=None))
         assert res["source"] == "unavailable"
         assert res["actual_days"] == 0
 
     @pytest.mark.asyncio
     async def test_market_cap_eok_to_million(self, fresh_db) -> None:
-        assert await get_stock_market_cap("X", kis=_FakeKIS(123)) == 12300.0
+        assert await get_stock_market_cap("X", kis=_FakeKIS(market_cap_eok=123)) == 12300.0
 
     @pytest.mark.asyncio
     async def test_market_cap_none_on_error(self, fresh_db) -> None:
-        assert await get_stock_market_cap("X", kis=_FakeKIS(None)) is None
+        assert await get_stock_market_cap("X", kis=_FakeKIS(market_cap_eok=None)) is None

@@ -366,6 +366,45 @@ class KISClient:
             "institution_net_amount": _safe_int(today.get("orgn_ntby_tr_pbmn", 0)),
         }
 
+    async def stock_investor_history(self, ticker: str) -> list[dict[str, Any]]:
+        """종목별 투자자 순매수 거래대금 일별 시계열 (3주체: 외인·기관·개인).
+
+        inquire-investor (FHKST01010900) output = 당일 + 최근 일자들. INFRA-STOCK-SUPPLY-001.
+        Returns:
+            [{"date": "2026-05-31", "foreign_net": int(백만원),
+              "institution_net": int, "individual_net": int}] (정순 보장 X — 호출부 정렬).
+            오류 시 [] (collector 가 시장 프록시 fallback).
+        단위: KIS 순매수 거래대금(원) → 백만원(// 1_000_000).
+        """
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/inquire-investor",
+            tr_id="FHKST01010900",
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker},
+        )
+        if data.get("rt_cd") != "0":
+            return []
+
+        def _won_m(v: Any) -> int:
+            if v in (None, ""):
+                return 0
+            try:
+                return int(v) // 1_000_000
+            except (ValueError, TypeError):
+                return 0
+
+        out: list[dict[str, Any]] = []
+        for it in data.get("output", []):
+            raw_d = str(it.get("stck_bsop_date", ""))
+            if len(raw_d) != 8:
+                continue
+            out.append({
+                "date": f"{raw_d[0:4]}-{raw_d[4:6]}-{raw_d[6:8]}",
+                "foreign_net": _won_m(it.get("frgn_ntby_tr_pbmn")),
+                "institution_net": _won_m(it.get("orgn_ntby_tr_pbmn")),
+                "individual_net": _won_m(it.get("prsn_ntby_tr_pbmn")),
+            })
+        return out
+
     async def market_cap_rank(
         self,
         market: str = "0001",  # 0001=KOSPI, 1001=KOSDAQ

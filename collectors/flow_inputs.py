@@ -216,7 +216,7 @@ async def build_flow_inputs(
             stock_rows = await ensure_stock_supply_series(ticker_s, cutoff_date=cutoff_date)
             if stock_rows:
                 rows = stock_rows
-                source = f"stock_krx@{cutoff_date}" if cutoff_date else "stock_krx"
+                source = f"stock_kis@{cutoff_date}" if cutoff_date else "stock_kis"
                 if resolved_cap is None and not cutoff_date:
                     resolved_cap = await get_stock_market_cap(ticker_s)
         except Exception as e:  # noqa: BLE001 — 미가용 시 시장 프록시로 graceful fallback
@@ -293,7 +293,7 @@ def render_flow_inputs_md(fi: FlowInputs, *, name: str | None = None) -> str:
     name_part = f" ({name})" if name else ""
     cutoff = f" | cutoff: {fi.cutoff_date}" if fi.cutoff_date else ""
     lines: list[str] = []
-    _level = "종목 레벨" if str(fi.source).startswith("stock_krx") else "시장 프록시"
+    _level = "종목 레벨" if str(fi.source).startswith("stock_") else "시장 프록시"
     lines.append(f"## [5c] 수급 입력 지표 (INFRA-SCORE-INPUTS-001 · F-Score, {_level})")
     lines.append("")
     lines.append(

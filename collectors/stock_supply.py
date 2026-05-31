@@ -16,11 +16,11 @@ agreement_score 는 supply_demand_history 순수 함수 재사용 (신설 0).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from connectors.krx import KRXClient
+from connectors.kis import KISClient
 from core.db import get_db
 from core.logging import get_logger
 from collectors.supply_demand_history import agreement_score  # 순수 함수 재사용
@@ -29,9 +29,9 @@ log = get_logger(__name__)
 
 _KST = ZoneInfo("Asia/Seoul")
 _WINDOW_DAYS = 60
-# 60 거래일 ≈ 약 88 달력일. 백필 시 넉넉히 잡아 거래일 60 확보.
-_BACKFILL_CALENDAR_DAYS = 95
-_REFRESH_CALENDAR_DAYS = 7  # 당일 + 직전 며칠 재-fetch (갭 보정)
+# 소스 = KIS investor_trend (3주체: 외인·기관·개인). 금융투자·연기금은 종목 레벨 미제공 → 0.
+# (theme_authority 영향 거의 0: pension 은 defense_nuclear 1개, financial_inv 는 0개 테마.
+#  momentum/inflow_speed 는 외인+기관만 사용 → 100% 커버.) KRX 5주체는 로그인 벽으로 보류.
 
 _INVESTOR_KEYS = (
     "foreign_net",
@@ -44,7 +44,7 @@ _INVESTOR_KEYS = (
 
 @dataclass
 class StockSupplyRow:
-    """1 종목 1 일 의 5주체 net 매수액 (백만원)."""
+    """1 종목 1 일 의 5주체 net 매수액 (백만원). KIS 소스는 financial_inv/pension = 0."""
 
     ticker: str
     date: str
@@ -53,16 +53,11 @@ class StockSupplyRow:
     individual_net: int
     financial_inv_net: int
     pension_net: int
-    source: str = "krx"
+    source: str = "kis"
 
 
 def _today_kst_str() -> str:
     return datetime.now(_KST).strftime("%Y-%m-%d")
-
-
-def _iso_to_krx(iso: str) -> str:
-    """"2026-05-31" → "20260531"."""
-    return iso.replace("-", "")
 
 
 # ---------------------------------------------------------------------------
@@ -141,26 +136,17 @@ def get_stock_supply_latest_date(ticker: str) -> str | None:
 async def fetch_stock_supply(
     ticker: str,
     *,
-    calendar_days: int = _BACKFILL_CALENDAR_DAYS,
     cutoff_date: str | None = None,
-    krx: KRXClient | None = None,
+    kis: Any | None = None,
 ) -> int:
-    """KRX 종목별 투자자 거래실적 fetch → upsert. 적재 행 수 반환 (오류 시 0).
+    """KIS 종목 투자자(3주체) 시계열 fetch → upsert (멱등). 적재 행 수 반환 (오류 시 0).
 
-    end = cutoff_date or today_kst, start = end - calendar_days. cutoff 이후 행 제외.
+    KIS inquire-investor 는 자체 윈도우(당일+최근 ~30일)를 한 콜로 반환. financial_inv/pension = 0.
+    cutoff 이후 행 제외. ON CONFLICT REPLACE 라 당일 재-fetch + 과거 보존 동시 만족.
     """
-    end_iso = cutoff_date or _today_kst_str()
-    try:
-        end_dt = datetime.strptime(end_iso, "%Y-%m-%d")
-    except (ValueError, TypeError):
-        return 0
-    start_iso = (end_dt - timedelta(days=calendar_days)).strftime("%Y-%m-%d")
-
-    async def _do(client: KRXClient) -> int:
+    async def _do(client: Any) -> int:
         try:
-            rows = await client.stock_investor_supply(
-                ticker, start_date=_iso_to_krx(start_iso), end_date=_iso_to_krx(end_iso)
-            )
+            rows = await client.stock_investor_history(ticker)
         except Exception as e:  # noqa: BLE001
             log.warning("stock_supply_fetch_failed", ticker=ticker, error=str(e))
             return 0
@@ -175,17 +161,17 @@ async def fetch_stock_supply(
                 foreign_net=int(r.get("foreign_net", 0)),
                 institution_net=int(r.get("institution_net", 0)),
                 individual_net=int(r.get("individual_net", 0)),
-                financial_inv_net=int(r.get("financial_inv_net", 0)),
-                pension_net=int(r.get("pension_net", 0)),
-                source="krx",
+                financial_inv_net=0,  # KIS 3주체 미제공
+                pension_net=0,
+                source="kis",
             ))
             count += 1
         return count
 
-    if krx is None:
-        async with KRXClient() as own:
+    if kis is None:
+        async with KISClient() as own:
             return await _do(own)
-    return await _do(krx)
+    return await _do(kis)
 
 
 async def ensure_stock_supply_series(
@@ -193,12 +179,12 @@ async def ensure_stock_supply_series(
     *,
     days: int = _WINDOW_DAYS,
     cutoff_date: str | None = None,
-    krx: KRXClient | None = None,
+    kis: Any | None = None,
 ) -> list[StockSupplyRow]:
     """종목 수급 시계열 보장 + 반환. flow_inputs 진입점.
 
     - cutoff_date 지정(백테스팅): live fetch X. 저장된 행 중 ≤ cutoff 만.
-    - 평상시: 캐시 sparse(< days) 면 60일 백필, 아니면 당일분 재-fetch(R3-a).
+    - 평상시: KIS 1콜(자체 윈도우) → 멱등 upsert (당일 갱신 + 과거 보존).
     - 미가용(빈 결과) 시 [] 반환 → 호출부(flow_inputs) 가 시장 프록시 fallback.
     """
     ticker = (ticker or "").strip()
@@ -206,12 +192,7 @@ async def ensure_stock_supply_series(
         return []
 
     if cutoff_date is None:
-        existing = load_stock_supply_window(ticker, days=days)
-        if len(existing) < days:
-            await fetch_stock_supply(ticker, calendar_days=_BACKFILL_CALENDAR_DAYS, krx=krx)
-        else:
-            # 당일분 + 직전 며칠만 재-fetch (멱등 upsert, 과거 보존)
-            await fetch_stock_supply(ticker, calendar_days=_REFRESH_CALENDAR_DAYS, krx=krx)
+        await fetch_stock_supply(ticker, kis=kis)
 
     rows = load_stock_supply_window(ticker, days=days)
     if cutoff_date:
@@ -221,8 +202,6 @@ async def ensure_stock_supply_series(
 
 async def get_stock_market_cap(ticker: str, *, kis: Any | None = None) -> float | None:
     """KIS 시총(억) → 백만원 (1억 = 100백만원). inflow_speed 분모. 실패 시 None."""
-    from connectors.kis import KISClient
-
     async def _do(client: Any) -> float | None:
         try:
             data = await client.stock_price(ticker)
@@ -260,14 +239,13 @@ def sum_stock_supply(rows: list[StockSupplyRow]) -> dict[str, int]:
 
 
 async def get_stock_supply_60d(
-    ticker: str, *, cutoff_date: str | None = None,
-    kis: Any | None = None, krx: KRXClient | None = None,
+    ticker: str, *, cutoff_date: str | None = None, kis: Any | None = None,
 ) -> dict[str, Any]:
-    """ticker 60일 5주체 net 합 + agreement + market_cap. stock-supply-v1 contract.
+    """ticker 60일 net 합 + agreement + market_cap. stock-supply-v1 contract.
 
     actual_days == 0 → 미가용 (호출부 시장 프록시 fallback).
     """
-    rows = await ensure_stock_supply_series(ticker, cutoff_date=cutoff_date, krx=krx)
+    rows = await ensure_stock_supply_series(ticker, cutoff_date=cutoff_date, kis=kis)
     if not rows:
         return {
             "ticker": ticker, "actual_days": 0,
@@ -282,5 +260,5 @@ async def get_stock_supply_60d(
         **{f"{k}_60d": sums[k] for k in _INVESTOR_KEYS},
         "agreement_score_60d": agreement_score(sums),
         "market_cap": market_cap,
-        "source": "stock_krx",
+        "source": "stock_kis",
     }
