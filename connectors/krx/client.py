@@ -34,11 +34,11 @@ MKTID_KOSPI = "STK"   # 코스피
 MKTID_KOSDAQ = "KSQ"  # 코스닥
 
 # 개별종목 투자자별 거래실적 (일별추이, 순매수 거래대금) — INFRA-STOCK-SUPPLY-001
-# ⚠️ INTERVIEW-SLOT: 아래 bld+params 는 2026-05-31 smoke 에서 400 Bad Request. 유력 가설 =
-#   isuCd 에 풀 ISIN(KR7005930003) 요구 + bld 일별추이=MDCSTAT02403 + mktId/inqTpCd params.
-#   data.krx.co.kr 개별종목 투자자별 거래실적 페이지 devtools 로 실 POST 검증 필요 (pykrx 참고).
-#   미해소 동안 collector 는 빈 결과 → flow_inputs 시장 프록시 fallback (비차단).
-# 응답 단위는 원(₩) 가정 → 백만원으로 정규화. 컬럼 부재/오류 시 collector 가 시장 프록시 fallback.
+# ⚠️ DEPRECATED (2026-05-31): KRX STAT/standard/* 가 Akamai 봇차단으로 영구 불가.
+#   실증: getJsonData STAT(02303 일별추이 / 02401 기간합 / 01701 OHLCV / 04302 breadth) = "400 LOGOUT",
+#   OTP→download.cmd = 403 Akamai Access Denied. pykrx 투자자 함수도 동일 벽(OHLCV만 네이버 우회로 됨).
+#   devtools 캡처도 무의미(Akamai 토큰 = 실 브라우저 센서 바인딩). 종목 5주체는 KIS 3주체로 확정 유지
+#   (financial_inv/pension 실익 ≈ 0). 본 helper 휴면 보존.
 BLD_STOCK_INVESTOR = "dbms/MDC/STAT/standard/MDCSTAT02401"
 # KRX 응답 row 의 (5주체 → 순매수 거래대금 컬럼명) best-guess 맵. smoke 시 정정 지점.
 _STOCK_INVESTOR_COLS = {
@@ -188,11 +188,14 @@ class KRXClient:
         return out
 
     async def market_breadth(self, market: str = "KOSPI") -> dict[str, Any]:
-        """시장 등락 종목 수 (상승/하락/보합/상한/하한). INFRA-SNAPSHOT-EXTEND-001.
+        """⚠️ DEPRECATED (2026-05-31) — KRX STAT 통계가 Akamai 봇차단으로 영구 폐기.
 
-        KRX 통계 페이지 backend (MDCSTAT04302) 호출. market_state_analyzer breadth 축 base.
-        정확한 bld·payload 는 SLOT S4 = production smoke 시 검증. 차단 시 KIS 종목 list
-        iterate fallback 안 검토.
+        getJsonData 의 `STAT/standard/*` 카테고리 전부 "400 LOGOUT"(Akamai Bot Manager).
+        OTP→download.cmd 도 403. MAIN bld(선물 위젯)만 무방비. → market_breadth 는
+        **KIS `inquire-index-price` 의 `*_issu_cnt`**(connectors/kis/client.market_breadth)로
+        승계됨 (전체 시장 정확값). 본 메서드는 휴면 보존 (호출 X). 아래는 원 STAT 구현.
+
+        시장 등락 종목 수 (상승/하락/보합/상한/하한). INFRA-SNAPSHOT-EXTEND-001.
 
         Args:
             market: "KOSPI" | "KOSDAQ"

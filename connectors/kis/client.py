@@ -35,6 +35,9 @@ _CALL_INTERVAL = 1.1  # seconds
 _RATE_LIMIT_BACKOFF = 1.5  # seconds
 _MAX_RATE_LIMIT_RETRY = 1  # 호출당 최대 retry 횟수
 
+# 업종지수 코드 (market_breadth 등락 종목수 — 전체 시장)
+_BREADTH_INDEX_CODE = {"KOSPI": "0001", "KOSDAQ": "1001"}
+
 
 class KISClient:
     """Async KIS API client with automatic token management.
@@ -252,6 +255,58 @@ class KISClient:
             "change_pct": float(o.get("bstp_nmix_prdy_ctrt", 0)),
             "volume": int(o.get("acml_vol", 0)),
             "trade_amount": int(o.get("acml_tr_pbmn", 0)),
+        }
+
+    async def market_breadth(self, market: str = "KOSPI") -> dict[str, Any]:
+        """전체 시장 등락 종목수 (상승/하락/보합/상한/하한). inquire-index-price (FHPUP02100000).
+
+        KRX STAT breadth bld 가 Akamai 봇차단(getJsonData STAT 전 카테고리 "LOGOUT")으로
+        폐기됨(2026-05-31) → KIS 업종지수 응답의 `*_issu_cnt` 필드가 **전체 시장** 종목수를
+        직접 제공(거래대금 top30 대용이 아닌 정확값).
+
+        Args:
+            market: "KOSPI" | "KOSDAQ"
+
+        Returns:
+            {market, advancing, declining, unchanged, limit_up, limit_down,
+             breadth_ratio, source}. rt_cd != 0 시 카운트 None + source="unavailable".
+        """
+        market_upper = market.upper()
+        index_code = _BREADTH_INDEX_CODE.get(market_upper)
+        if index_code is None:
+            raise ValueError(f"market must be 'KOSPI' or 'KOSDAQ', got {market!r}")
+
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/inquire-index-price",
+            tr_id="FHPUP02100000",
+            params={"FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": index_code},
+        )
+        if data.get("rt_cd") != "0":
+            return {
+                "market": market_upper, "advancing": None, "declining": None,
+                "unchanged": None, "limit_up": None, "limit_down": None,
+                "breadth_ratio": None, "source": "unavailable",
+            }
+        o = data.get("output") or {}
+
+        def _i(key: str) -> int:
+            try:
+                return int(o.get(key, 0) or 0)
+            except (ValueError, TypeError):
+                return 0
+
+        advancing = _i("ascn_issu_cnt")  # 상승 종목수
+        declining = _i("down_issu_cnt")  # 하락 종목수
+        denom = advancing + declining
+        return {
+            "market": market_upper,
+            "advancing": advancing,
+            "declining": declining,
+            "unchanged": _i("stnr_issu_cnt"),  # 보합
+            "limit_up": _i("uplm_issu_cnt"),   # 상한
+            "limit_down": _i("lslm_issu_cnt"),  # 하한
+            "breadth_ratio": round(advancing / denom, 4) if denom > 0 else 0.0,
+            "source": "kis_index",
         }
 
     async def volume_rank(

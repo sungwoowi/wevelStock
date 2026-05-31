@@ -223,3 +223,91 @@ async def test_refresh_all_orchestrates_both_markets(
         (mm._today_kst_str(),),
     )
     assert rows2[0]["n"] == 2  # 행 수 그대로 (ON CONFLICT REPLACE)
+
+
+# ---------------------------------------------------------------------------
+# 6. market_breadth — KIS 업종지수 등락종목수 (KRX STAT Akamai 폐기 대체, 2026-05-31)
+# ---------------------------------------------------------------------------
+
+
+class _FakeKIS:
+    """async with KISClient() as kis 대체 — market_breadth 고정 반환."""
+
+    def __init__(self, breadth: dict) -> None:
+        self._b = breadth
+
+    async def __aenter__(self) -> "_FakeKIS":
+        return self
+
+    async def __aexit__(self, *args: object) -> bool:
+        return False
+
+    async def market_breadth(self, market: str) -> dict:
+        return self._b
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("market,iscd", [("KOSPI", "0001"), ("KOSDAQ", "1001")])
+async def test_kis_market_breadth_parses_issu_cnt(
+    market: str, iscd: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """inquire-index-price 의 *_issu_cnt → 전체 시장 등락 종목수 파싱 + 시장→index_code."""
+    from connectors.kis.client import KISClient
+
+    kis = KISClient()
+
+    async def _fake_get(path: str, *, tr_id: str, params: dict) -> dict:
+        assert tr_id == "FHPUP02100000"
+        assert params["FID_INPUT_ISCD"] == iscd
+        return {"rt_cd": "0", "output": {
+            "ascn_issu_cnt": "206", "down_issu_cnt": "688", "stnr_issu_cnt": "28",
+            "uplm_issu_cnt": "4", "lslm_issu_cnt": "0",
+        }}
+
+    monkeypatch.setattr(kis, "_get", _fake_get)
+    r = await kis.market_breadth(market)
+    assert r["advancing"] == 206 and r["declining"] == 688 and r["unchanged"] == 28
+    assert r["limit_up"] == 4 and r["limit_down"] == 0
+    assert r["breadth_ratio"] == round(206 / 894, 4)
+    assert r["source"] == "kis_index"
+
+
+@pytest.mark.asyncio
+async def test_kis_market_breadth_error_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from connectors.kis.client import KISClient
+
+    kis = KISClient()
+
+    async def _fake_get(path: str, *, tr_id: str, params: dict) -> dict:
+        return {"rt_cd": "1", "msg1": "조회 실패"}
+
+    monkeypatch.setattr(kis, "_get", _fake_get)
+    r = await kis.market_breadth("KOSPI")
+    assert r["source"] == "unavailable" and r["advancing"] is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_breadth_uses_kis_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_fetch_breadth 1순위 = KIS 업종지수 (정확값)."""
+    breadth = {"market": "KOSPI", "advancing": 206, "declining": 688,
+               "unchanged": 28, "breadth_ratio": 0.2304, "source": "kis_index"}
+    monkeypatch.setattr(mm, "KISClient", lambda: _FakeKIS(breadth))
+    r = await mm._fetch_breadth("KOSPI")
+    assert r["source"] == "kis_index" and r["advancing"] == 206
+
+
+@pytest.mark.asyncio
+async def test_fetch_breadth_falls_back_to_volrank_when_empty(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """KIS 업종지수가 0 카운트 → volume_rank top30 대용으로 강등."""
+    monkeypatch.setattr(mm, "KISClient", lambda: _FakeKIS({"advancing": 0, "declining": 0}))
+    called = {}
+
+    async def _fake_fallback(market: str) -> dict:
+        called["hit"] = True
+        return {"source": "kis_volrank_top30", "advancing": 5, "declining": 3}
+
+    monkeypatch.setattr(mm, "_fetch_breadth_kis_fallback", _fake_fallback)
+    r = await mm._fetch_breadth("KOSPI")
+    assert called.get("hit") and r["source"] == "kis_volrank_top30"

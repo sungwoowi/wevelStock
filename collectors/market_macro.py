@@ -9,17 +9,18 @@ market_state_analyzer 의 4축 (지수 위계 / 등락 추세 / breadth / Distri
   3. 없으면 `chart_ohlcv` 의 지수 ticker (KOSPI=0001 / KOSDAQ=1001) 일봉 read
      → 월봉 36/60 MA (지수 위계) + 일봉 20/60 MA + slope (등락 추세)
      + Distribution Day 25 일 윈도우 카운트 계산.
-  4. KRX backend `market_breadth(market)` 호출 → 상승·하락 종목 수 + ratio.
+  4. KIS `market_breadth(market)` (업종지수 등락종목수) 호출 → 상승·하락 종목 수 + ratio.
   5. 4축 종합 → `market_macro_snapshot` 에 upsert.
 
 SLOT 보류:
 - S1: Distribution Day 임계 (현재 change_pct ≤ -0.2% + volume > prev) — production 검증 시 정정.
 - S5: KIS 지수 chart endpoint — connectors/kis/client.get_daily_chart 의 SLOT.
 
-S4 (KRX breadth bld) = cycle 14.0 KIS volume_rank fallback 으로 봉합 (KRX 400 응답 시
-거래대금 상위 30 종목 등락 분포로 대용). breadth_source 메타데이터로 분석가에게 한계 노출.
+breadth source = **KIS inquire-index-price 의 `*_issu_cnt` (전체 시장 정확값, 2026-05-31)**.
+구 KRX STAT breadth bld 는 Akamai 봇차단으로 폐기. 실패 시 KIS volume_rank top30 대용으로
+강등 (breadth_source 메타데이터로 분석가에게 한계 노출).
 
-본 collector 는 KIS 호출을 직접 사용 (S4 fallback). chart_ohlcv 에 적재된 지수 일봉도 read.
+본 collector 는 KIS 호출을 직접 사용. chart_ohlcv 에 적재된 지수 일봉도 read.
 지수 적재는 별도 cron (`charts.refresh_all_tickers`) 의 ticker list 확장으로 처리.
 """
 from __future__ import annotations
@@ -34,7 +35,6 @@ import pandas as pd
 
 from collectors.charts import load_ohlcv_from_db
 from connectors.kis import KISClient
-from connectors.krx.client import KRXClient
 from core.db import get_db
 from core.logging import get_logger
 
@@ -356,20 +356,21 @@ async def _fetch_breadth_kis_fallback(market: str) -> dict[str, Any]:
 
 
 async def _fetch_breadth(market: str) -> dict[str, Any]:
-    """Breadth fetch chain: KRX bld → KIS volume_rank fallback (SLOT S4).
+    """Breadth fetch chain: KIS 업종지수 등락종목수(전체 시장·정확) → KIS volume_rank top30(대용).
 
-    KRX 성공 시 전체 시장 breadth (정확). 실패 시 KIS 거래대금 상위 30 대용 (한계).
-    응답에 source 키 포함하여 호출자가 한계 식별 가능.
+    KRX STAT breadth bld 는 Akamai 봇차단(getJsonData STAT 전 카테고리 "LOGOUT")으로 폐기
+    (2026-05-31). KIS inquire-index-price 의 `*_issu_cnt` 가 전체 시장 상승/하락/보합 종목수를
+    직접 제공한다 (top30 대용 대비 정확). 응답 source 키로 호출자가 한계 식별:
+    kis_index(정확) / kis_volrank_top30(대용) / unavailable.
     """
     try:
-        async with KRXClient() as krx:
-            result = await krx.market_breadth(market)
-        # KRX 응답이 0 카운트만 돌려주면 (bld 미해소 휴리스틱 실패) fallback.
-        if (result.get("advancing", 0) + result.get("declining", 0)) > 0:
+        async with KISClient() as kis:
+            result = await kis.market_breadth(market)
+        if (result.get("advancing") or 0) + (result.get("declining") or 0) > 0:
             return result
-        log.info("breadth_krx_empty_fallback_to_kis", market=market)
-    except Exception as exc:
-        log.info("breadth_krx_failed_fallback_to_kis", market=market, error=str(exc))
+        log.info("breadth_kis_index_empty_fallback_to_volrank", market=market)
+    except Exception as exc:  # noqa: BLE001
+        log.info("breadth_kis_index_failed_fallback_to_volrank", market=market, error=str(exc))
 
     return await _fetch_breadth_kis_fallback(market)
 
