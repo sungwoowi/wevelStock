@@ -110,6 +110,24 @@ def get_theme_taxonomy() -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items()}
 
 
+_S_WEIGHTS_DEFAULTS: dict[str, float] = {"momentum": 0.45, "inflow": 0.30, "volume": 0.25}
+
+
+def get_buyscore_s_weights() -> dict[str, float]:
+    """buy_score S(수급) demand 블렌드 가중 (momentum/inflow/volume). 부재 키는 default."""
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("buyscore") or {}).get("s_weights") or {}
+    out = dict(_S_WEIGHTS_DEFAULTS)
+    for k in _S_WEIGHTS_DEFAULTS:
+        v = raw.get(k)
+        if v is not None:
+            try:
+                out[k] = float(v)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def get_theme_sector_mapping() -> dict[str, list[str]]:
     """테마 key → 섹터 ETF 이름 리스트 (S-Score supply_chain 실측). flow.theme_sector_mapping. 부재 시 빈 dict."""
     cfg = load_score_inputs_config()

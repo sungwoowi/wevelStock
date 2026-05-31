@@ -39,7 +39,9 @@ class BuyScoreInputs:
     # 원시 지표 (LLM 주입 = 권위)
     eps_yoy_pct: float | None        # C: 분기 EPS YoY %
     high_proximity_pct: float | None  # N: 52주 고가 대비 이격 % (0=신고가)
-    inflow_speed_raw: float | None    # S: 외인+기관 자금 유입 bp
+    inflow_speed_raw: float | None    # S: 외인+기관 자금 유입 bp (누적 level)
+    demand_momentum: float | None     # S: 최근 수급 turnaround 점수 (이벤트 포착)
+    volume_spike: float | None        # S: 거래량 동반 (오늘/20일평균)
     institution_ratio: float | None   # I: 기관 net 비중 -1..+1
     regime: str | None                # M: 시장 체제 6단계 라벨
     breadth_ratio: float | None       # M 맥락: 시장 폭 (narrow breadth 노출)
@@ -78,6 +80,35 @@ def compute_eps_yoy(quarterly_eps: list[float | None] | None) -> float | None:
     if cur is None or base is None or base == 0:
         return None
     return (cur - base) / abs(base) * 100.0
+
+
+def compute_demand_score(
+    momentum_score: float | None,
+    inflow_score: float | None,
+    volume_confirm_score: float | None,
+    weights: dict[str, float],
+) -> float | None:
+    """S(수급) demand composite — 최근 momentum + 누적 inflow + 거래량 동반 가중 블렌드 (순수).
+
+    누적 level(inflow)만 보면 하루짜리 대량 수급 전환(이벤트)을 놓침 → momentum 이 이벤트 포착,
+    volume 이 수요 진위 확증. 결측 컴포넌트는 평가 제외 후 재정규화(비례). 전부 결측 → None.
+    """
+    pairs = [
+        (momentum_score, weights.get("momentum", 0.45)),
+        (inflow_score, weights.get("inflow", 0.30)),
+        (volume_confirm_score, weights.get("volume", 0.25)),
+    ]
+    num = 0.0
+    wsum = 0.0
+    for val, w in pairs:
+        if val is not None:
+            num += w * val
+            wsum += w
+    if wsum <= 0:
+        return None
+    from collectors.scoring import _clamp, _round_to_half
+
+    return _clamp(_round_to_half(num / wsum))
 
 
 def compute_institution_ratio(net_sums: dict[str, int] | None) -> float | None:
@@ -132,8 +163,10 @@ async def build_buy_score_inputs(
     # A — 연간 EPS 3년 가속 = fundamentals 5분기만(데이터 공백) → 중립 (SLOT)
     reasons.append("A(연간 EPS 3년) 중립 5.0 — fundamentals 5분기만(SLOT: KIS/별도 소스)")
 
-    # ---- N — 52주 신고가 (charts) ----
+    # ---- N — 52주 신고가 (charts) + 거래량 spike(S 거래량 동반 입력) ----
     high_prox: float | None = None
+    vol_spike: float | None = None
+    vol_confirm: float | None = None
     n = _NEUTRAL
     axis_source["n"] = "neutral_fallback"
     if ticker_s:
@@ -153,6 +186,9 @@ async def build_buy_score_inputs(
                     axis_source["n"] = "charts_52w"
                 else:
                     reasons.append("N(52주 신고가) 중립 — pct_from_high 부재")
+                vol_spike = (ind.get("volume") or {}).get("spike_ratio")
+                if vol_spike is not None:
+                    vol_confirm = map_to_axis(vol_spike, _bps("buyscore", "s_volume_confirm"))
             else:
                 reasons.append("N(52주) 중립 — 일봉 부재")
         except Exception as e:  # noqa: BLE001
@@ -160,22 +196,29 @@ async def build_buy_score_inputs(
             reasons.append(f"N 산출 실패 ({type(e).__name__}) → 중립")
     reasons.append("N 뉴스부(신제품) 0시드 — 52주 신고가만 (SLOT: NEWS-SOURCE-001)")
 
-    # ---- S / I — flow_inputs (collector 직접 호출) ----
+    # ---- S / I — flow_inputs (collector 직접 호출). S = demand composite(momentum+inflow+거래량) ----
     inflow_raw: float | None = None
+    demand_momentum: float | None = None
     inst_ratio: float | None = None
     s = i = _NEUTRAL
     axis_source["s"] = axis_source["i"] = "neutral_fallback"
     if ticker_s:
         try:
             from collectors.flow_inputs import build_flow_inputs
+            from collectors.score_inputs_config import get_buyscore_s_weights
 
             fi = await build_flow_inputs(ticker=ticker_s, cutoff_date=cutoff_date)
             inflow_raw = fi.inflow_speed_raw
-            if fi.inflow_score is not None:
-                s = fi.inflow_score
-                axis_source["s"] = f"flow({fi.source})"
+            demand_momentum = fi.momentum_score
+            # S = 최근 momentum(이벤트) + 누적 inflow + 거래량 동반 블렌드 (누적 level 단독의 이벤트 누락 해소)
+            demand = compute_demand_score(
+                fi.momentum_score, fi.inflow_score, vol_confirm, get_buyscore_s_weights()
+            )
+            if demand is not None:
+                s = demand
+                axis_source["s"] = f"demand(flow {fi.source}+vol)"
             else:
-                reasons.append("S(수급) 중립 — inflow 미산출")
+                reasons.append("S(수급) 중립 — momentum/inflow/거래량 전부 미산출")
             inst_ratio = compute_institution_ratio(fi.net_sums)
             if inst_ratio is not None:
                 i = map_to_axis(inst_ratio, _bps("buyscore", "i_institution_ratio")) or _NEUTRAL
@@ -235,7 +278,8 @@ async def build_buy_score_inputs(
     return BuyScoreInputs(
         ticker=ticker_s,
         eps_yoy_pct=eps_yoy, high_proximity_pct=high_prox,
-        inflow_speed_raw=inflow_raw, institution_ratio=inst_ratio,
+        inflow_speed_raw=inflow_raw, demand_momentum=demand_momentum, volume_spike=vol_spike,
+        institution_ratio=inst_ratio,
         regime=regime, breadth_ratio=breadth, distribution_count=dist,
         screening_score=screening_sc,
         c=c, a=a, n=n, s=s, l=l, i=i, m=m,
@@ -285,7 +329,11 @@ def render_buy_score_inputs_md(bi: BuyScoreInputs, *, name: str | None = None) -
     lines.append(f"| C | 분기 EPS YoY | {_fmt(bi.eps_yoy_pct, '%', plus=True)} | {bi.c:.1f} | {bi.axis_source.get('c','')} |")
     lines.append(f"| A | 연간 EPS 3년 | (공백) | {bi.a:.1f} | {bi.axis_source.get('a','')} |")
     lines.append(f"| N | 52주 신고가 이격 | {_fmt(bi.high_proximity_pct, '%')} | {bi.n:.1f} | {bi.axis_source.get('n','')} |")
-    lines.append(f"| S | 수급(자금 유입) | {_fmt(bi.inflow_speed_raw, 'bp', plus=True)} | {bi.s:.1f} | {bi.axis_source.get('s','')} |")
+    vol_s = "null" if bi.volume_spike is None else f"{bi.volume_spike:.1f}배"
+    mom_s = "null" if bi.demand_momentum is None else f"{bi.demand_momentum:.1f}"
+    lines.append(
+        f"| S | 수급(최근모멘텀+누적+거래량) | 누적 {_fmt(bi.inflow_speed_raw, 'bp', plus=True)}·모멘텀 {mom_s}·거래량 {vol_s} | {bi.s:.1f} | {bi.axis_source.get('s','')} |"
+    )
     lines.append(f"| L | 주도주(RS+과열도) | {_fmt(bi.screening_score)} | {bi.l:.1f} | {bi.axis_source.get('l','')} |")
     lines.append(f"| I | 기관 비중 | {_fmt(bi.institution_ratio, plus=True)} | {bi.i:.1f} | {bi.axis_source.get('i','')} |")
     # M — narrow breadth 맥락 노출 (구조적 성장 vs 천장 디버전스 판단은 LLM)

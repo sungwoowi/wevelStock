@@ -50,6 +50,17 @@ buyscore:
   # I: 기관 비중 = institution_net / (|foreign|+|institution|+1) = -1..+1. 기관 매수 우위일수록 강함.
   i_institution_ratio:
     breakpoints: [[-1.0, 1.0], [-0.3, 3.5], [0.0, 5.0], [0.3, 7.0], [0.6, 9.0], [1.0, 10.0]]
+  # S(수급) = demand composite = 최근 수급 momentum + 누적 inflow + 거래량 동반 가중 블렌드.
+  #   본질(2026-06-01 NAVER 젠슨황 이벤트 발견): 누적 level(inflow)만 보면 하루짜리 대량 수급 전환을
+  #   놓침. 최근 turnaround(momentum)가 이벤트를 잡고, 거래량 동반(spike)이 수요 진위를 확증.
+  #   CAN SLIM S = 거래량 동반 수요. 결측 컴포넌트는 평가 제외 후 재정규화(비례).
+  s_weights:
+    momentum: 0.45   # 최근 15일 vs 직전 15일 외인·기관 turnaround (이벤트 포착)
+    inflow: 0.30     # 30일 누적 자금 유입 (지속 매집)
+    volume: 0.25     # 거래량 동반 (오늘/20일평균 spike)
+  # 거래량 spike = 오늘 거래량 / 20일 평균. 1배=중립 동반, 3배+=강한 동반. 단조 증가(수요 확증).
+  s_volume_confirm:
+    breakpoints: [[0.5, 3.0], [1.0, 5.0], [2.0, 7.5], [4.0, 9.0], [6.0, 10.0]]
 
 flow:
   # 60일 수급 모멘텀 turnaround, collector 가 -1.0~+1.0 정규화 (직전 30일 대비 최근 30일 부호·가속).

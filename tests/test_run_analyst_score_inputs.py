@@ -51,7 +51,8 @@ def _fake_bi():
 
     return BuyScoreInputs(
         ticker="005930", eps_yoy_pct=30.0, high_proximity_pct=-2.0,
-        inflow_speed_raw=80.0, institution_ratio=0.6, regime="strong_bull",
+        inflow_speed_raw=80.0, demand_momentum=7.0, volume_spike=2.5,
+        institution_ratio=0.6, regime="strong_bull",
         breadth_ratio=0.55, distribution_count=0, screening_score=8.0,
         c=10.0, a=5.0, n=8.0, s=9.0, l=8.0, i=8.0, m=10.0,
         advisory_buy_score=8.5, reasons=[], source="db",

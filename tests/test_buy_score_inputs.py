@@ -10,10 +10,13 @@ import pytest
 
 from collectors.buy_score_inputs import (
     BuyScoreInputs,
+    compute_demand_score,
     compute_eps_yoy,
     compute_institution_ratio,
     render_buy_score_inputs_md,
 )
+
+_S_W = {"momentum": 0.45, "inflow": 0.30, "volume": 0.25}
 
 
 # ============================================================
@@ -44,6 +47,28 @@ class TestComputeEpsYoy:
 
     def test_empty(self) -> None:
         assert compute_eps_yoy(None) is None
+
+
+class TestComputeDemandScore:
+    def test_event_momentum_lifts_despite_low_inflow(self) -> None:
+        # NAVER 케이스: 누적 inflow 약함(1) but 최근 momentum 강함(10) + 거래량 동반(9)
+        # → 누적 단독(1.0)보다 크게 상향
+        s = compute_demand_score(10.0, 1.0, 9.0, _S_W)
+        assert s is not None and s > 5.0
+        # (0.45*10 + 0.30*1 + 0.25*9)/1.0 = 4.5+0.3+2.25 = 7.05 → 7.0
+        assert s == 7.0
+
+    def test_renormalize_missing_volume(self) -> None:
+        # 거래량 결측 → momentum/inflow 만 재정규화
+        s = compute_demand_score(8.0, 4.0, None, _S_W)
+        # (0.45*8 + 0.30*4)/0.75 = (3.6+1.2)/0.75 = 6.4 → 6.5
+        assert s == 6.5
+
+    def test_all_missing_none(self) -> None:
+        assert compute_demand_score(None, None, None, _S_W) is None
+
+    def test_determinism(self) -> None:
+        assert compute_demand_score(10.0, 1.0, 9.0, _S_W) == compute_demand_score(10.0, 1.0, 9.0, _S_W)
 
 
 class TestComputeInstitutionRatio:
@@ -154,7 +179,9 @@ async def test_eps_and_regime_live(isolated_db, monkeypatch: pytest.MonkeyPatch)
     assert bi.eps_yoy_pct == pytest.approx(30.0)
     assert bi.c >= 9.0  # +30% YoY → 높은 C
     assert bi.regime == "strong_bull" and bi.m == 10.0
-    assert bi.s == 9.0  # flow inflow_score
+    # S = demand 블렌드(momentum 7 + inflow 9, 거래량 결측) = (0.45*7+0.30*9)/0.75 = 7.8 → 8.0
+    assert bi.s >= 7.0
+    assert bi.demand_momentum == 7.0
     assert bi.i > 5.0   # 기관 매수 우위
     assert bi.axis_source["c"].startswith("fundamentals")
 
