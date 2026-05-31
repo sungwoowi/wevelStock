@@ -374,7 +374,9 @@ class KISClient:
             [{"date": "2026-05-31", "foreign_net": int(백만원),
               "institution_net": int, "individual_net": int}] (정순 보장 X — 호출부 정렬).
             오류 시 [] (collector 가 시장 프록시 fallback).
-        단위: KIS 순매수 거래대금(원) → 백만원(// 1_000_000).
+        단위: `*_ntby_tr_pbmn`(순매수 거래대금)은 KIS 에서 **이미 백만원** 단위 — 변환 없음.
+              (market_investor_total 가 동일 필드를 백만원으로 취급하는 것과 정합. 실서버 005930
+               검증: frgn -327,750=−3,278억 / orgn 1,666,582=+1.67조. 2026-05-31 단위 버그 정정.)
         """
         data = await self._get(
             "/uapi/domestic-stock/v1/quotations/inquire-investor",
@@ -384,11 +386,11 @@ class KISClient:
         if data.get("rt_cd") != "0":
             return []
 
-        def _won_m(v: Any) -> int:
+        def _m(v: Any) -> int:
             if v in (None, ""):
                 return 0
             try:
-                return int(v) // 1_000_000
+                return int(v)  # 이미 백만원
             except (ValueError, TypeError):
                 return 0
 
@@ -399,9 +401,9 @@ class KISClient:
                 continue
             out.append({
                 "date": f"{raw_d[0:4]}-{raw_d[4:6]}-{raw_d[6:8]}",
-                "foreign_net": _won_m(it.get("frgn_ntby_tr_pbmn")),
-                "institution_net": _won_m(it.get("orgn_ntby_tr_pbmn")),
-                "individual_net": _won_m(it.get("prsn_ntby_tr_pbmn")),
+                "foreign_net": _m(it.get("frgn_ntby_tr_pbmn")),
+                "institution_net": _m(it.get("orgn_ntby_tr_pbmn")),
+                "individual_net": _m(it.get("prsn_ntby_tr_pbmn")),
             })
         return out
 

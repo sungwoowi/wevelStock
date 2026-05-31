@@ -197,3 +197,28 @@ class TestGet60d:
     @pytest.mark.asyncio
     async def test_market_cap_none_on_error(self, fresh_db) -> None:
         assert await get_stock_market_cap("X", kis=_FakeKIS(market_cap_eok=None)) is None
+
+
+class TestKISUnit:
+    """KIS stock_investor_history 단위 회귀 가드 (2026-05-31 ÷1e6 버그 정정).
+
+    `*_ntby_tr_pbmn` 은 이미 백만원 — 절대 나누지 말 것. 실서버 005930 raw 로 고정.
+    """
+
+    @pytest.mark.asyncio
+    async def test_investor_history_no_division(self) -> None:
+        from unittest.mock import AsyncMock
+
+        from connectors.kis import KISClient
+
+        k = KISClient.__new__(KISClient)  # __init__(creds/httpx) 우회
+        k._get = AsyncMock(return_value={"rt_cd": "0", "output": [
+            {"stck_bsop_date": "20260529", "frgn_ntby_tr_pbmn": "-327750",
+             "orgn_ntby_tr_pbmn": "1666582", "prsn_ntby_tr_pbmn": "-1334073"},
+        ]})
+        rows = await k.stock_investor_history("005930")
+        assert rows[0]["date"] == "2026-05-29"
+        # 백만원 그대로 (÷1e6 금지) — 버그였다면 -327750//1e6 = -1 로 뭉개짐
+        assert rows[0]["foreign_net"] == -327750
+        assert rows[0]["institution_net"] == 1666582
+        assert rows[0]["individual_net"] == -1334073
