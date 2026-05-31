@@ -571,6 +571,28 @@ def _leading_pool_tickers(snapshot: MarketSnapshot) -> list[str]:
     return list(dict.fromkeys(tickers))
 
 
+def _regime_from_snapshot(snapshot: MarketSnapshot, resolved_ticker: str) -> str | None:
+    """snapshot.market_macro → classify_market_regime (종목 시장 기준). 부재 시 None.
+
+    buy_score M축 + S-Score rs/extension 가중(rank_candidates regime) 공용.
+    """
+    macro_map = snapshot.market_macro if isinstance(snapshot.market_macro, dict) else {}
+    if not macro_map:
+        return None
+    market = "KOSDAQ" if market_for_ticker(resolved_ticker) == "KQ" else "KOSPI"
+    macro = macro_map.get(market) or macro_map.get("KOSPI")
+    if not macro:
+        return None
+    try:
+        from collectors.market_macro import classify_market_regime
+        from collectors.screening import get_regime_thresholds
+
+        return classify_market_regime(macro, thresholds=get_regime_thresholds())
+    except Exception as e:  # noqa: BLE001
+        log.warning("regime_classify_failed", ticker=resolved_ticker, error=str(e))
+        return None
+
+
 async def _maybe_build_s_score_inputs_md(
     spec: AnalystSpec, target_ticker: str | None, snapshot: MarketSnapshot
 ) -> tuple[str | None, dict[str, Any]]:
@@ -598,9 +620,10 @@ async def _maybe_build_s_score_inputs_md(
 
     pool = _leading_pool_tickers(snapshot)
     sector_rs = snapshot.sector_rs if isinstance(snapshot.sector_rs, list) else None
+    regime = _regime_from_snapshot(snapshot, resolved_ticker)
     try:
         si = await build_s_score_inputs(
-            ticker=resolved_ticker, pool_tickers=pool, sector_rs=sector_rs
+            ticker=resolved_ticker, pool_tickers=pool, sector_rs=sector_rs, regime=regime
         )
     except Exception as e:  # noqa: BLE001
         log.warning("s_score_inputs_inject_failed", ticker=resolved_ticker, error=str(e))

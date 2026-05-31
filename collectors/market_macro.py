@@ -117,6 +117,87 @@ def _trend_from_slopes(slope_5d_20: float | None, slope_20d_60: float | None) ->
     return "sideways"
 
 
+# ---------------------------------------------------------------------------
+# 시장 체제 6단계 분류 (CAN SLIM Market Direction — buy_score M축 + rank_candidates regime)
+# ---------------------------------------------------------------------------
+
+Regime = str  # "parabolic"|"strong_bull"|"moderate_bull"|"sideways"|"moderate_bear"|"strong_bear"
+
+# 임계 default (SLOT — config/screening.yaml regime_thresholds 로 외부화, production 튜닝).
+_DEFAULT_REGIME_THRESHOLDS: dict[str, float] = {
+    "parabolic_slope_pct": 3.0,   # ma20 5일 기울기 % 이 이상 = 폭주 후보
+    "breadth_strong": 0.55,       # 상승종목 비율 이 이상 = 강한 폭 (parabolic 조건)
+    "breadth_weak": 0.40,         # 이 미만 = 폭 좁은 상승 → moderate_bull 강등
+    "distribution_ceiling": 5,    # 25일 분산일 이 이상 = 천장 경고 → parabolic 억제
+}
+
+# regime → M축 점수 (persona buy_score M 정의: parabolic·strong_bull=10 / moderate_bull=7 / sideways=4 / bear).
+_REGIME_SCORE: dict[str, float] = {
+    "parabolic": 10.0, "strong_bull": 10.0, "moderate_bull": 7.0,
+    "sideways": 4.0, "moderate_bear": 2.0, "strong_bear": 0.0,
+}
+
+
+def _mget(macro: Any, key: str) -> Any:
+    """MarketMacro dataclass 또는 dict 양쪽에서 필드 read."""
+    if isinstance(macro, dict):
+        return macro.get(key)
+    return getattr(macro, key, None)
+
+
+def classify_market_regime(
+    macro: Any,
+    *,
+    thresholds: dict[str, float] | None = None,
+) -> Regime:
+    """시장 체제 6단계 결정론 분류 (예측 X — **현재 상태 라벨링**).
+
+    3 계층 신호 조합 (오닐 CAN SLIM Market Direction):
+        장기 골격 = position(월봉 36·60MA 대비) / 중기 방향 = trend(일봉 20·60 기울기) +
+        ma20 기울기 강도 / 강도·천장 = breadth_ratio(상승종목 폭) + distribution_count(기관 분산일).
+
+    Args:
+        macro: MarketMacro 또는 snapshot.market_macro dict (position/trend/ma20_slope_pct_5d/
+               breadth_ratio/distribution_count_25d).
+        thresholds: 임계 DI (config/screening.yaml). None → _DEFAULT (SLOT).
+
+    Returns:
+        6 regime 중 하나. position/trend 부재(데이터 부족) → "sideways"(모름).
+    """
+    th = {**_DEFAULT_REGIME_THRESHOLDS, **(thresholds or {})}
+    position = _mget(macro, "position")
+    trend = _mget(macro, "trend")
+    slope = _mget(macro, "ma20_slope_pct_5d")
+    breadth = _mget(macro, "breadth_ratio")
+    dist = _mget(macro, "distribution_count_25d") or 0
+
+    if position is None or trend is None:
+        return "sideways"
+
+    if trend == "downtrend":
+        return "strong_bear" if position == "below_both" else "moderate_bear"
+    if trend == "sideways":
+        return "sideways"
+
+    # uptrend
+    if position == "above_both":
+        if breadth is not None and breadth < th["breadth_weak"]:
+            return "moderate_bull"   # 폭 좁은 상승 = 약한 강세
+        parabolic_ok = (
+            slope is not None and slope >= th["parabolic_slope_pct"]
+            and (breadth is None or breadth >= th["breadth_strong"])
+            and dist < th["distribution_ceiling"]   # 분산일 多 → parabolic 억제
+        )
+        return "parabolic" if parabolic_ok else "strong_bull"
+    # uptrend 이나 장기선 회복 중 (between/below_both) = 완만한 강세
+    return "moderate_bull"
+
+
+def regime_to_score(regime: Regime | None) -> float:
+    """regime → M축 0~10 점수 (buy_score). 미지정/미정의 → 4.0(중립 sideways)."""
+    return _REGIME_SCORE.get(regime or "", 4.0)
+
+
 def compute_index_hierarchy(daily_df: pd.DataFrame) -> dict[str, Any]:
     """월봉 36·60 MA + 현재가 위계.
 

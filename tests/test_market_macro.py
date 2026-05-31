@@ -311,3 +311,101 @@ async def test_fetch_breadth_falls_back_to_volrank_when_empty(
     monkeypatch.setattr(mm, "_fetch_breadth_kis_fallback", _fake_fallback)
     r = await mm._fetch_breadth("KOSPI")
     assert called.get("hit") and r["source"] == "kis_volrank_top30"
+
+
+# ---------------------------------------------------------------------------
+# classify_market_regime — 6단계 결정론 분류 (예측 X, 현재 상태 라벨링)
+# ---------------------------------------------------------------------------
+
+
+def _macro(**kw) -> dict:
+    base = {
+        "position": "above_both", "trend": "uptrend",
+        "ma20_slope_pct_5d": 1.0, "breadth_ratio": 0.50,
+        "distribution_count_25d": 0,
+    }
+    base.update(kw)
+    return base
+
+
+class TestClassifyMarketRegime:
+    def test_strong_bull(self) -> None:
+        # above_both + uptrend + breadth 양호 + 분산일 적음, 기울기 완만 → strong_bull
+        assert mm.classify_market_regime(_macro(ma20_slope_pct_5d=1.0)) == "strong_bull"
+
+    def test_parabolic(self) -> None:
+        # 가파른 기울기(≥3.0) + breadth 강함(≥0.55) + 분산일 적음 → parabolic
+        assert mm.classify_market_regime(
+            _macro(ma20_slope_pct_5d=4.0, breadth_ratio=0.60)
+        ) == "parabolic"
+
+    def test_parabolic_suppressed_by_distribution(self) -> None:
+        # 가파르나 분산일 천장(≥5) → parabolic 억제 → strong_bull
+        assert mm.classify_market_regime(
+            _macro(ma20_slope_pct_5d=4.0, breadth_ratio=0.60, distribution_count_25d=6)
+        ) == "strong_bull"
+
+    def test_narrow_breadth_downgrades_to_moderate_bull(self) -> None:
+        # 시총 상위 쏠림 = 지수 상승(above_both+uptrend)인데 breadth 좁음(<0.40) → moderate_bull
+        assert mm.classify_market_regime(
+            _macro(breadth_ratio=0.30, ma20_slope_pct_5d=4.0)
+        ) == "moderate_bull"
+
+    def test_recovery_uptrend_below_long_ma_is_moderate(self) -> None:
+        # uptrend 이나 장기선 회복 중(between) → moderate_bull
+        assert mm.classify_market_regime(_macro(position="between")) == "moderate_bull"
+
+    def test_sideways(self) -> None:
+        assert mm.classify_market_regime(_macro(trend="sideways")) == "sideways"
+
+    def test_moderate_bear(self) -> None:
+        # downtrend 이나 장기선 위/중간 → moderate_bear
+        assert mm.classify_market_regime(_macro(trend="downtrend", position="between")) == "moderate_bear"
+
+    def test_strong_bear(self) -> None:
+        assert mm.classify_market_regime(
+            _macro(trend="downtrend", position="below_both")
+        ) == "strong_bear"
+
+    def test_missing_data_sideways_fallback(self) -> None:
+        assert mm.classify_market_regime(_macro(position=None)) == "sideways"
+        assert mm.classify_market_regime(_macro(trend=None)) == "sideways"
+
+    def test_accepts_dataclass(self) -> None:
+        # MarketMacro dataclass 도 수용
+        macro = MarketMacro(
+            date="2026-06-01", market="KOSPI", index_close=2500.0,
+            ma_36m=2400.0, ma_60m=2300.0, position="above_both",
+            ma_20d=2480.0, ma_60d=2450.0, ma20_slope_pct_5d=1.0, ma60_slope_pct_20d=0.5,
+            trend="uptrend", advancing=500, declining=400, unchanged=50, breadth_ratio=0.55,
+            is_distribution_day=False, change_pct=0.5, volume_change_pct=2.0,
+            distribution_count_25d=0,
+        )
+        assert mm.classify_market_regime(macro) == "strong_bull"
+
+    def test_thresholds_di(self) -> None:
+        # 임계 DI: parabolic 기울기 임계를 5.0 으로 올리면 기울기 4.0 은 strong_bull
+        assert mm.classify_market_regime(
+            _macro(ma20_slope_pct_5d=4.0, breadth_ratio=0.60),
+            thresholds={"parabolic_slope_pct": 5.0},
+        ) == "strong_bull"
+
+    def test_determinism(self) -> None:
+        m = _macro(ma20_slope_pct_5d=4.0, breadth_ratio=0.60)
+        assert mm.classify_market_regime(m) == mm.classify_market_regime(m)
+
+
+class TestRegimeToScore:
+    def test_bull_high(self) -> None:
+        assert mm.regime_to_score("parabolic") == 10.0
+        assert mm.regime_to_score("strong_bull") == 10.0
+        assert mm.regime_to_score("moderate_bull") == 7.0
+
+    def test_neutral_bear(self) -> None:
+        assert mm.regime_to_score("sideways") == 4.0
+        assert mm.regime_to_score("moderate_bear") == 2.0
+        assert mm.regime_to_score("strong_bear") == 0.0
+
+    def test_unknown_neutral(self) -> None:
+        assert mm.regime_to_score(None) == 4.0
+        assert mm.regime_to_score("??") == 4.0

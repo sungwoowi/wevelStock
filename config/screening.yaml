@@ -28,3 +28,14 @@ regime_weights:
   sideways:       { w_rs: 0.15, w_ext: 0.30 }   # 횡보 — 과열 페널티 강조
   moderate_bear:  { w_rs: 0.15, w_ext: 0.30 }   # 완만한 약세 — 과열 페널티 강조
   strong_bear:    { w_rs: 0.15, w_ext: 0.30 }   # 강한 약세 — 과열 페널티 강조 (또는 매매 중단)
+
+# 시장 체제 6단계 분류 임계 (market_macro.classify_market_regime, buy_score M축 + rank_candidates regime).
+#   3 계층: 장기 골격(position) → 중기 방향(trend+ma20 기울기) → 강도·천장(breadth+분산일).
+#   **narrow breadth(시총 상위 쏠림)는 breadth_weak 미만 → strong_bull 대신 moderate_bull 강등**:
+#   결정론은 보수 라벨만, "구조적 성장 vs 천장 디버전스" 판단은 breadth·분산일 원시값 보고 LLM이 함.
+#   하드코딩 금지(watchdog). SLOT — production 분포로 튜닝.
+regime_thresholds:
+  parabolic_slope_pct: 3.0     # ma20 5일 기울기 % 이 이상 = 폭주(parabolic) 후보
+  breadth_strong: 0.55         # 상승종목 비율 이 이상 = 강한 폭 (parabolic 조건)
+  breadth_weak: 0.40           # 이 미만 = 폭 좁은 상승 → moderate_bull 강등 (쏠림 경고)
+  distribution_ceiling: 5      # 25일 분산일 이 이상 = 천장 경고 → parabolic 억제

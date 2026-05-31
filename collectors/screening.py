@@ -86,6 +86,19 @@ def get_adr_window() -> int:
         return 14
 
 
+def get_regime_thresholds() -> dict[str, float]:
+    """시장 체제 분류 임계 (market_macro.classify_market_regime DI). 부재 시 빈 dict→함수 default."""
+    raw = _load_screening_config().get("regime_thresholds") or {}
+    out: dict[str, float] = {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            try:
+                out[str(k)] = float(v)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 def get_regime_weights() -> dict[str, dict[str, float]]:
     raw = _load_screening_config().get("regime_weights") or {}
     out: dict[str, dict[str, float]] = {}
