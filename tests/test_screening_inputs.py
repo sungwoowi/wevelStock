@@ -15,6 +15,7 @@ from collectors.screening_inputs import (
     ScreeningInputs,
     build_s_score_inputs,
     compute_alignment,
+    compute_supply_chain_score,
     render_s_score_inputs_md,
 )
 
@@ -48,12 +49,24 @@ class TestComputeAlignment:
         assert score == 0.0
         assert detail["monthly_7ma"] is False
 
-    def test_partial_components(self) -> None:
-        # 월봉만 위 = 4점 (주/일봉 데이터 부족)
+    def test_partial_components_normalized(self) -> None:
+        # 월봉만 산출 가능 + 정배열 → 4/4 비례 정규화 = 10.0 (결측 위계 평가 제외, 저평가 편향 제거)
         ind = _ind(close=100, m7=90)
         score, detail = compute_alignment(ind)
-        assert score == 4.0
+        assert score == 10.0
         assert detail["weekly_stack"] is None and detail["daily_stack"] is None
+
+    def test_partial_mixed_normalized(self) -> None:
+        # 월봉 정배열(4) + 일봉 역배열(0), 주봉 결측 → available_max 7, earned 4 → 4/7×10 = 5.714 → 5.5
+        ind = _ind(close=100, m7=90, d20=105, d60=110)  # close < d20 → 일봉 역배열
+        score, _ = compute_alignment(ind)
+        assert score == 5.5
+
+    def test_daily_only_aligned_full(self) -> None:
+        # 일봉만 산출 + 정배열 → 3/3 = 10.0 (구 구현은 max 3 으로 막혔던 저평가 편향)
+        ind = _ind(close=100, d20=95, d60=90)
+        score, _ = compute_alignment(ind)
+        assert score == 10.0
 
     def test_all_missing_returns_none(self) -> None:
         ind = _ind(close=100)
@@ -67,6 +80,59 @@ class TestComputeAlignment:
     def test_determinism(self) -> None:
         ind = _ind(close=100, m7=90, d20=92, d60=88)
         assert compute_alignment(ind)[0] == compute_alignment(ind)[0]
+
+
+# ============================================================
+# compute_supply_chain_score (순수) — theme → 섹터 RS 실측
+# ============================================================
+
+
+class TestComputeSupplyChain:
+    _SECTORS = [
+        {"sector": "KODEX AI반도체", "rs_score": 8.0},
+        {"sector": "KODEX AI반도체핵심장비", "rs_score": 9.5},
+        {"sector": "KODEX 바이오", "rs_score": 3.0},
+    ]
+    _MAP = {
+        "AI_semiconductor": ["KODEX AI반도체", "KODEX AI반도체핵심장비", "KODEX AI전력핵심"],
+        "bio": ["KODEX 바이오"],
+        "kosdaq_theme": [],
+    }
+
+    def test_strongest_sector_chosen(self) -> None:
+        # AI 테마 → 두 매핑 섹터 중 최강(9.5) 채택
+        score, src = compute_supply_chain_score("AI_semiconductor", self._SECTORS, self._MAP)
+        assert score == 9.5 and src == "theme_sector"
+
+    def test_single_sector(self) -> None:
+        score, src = compute_supply_chain_score("bio", self._SECTORS, self._MAP)
+        assert score == 3.0 and src == "theme_sector"
+
+    def test_empty_mapping_neutral(self) -> None:
+        # kosdaq_theme = 매핑 빈 리스트 → 중립
+        assert compute_supply_chain_score("kosdaq_theme", self._SECTORS, self._MAP) == (
+            None, "neutral_fallback",
+        )
+
+    def test_theme_none_neutral(self) -> None:
+        assert compute_supply_chain_score(None, self._SECTORS, self._MAP) == (
+            None, "neutral_fallback",
+        )
+
+    def test_no_sector_rs_neutral(self) -> None:
+        assert compute_supply_chain_score("bio", [], self._MAP) == (None, "neutral_fallback")
+
+    def test_mapped_sector_absent_in_rs(self) -> None:
+        # 매핑은 있으나 sector_rs 리스트에 해당 섹터 없음 → 중립
+        score, src = compute_supply_chain_score(
+            "AI_semiconductor", [{"sector": "KODEX 바이오", "rs_score": 3.0}], self._MAP
+        )
+        assert score is None and src == "neutral_fallback"
+
+    def test_determinism(self) -> None:
+        a = compute_supply_chain_score("AI_semiconductor", self._SECTORS, self._MAP)
+        b = compute_supply_chain_score("AI_semiconductor", self._SECTORS, self._MAP)
+        assert a == b
 
 
 # ============================================================
@@ -149,6 +215,41 @@ async def test_rs_from_pool_db(isolated_db) -> None:
     assert si_a.rs_score is not None and si_b.rs_score is not None
     assert si_a.rs_score > si_b.rs_score  # A 가 풀 내 더 강함
     assert si_a.pool_size == 2
+
+
+@pytest.mark.asyncio
+async def test_supply_chain_from_sector_rs(isolated_db, monkeypatch: pytest.MonkeyPatch) -> None:
+    from collectors import theme_match as tm_mod
+    from collectors.charts import persist_ohlcv_to_db
+    from collectors.theme_match import ThemeResult
+
+    persist_ohlcv_to_db("A", _bars(10_000, 15.0), adjusted=True)
+
+    async def _fake_classify(ticker: str, **_kw):
+        return ThemeResult(ticker=ticker, theme="AI_semiconductor", source="manual")
+
+    monkeypatch.setattr(tm_mod, "classify_theme", _fake_classify)
+
+    sectors = [
+        {"sector": "KODEX AI반도체", "rs_score": 7.0},
+        {"sector": "KODEX AI반도체핵심장비", "rs_score": 9.0},
+    ]
+    si = await build_s_score_inputs(ticker="A", pool_tickers=["A"], sector_rs=sectors)
+    assert si.supply_chain_source == "theme_sector"
+    assert si.supply_chain_score == 9.0  # 최강 섹터
+    assert si.supply_chain_theme == "AI_semiconductor"
+    assert si.supply_chain_sector == "KODEX AI반도체핵심장비"
+
+
+@pytest.mark.asyncio
+async def test_supply_chain_neutral_without_sector_rs(isolated_db) -> None:
+    from collectors.charts import persist_ohlcv_to_db
+
+    persist_ohlcv_to_db("A", _bars(10_000, 15.0), adjusted=True)
+    # sector_rs 미전달 → supply_chain 중립 (classify_theme 호출 안 함)
+    si = await build_s_score_inputs(ticker="A", pool_tickers=["A"])
+    assert si.supply_chain_source == "neutral_fallback"
+    assert si.supply_chain_score == 5.0
 
 
 @pytest.mark.asyncio

@@ -597,8 +597,11 @@ async def _maybe_build_s_score_inputs_md(
         return None, base_meta
 
     pool = _leading_pool_tickers(snapshot)
+    sector_rs = snapshot.sector_rs if isinstance(snapshot.sector_rs, list) else None
     try:
-        si = await build_s_score_inputs(ticker=resolved_ticker, pool_tickers=pool)
+        si = await build_s_score_inputs(
+            ticker=resolved_ticker, pool_tickers=pool, sector_rs=sector_rs
+        )
     except Exception as e:  # noqa: BLE001
         log.warning("s_score_inputs_inject_failed", ticker=resolved_ticker, error=str(e))
         base_meta["screening_ticker_used"] = resolved_ticker

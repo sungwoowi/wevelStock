@@ -85,6 +85,22 @@ flow:
     "090430": cosmetics    # 아모레퍼시픽 (화장품 대표주, LLM neutral_fallback 정정)
     "454910": robotics     # 두산로보틱스 (로봇 대표주, LLM neutral_fallback 정정)
 
+  # 테마 key → 섹터 ETF 이름 매핑 (S-Score supply_chain 실측, SCREEN-RS/INFRA-SCORE-INPUTS-001 v2).
+  # 종목 theme(classify_theme) → 매핑 섹터의 현재 RS 강도(snapshot.sector_rs, sector_rs.py)를
+  # supply_chain 점수로 사용 = "이 종목이 강세 산업 공급망 중심에 있는가". 섹터명 = kr_sectors.DEFAULT_TRACKED_ETFS 기준.
+  # 여러 섹터 매핑 시 최강 RS 채택(가장 강한 공급망). 매핑 없는 테마(kosdaq_theme)는 빈 리스트 → 중립.
+  theme_sector_mapping:
+    AI_semiconductor: ["KODEX AI반도체", "KODEX AI반도체핵심장비", "KODEX AI전력핵심"]
+    semiconductor: ["KODEX 반도체"]
+    cosmetics: ["TIGER 화장품"]
+    defense_nuclear: ["KODEX 방산TOP10", "TIGER K방산&우주", "ACE 원자력TOP10"]
+    automotive: ["KODEX 자동차"]
+    secondary_battery: ["KODEX 2차전지산업"]
+    bio: ["KODEX 바이오"]
+    shipbuilding: ["TIGER 조선TOP10"]
+    robotics: ["KODEX 로봇액티브"]
+    kosdaq_theme: []   # 개별 테마주 — 대표 섹터 ETF 없음 → 중립
+
 advisory:
   # theme_match 미해소(taxonomy 부재·LLM 실패·권위 미정의) 시 중립 fallback (SLOT S1).
   theme_match_neutral: 5.0

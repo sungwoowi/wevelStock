@@ -185,7 +185,7 @@ cited: []
 | 축 | 정의 | 산출 데이터 |
 |----|------|------------|
 | **rs (Relative Strength)** | 상대강도 — **종목 레벨** 오닐식 후보 풀 정규화 (`collectors/scoring.py:stock_rs_score` + `collectors/screening.py:rank_candidates`, SCREEN-RS-EXTENSION-001). 풀 최강 = 10, 중앙값 = 5, 최약 = 0. 섹터 레벨 RS 는 snapshot.sector_rs 보조. | screening.rank_candidates(종목 풀) + snapshot.sector_rs |
-| **supply_chain** | 수급망 일치도 — 종목이 강세 산업 (AI·반도체·방산·원전 등) 의 공급망 중심에 있는가. 단순 종목 단가 X, **산업 트렌드 정합** 측정. | snapshot.theme_classification + supply_chain canon (자료 들어오면) |
+| **supply_chain** | 수급망 일치도 — 종목이 강세 산업 (AI·반도체·방산·원전 등) 의 공급망 중심에 있는가. 단순 종목 단가 X, **산업 트렌드 정합** 측정. 종목 theme 분류(`classify_theme`) → 매핑 섹터의 현재 RS 강도(`snapshot.sector_rs`) 최강값 실측. 매핑 없는 테마 → 중립. | classify_theme → sector_rs 실측 (config theme_sector_mapping) |
 | **alignment** | 정배열 — 월봉 (7월선 위) + 주봉 (MFI) + 일봉 (Vol Osc) 위계 정합. 월봉 종가 7월선 위 = 4점 + 주봉 MFI 정배열 = 3점 + 일봉 Vol Osc 양의 영역 = 3점. | snapshot.price_alignment (3 시간축) |
 
 **verdict 매핑** (S-Score 기준):

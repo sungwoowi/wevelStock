@@ -44,15 +44,18 @@ class ScreeningInputs:
     source: str = "db"
     cutoff_date: str | None = None
     rs_source: str = "screening"       # screening | neutral_fallback
-    supply_chain_source: str = "neutral_fallback"  # MVP — SLOT
+    supply_chain_source: str = "neutral_fallback"  # theme_sector | neutral_fallback
+    supply_chain_theme: str | None = None    # classify_theme 분류 결과 (md 표기)
+    supply_chain_sector: str | None = None   # 채택된 최강 섹터명 (md 표기)
 
 
 def compute_alignment(indicators: dict[str, Any]) -> tuple[float | None, dict[str, Any]]:
     """월·주·일봉 정배열 위계 → 0~10 + 컴포넌트 detail (순수).
 
     월봉 종가 7MA 위 = 4점 + 주봉 10MA>20MA(>60MA) 정배열 = 3점 +
-    일봉 종가>20MA>60MA = 3점. 산출 불가 컴포넌트는 0 기여 + detail None.
-    모든 컴포넌트 불가 → (None, detail).
+    일봉 종가>20MA>60MA = 3점. **산출 가능 위계만 평가 → available_max 대비 비례 정규화**
+    (결측 위계는 0 기여가 아니라 *평가 제외* — 데이터 짧은 종목 저평가 편향 제거).
+    품질 측정(정배열 비율)이지 데이터 양 측정이 아니므로 정규화가 본질. 모든 컴포넌트 불가 → (None, detail).
     """
     monthly = indicators.get("monthly_ma") or {}
     weekly = indicators.get("weekly_ma") or {}
@@ -63,28 +66,59 @@ def compute_alignment(indicators: dict[str, Any]) -> tuple[float | None, dict[st
         return None, detail
 
     points = 0.0
+    available_max = 0.0
 
     m7 = monthly.get("ma7")
     if m7 is not None:
         ok = close > m7
         detail["monthly_7ma"] = ok
+        available_max += 4.0
         points += 4.0 if ok else 0.0
 
     w10, w20, w60 = weekly.get("ma10"), weekly.get("ma20"), weekly.get("ma60")
     if w10 is not None and w20 is not None:
         ok = w10 > w20 and (w60 is None or w20 > w60)
         detail["weekly_stack"] = ok
+        available_max += 3.0
         points += 3.0 if ok else 0.0
 
     d20, d60 = daily.get("ma20"), daily.get("ma60")
     if d20 is not None and d60 is not None:
         ok = close > d20 > d60
         detail["daily_stack"] = ok
+        available_max += 3.0
         points += 3.0 if ok else 0.0
 
-    if all(v is None for v in detail.values()):
+    if available_max <= 0:
         return None, detail
-    return _clamp(_round_to_half(points)), detail
+    normalized = points / available_max * 10.0
+    return _clamp(_round_to_half(normalized)), detail
+
+
+def compute_supply_chain_score(
+    theme: str | None,
+    sector_rs_list: list[dict[str, Any]] | None,
+    mapping: dict[str, list[str]] | None,
+) -> tuple[float | None, str]:
+    """종목 theme → 매핑 섹터의 최강 RS 강도 → supply_chain 0~10 (순수).
+
+    "이 종목이 강세 산업 공급망 중심에 있는가". 여러 섹터 매핑 시 최강 rs_score 채택.
+    theme None / 매핑 부재 / 일치 섹터 없음 / sector_rs 빈 경우 → (None, 'neutral_fallback').
+    """
+    if not theme or not sector_rs_list or not mapping:
+        return None, "neutral_fallback"
+    sector_names = mapping.get(theme) or []
+    if not sector_names:
+        return None, "neutral_fallback"
+    wanted = set(sector_names)
+    scores = [
+        float(r["rs_score"])
+        for r in sector_rs_list
+        if isinstance(r, dict) and r.get("sector") in wanted and r.get("rs_score") is not None
+    ]
+    if not scores:
+        return None, "neutral_fallback"
+    return _clamp(_round_to_half(max(scores))), "theme_sector"
 
 
 async def build_s_score_inputs(
@@ -93,10 +127,12 @@ async def build_s_score_inputs(
     pool_tickers: list[str] | None = None,
     regime: str | None = None,
     cutoff_date: str | None = None,
+    sector_rs: list[dict[str, Any]] | None = None,
 ) -> ScreeningInputs:
-    """S-Score 원시 지표 — rs(SCREEN-RS 후보 풀 정규화) + supply_chain(MVP 중립) + alignment.
+    """S-Score 원시 지표 — rs(SCREEN-RS 후보 풀 정규화) + supply_chain(theme→섹터 RS) + alignment.
 
     pool_tickers = rs 백분위 정규화에 쓸 후보 풀 (run_analyst 가 snapshot 주도주에서 추출).
+    sector_rs = snapshot.sector_rs (섹터별 rs_score) — supply_chain 실측 입력. None → 중립.
     빈 풀이면 ticker 단독 → rs 중립 5.0. cutoff_date 지정 시 live X (백테스팅).
     """
     ticker_s = (ticker or "").strip()
@@ -125,10 +161,42 @@ async def build_s_score_inputs(
     if rs_score is None:
         rs_score = 5.0
 
-    # 2) supply_chain — MVP 중립 (SLOT: theme/sector 매핑 후속)
-    supply_chain_score = _SUPPLY_CHAIN_NEUTRAL
+    # 2) supply_chain — theme(classify) → 매핑 섹터의 최강 RS 실측
+    supply_chain_score: float = _SUPPLY_CHAIN_NEUTRAL
     supply_chain_source = "neutral_fallback"
-    reasons.append("supply_chain MVP 중립 5.0 (SLOT — theme/sector 매핑 후속)")
+    supply_chain_theme: str | None = None
+    supply_chain_sector: str | None = None
+    if ticker_s and sector_rs:
+        try:
+            from collectors.score_inputs_config import get_theme_sector_mapping
+            from collectors.theme_match import classify_theme
+
+            tr = await classify_theme(ticker_s, cutoff_date=cutoff_date)
+            supply_chain_theme = tr.theme
+            mapping = get_theme_sector_mapping()
+            sc, sc_src = compute_supply_chain_score(tr.theme, sector_rs, mapping)
+            if sc is not None:
+                supply_chain_score = sc
+                supply_chain_source = sc_src
+                wanted = set(mapping.get(tr.theme or "", []))
+                matched = [
+                    r for r in sector_rs
+                    if isinstance(r, dict) and r.get("sector") in wanted and r.get("rs_score") is not None
+                ]
+                if matched:
+                    supply_chain_sector = max(matched, key=lambda r: r["rs_score"]).get("sector")
+                reasons.append(
+                    f"supply_chain: {supply_chain_theme}→{supply_chain_sector} 섹터 RS {supply_chain_score:.1f}"
+                )
+            else:
+                reasons.append(
+                    f"supply_chain 중립 5.0 (theme={supply_chain_theme or '미분류'} 섹터 매핑 없음)"
+                )
+        except Exception as e:  # noqa: BLE001
+            log.warning("s_score_supply_chain_failed", ticker=ticker_s, error=str(e))
+            reasons.append(f"supply_chain 산출 실패 ({type(e).__name__}) → 중립")
+    else:
+        reasons.append("supply_chain 중립 5.0 (sector_rs/ticker 부재)")
 
     # 3) alignment — charts.compute_indicators (결정론)
     alignment_score: float | None = None
@@ -169,6 +237,8 @@ async def build_s_score_inputs(
         cutoff_date=cutoff_date,
         rs_source=rs_source,
         supply_chain_source=supply_chain_source,
+        supply_chain_theme=supply_chain_theme,
+        supply_chain_sector=supply_chain_sector,
     )
 
 
@@ -188,11 +258,13 @@ async def build_s_score_inputs_md(
     pool_tickers: list[str] | None = None,
     regime: str | None = None,
     cutoff_date: str | None = None,
+    sector_rs: list[dict[str, Any]] | None = None,
 ) -> str | None:
     """stock_picker 프롬프트 주입용 md. 실패 시 None (크래시 금지)."""
     try:
         si = await build_s_score_inputs(
-            ticker=ticker, pool_tickers=pool_tickers, regime=regime, cutoff_date=cutoff_date
+            ticker=ticker, pool_tickers=pool_tickers, regime=regime,
+            cutoff_date=cutoff_date, sector_rs=sector_rs,
         )
     except Exception as e:  # noqa: BLE001
         log.warning("s_score_inputs_build_failed", ticker=ticker, error=str(e))
@@ -228,9 +300,14 @@ def render_s_score_inputs_md(si: ScreeningInputs, *, name: str | None = None) ->
     rs_v = _fmt(si.rs_score, " / 10")
     rs_ret = "null" if si.rs_return_60d is None else f"{si.rs_return_60d:+.1f}%"
     lines.append(f"| rs (상대강도, 풀 정규화) | {rs_v} ({si.rs_source}, 60일 {rs_ret}) |")
-    lines.append(
-        f"| supply_chain (수급망 정합) | {_fmt(si.supply_chain_score, ' / 10')} ({si.supply_chain_source}) |"
-    )
+    if si.supply_chain_source == "theme_sector":
+        sc_cell = (
+            f"{_fmt(si.supply_chain_score, ' / 10')} "
+            f"({si.supply_chain_theme}→{si.supply_chain_sector}, 섹터 RS)"
+        )
+    else:
+        sc_cell = f"{_fmt(si.supply_chain_score, ' / 10')} (중립 — {si.supply_chain_theme or '미분류'})"
+    lines.append(f"| supply_chain (수급망 정합) | {sc_cell} |")
     lines.append(f"| alignment (정배열 위계) | {_fmt(si.alignment_score, ' / 10')} |")
     lines.append("")
     lines.append("### 정배열 위계 컴포넌트")

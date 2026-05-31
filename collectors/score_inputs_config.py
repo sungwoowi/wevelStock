@@ -110,6 +110,18 @@ def get_theme_taxonomy() -> dict[str, str]:
     return {str(k): str(v) for k, v in raw.items()}
 
 
+def get_theme_sector_mapping() -> dict[str, list[str]]:
+    """테마 key → 섹터 ETF 이름 리스트 (S-Score supply_chain 실측). flow.theme_sector_mapping. 부재 시 빈 dict."""
+    cfg = load_score_inputs_config()
+    raw = (cfg.get("flow") or {}).get("theme_sector_mapping") or {}
+    out: dict[str, list[str]] = {}
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            if isinstance(v, list):
+                out[str(k)] = [str(x) for x in v]
+    return out
+
+
 def get_manual_theme() -> dict[str, str]:
     """수동 override (ticker → theme key). flow.manual_theme. 부재 시 빈 dict."""
     cfg = load_score_inputs_config()
