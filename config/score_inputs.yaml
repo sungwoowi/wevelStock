@@ -7,7 +7,10 @@
 # 각 축 breakpoints = (raw_x, score_y) 쌍, raw_x 오름차순. score_y 비단조 허용(V자).
 # scoring.map_to_axis 가 구간 선형보간 + [0,10] clamp + 0.5 단위.
 #
-# ⚠️ SLOT S2: 아래 값은 placeholder. production 분포 + 백테스팅으로 정정 (watchdog 즉시 반영).
+# SLOT S2 (2026-05-31): flow 3축 breakpoints 를 13종 라이브 종목 수급 분포로 1차 정합 정정.
+#   원칙 = 절대 앵커(raw 0 = 균형 = 5점) 보존 + 관측 폭에 맞춰 꼬리 재스케일. 단일일 median 으로
+#   recenter 안 함(snapshot overfitting 회피, 메모리 feedback_backtest_essence). 운용 누적 후 재튜닝.
+#   technicals 축은 아직 placeholder(별 SLOT). production 분포 + 백테스팅으로 정정 (watchdog 즉시 반영).
 
 technicals:
   # 이격도 % = (close - ma20) / ma20 * 100.
@@ -36,22 +39,28 @@ technicals:
 
 flow:
   # 60일 수급 모멘텀 turnaround, collector 가 -1.0~+1.0 정규화 (직전 30일 대비 최근 30일 부호·가속).
+  # [-1,1] 유계 + 부호 turnaround 라 양극단 집중(bimodal). 0=균형 5점, ±1 saturate 1/10.
   momentum:
-    breakpoints: [[-1.0, 1.0], [-0.3, 4.0], [0.0, 5.0], [0.3, 7.0], [1.0, 9.0]]
+    breakpoints: [[-1.0, 1.0], [-0.5, 2.5], [-0.2, 4.0], [0.0, 5.0], [0.2, 6.0], [0.5, 7.5], [1.0, 10.0]]
   # 시총 정규화 자금 유입 속도 = 외인+기관 60일 순매수액 / 시총 * 10000 (bp).
+  # 라이브 관측 -265~+170bp (p10 -107 / median -27 / p90 +80). 구 floor -50 은 너무 얕아
+  # 6/13 종목이 1.0 에 깔려 저구간 변별 0 이던 것을 -150 floor + 중간점으로 해소. 0=균형 5점.
   inflow_speed:
-    breakpoints: [[-50.0, 1.0], [0.0, 5.0], [50.0, 8.0], [150.0, 10.0]]
+    breakpoints: [[-150.0, 1.0], [-80.0, 2.5], [-30.0, 4.0], [0.0, 5.0], [40.0, 7.0], [90.0, 9.0], [170.0, 10.0]]
   # theme_match (SLOT S1, 2-Stage) — 권위 주체 net / (5주체 abs 합 +1) = -1..+1 → 0~10.
-  # ⚠️ placeholder (SLOT S2 production 분포 튜닝). momentum 곡선 재사용.
+  # 라이브 관측 -0.52~+0.95 (median -0.24, 이 시점 외인 전종목 순매도 skew — 절대 앵커 0→5 보존,
+  # recenter 안 함). 관측 폭에 맞춰 꼬리 재스케일 → 강분배 -0.5 saturate 2.5, 강매집 +1 → 10.
   theme_match:
-    breakpoints: [[-1.0, 1.0], [-0.3, 4.0], [0.0, 5.0], [0.3, 7.0], [1.0, 9.0]]
+    breakpoints: [[-1.0, 1.0], [-0.5, 2.5], [-0.2, 4.0], [0.0, 5.0], [0.2, 6.0], [0.5, 8.0], [1.0, 10.0]]
   # 테마 → 권위 주체 매핑 (SLOT S1/S8 초안). 주체 짧은 이름 = foreign/institution/individual/
   # financial_inv/pension. ⚠️ 운용 데이터 누적 후 사용자·회고분석가 합의로 갱신 (watchdog 즉시 반영).
+  # 주의: 종목 레벨 수급은 KIS 3주체(외인·기관·개인)만 → pension/financial_inv 는 항상 0(死문자).
+  #   연기금 주도 테마라도 종목 레벨에선 institution 으로 잡아야 점수 반영됨.
   theme_authority:
     AI_semiconductor: [foreign, institution]
     semiconductor: [foreign, institution]
     cosmetics: [foreign]
-    defense_nuclear: [pension, institution]
+    defense_nuclear: [institution]  # 구 [pension, institution] — 종목 레벨 pension=0 死문자 제거
     automotive: [foreign, institution]
     secondary_battery: [foreign, institution]
     bio: [institution, individual]
@@ -70,8 +79,11 @@ flow:
     shipbuilding: "조선"
     robotics: "로봇"
     kosdaq_theme: "코스닥 테마주"
-  # 수동 override (ticker → theme key). 빈 시드 — LLM 오분류 정정 시 사용자가 박음.
-  manual_theme: {}
+  # 수동 override (ticker → theme key). LLM Stage 2 오분류/누락 정정.
+  # 2026-05-31 SLOT S2 라이브 검증: 아모레·두산로보틱스가 None(중립 5.0)으로 빠져 변별 손실 → 대표주 박음.
+  manual_theme:
+    "090430": cosmetics    # 아모레퍼시픽 (화장품 대표주, LLM neutral_fallback 정정)
+    "454910": robotics     # 두산로보틱스 (로봇 대표주, LLM neutral_fallback 정정)
 
 advisory:
   # theme_match 미해소(taxonomy 부재·LLM 실패·권위 미정의) 시 중립 fallback (SLOT S1).
