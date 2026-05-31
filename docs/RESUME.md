@@ -9,22 +9,21 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **INFRA-SCORE-INPUTS-001 SLOT S1 (theme_match 2-Stage 하이브리드) 골격 구현 ✨ (2026-05-31)**. F-Score 최대 가중 축(theme_match 0.4)이 비어있던 중립(5.0) → **2-Stage 하이브리드**(테마 분류=LLM 직관 / 채점=결정론)로 채워짐. `anchors.py` 패턴 1:1 mirror. **라이브 검증은 미실시** — 서버 재시작 중 8000 좀비 소켓으로 바인딩 실패 → 사용자 재부팅, **다음 세션 첫 확인용으로 남김**. pytest 695, validate 0 errors 로 코드는 green.
+**현재 위치**: **SLOT S1 theme_match 라이브 검증 완료 + Gemini thinking 예산 잠식 버그 시스템 수정 ✨ (2026-05-31)**. 직전 세션의 theme_match 2-Stage 골격이 라이브에서 항상 `neutral_fallback` 으로 떨어지던 근본 원인 = **Gemini-2.5 thinking 토큰이 max_output_tokens 예산을 잠식**해 짧은 JSON 출력이 잘림(`tokens_out=8`) → JSONDecodeError. `call_llm` 에 per-call `thinking_budget` 파라미터 신설로 theme_match·anchors 양쪽 동시 해소. **라이브 검증 GREEN**: 005930 → `theme_match: AI_semiconductor (llm) → 4.5` (HTTP 서버 + in-process 둘 다). pytest 698.
 
 **본 세션 산출**:
-- `collectors/theme_match.py` (신규) — `classify_theme`(manual→Stage1 후보→Stage2 LLM+캐싱 type='theme_match'→neutral fallback) / `score_theme_match`(권위 주체 net 비율 → breakpoints 0~10) / `resolve_theme_match`(결합).
-- `collectors/flow_inputs.py` — `compute_flow_inputs` 파라미터 정련(theme_match_score 주입) + `build_flow_inputs` async resolve(크래시 가드) + render 테마 표기. `config/score_inputs.yaml` flow.theme_authority/taxonomy/manual + `score_inputs_config` 로더 3개.
-- 테스트 +18 (theme_match 16 + flow_inputs 4 갱신). **pytest 677→695, 회귀 0, validate 0 errors.** run_analyst 무수정(이미 배선).
+- `core/llm/client.py` — `call_llm`/`_dispatch_provider`/`_call_gemini_real` 에 `thinking_budget: int|None` 스레딩. None=모델 기본(분석가 추론 보존), 0=비활성(flash), anthropic/claude_code/mock no-op. `types.ThinkingConfig` 조건부 주입.
+- `collectors/theme_match.py` + `collectors/anchors.py` — Stage 2 호출 `thinking_budget=0` + max_tokens(200→512 / 400→512). WAVE-ALPHA anchors deterministic_fallback 결함도 동시 해소.
+- 테스트 +3 (theme_match/anchors forwarding + client thinking_budget Gemini 전달). **pytest 695→698, 회귀 0.**
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **theme_match 골격 = 분류(LLM 직관) ⊥ 채점(결정론) 분리** (사용자 합의): classify_theme=manual→결정론 후보→LLM 선택→캐싱(`feedback_llm_intuition_distribution` 첫 적용), score_theme_match=권위 주체 net 비율 결정론. 데이터 소스 무관 골격 → **종목 레벨 수급 도입 시 `net_sums` 입력만 교체**(분류·채점 로직 재사용). 사전·임계는 `config/score_inputs.yaml::flow.theme_*`(응집, runtime.yaml 분산 회피). manual override는 config 맵(schema 무변경).
-- **MVP 한계 명시 = 시장 레벨 프록시**: 현재 F-Score 세 데이터 축(momentum/inflow_speed/theme_match) 전부 시장 레벨(KOSPI/KOSDAQ 집계). theme_match 위력은 종목 레벨 수급 collector 후 발현 — **순서: 골격 지금 → 종목 수급 다음**(사용자 결정).
+- **Gemini-2.5 결정론 JSON 호출 = `thinking_budget=0` 필수** (메모리 `feedback_gemini_thinking_budget_json`): thinking 토큰이 max_output_tokens 예산을 잠식 → 짧은 max_tokens 로 구조화 JSON 요청 시 출력 잘림. 분류/선택 등 짧은 JSON 은 thinking 비활성 + max_tokens≥512, 분석가 긴 추론은 thinking 보존(None). `call_llm` per-call 파라미터로 제어. 같은 결함이 anchors·`test_executive.py:136`(8000 우회)에도 있었음.
 
-**직전 세션 판단 (2026-05-30)**:
-- **R/R advisory baseline = 스윙+ATR risk-cap clamp**: 손절=직전 스윙저점을 `[floor,cap]×ATR` risk 밴드로 clamp. collector R/R 은 advisory 참고선(override 가능). 임계 `config/score_inputs.yaml::technicals.rr_rule`.
-- **서버 코드 수정 후 재시작 필수** (hot reload 불신, CLAUDE.md) = `feedback_server_cleanup_show_pids`(서버 정리는 PID 보여주고 승인). 본 세션 8000 좀비 소켓 재확인.
+**직전 세션 판단 (2026-05-31)**:
+- **theme_match 골격 = 분류(LLM 직관) ⊥ 채점(결정론) 분리**: classify_theme=manual→결정론 후보→LLM 선택→캐싱(`feedback_llm_intuition_distribution`), score_theme_match=권위 주체 net 비율 결정론. 데이터 소스 무관 골격 → **종목 레벨 수급 도입 시 `net_sums` 입력만 교체**. 사전·임계는 `config/score_inputs.yaml::flow.theme_*`.
+- **MVP 한계 = 시장 레벨 프록시**: F-Score 세 축(momentum/inflow_speed/theme_match) 전부 시장 레벨(KOSPI/KOSDAQ 집계). 위력은 종목 레벨 수급 collector 후 발현 — **순서: 골격 → 종목 수급**(사용자 결정).
+- **R/R advisory baseline = 스윙+ATR risk-cap clamp**: 손절=직전 스윙저점을 `[floor,cap]×ATR` risk 밴드로 clamp. 임계 `config/score_inputs.yaml::technicals.rr_rule`.
 - **점수 collapse 게이트키핑 금지 → advisory 강등**: 원시 지표=권위, collapse=참고선. = `feedback_score_collapse_advisory`.
-- **새 축 배선 패턴 = α mirror 3단**: compute(순수) / render md / build async + run_analyst hook. 임계는 `config/score_inputs.yaml` 만 수정(watchdog).
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
 
@@ -48,33 +47,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+**S1 theme_match** 구현 완료, pytest 695. **잔여 = ⚠️ theme_match 라이브 미검증(다음 세션 첫 확인, 8000 좀비 소켓→재부팅) / 종목 레벨 5주체 수급 collector(F-Score 세 축 실측 승급) / S2 매핑 임계·theme_authority production 튜닝 / S3 ATH 근처 목표 measured-move / buy_score·S-Score 후속 배선**) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐** (커밋 메시지에 "pytest" 단어 있으면 차단 — 훅 정규식을 명령 시작 토큰만 보도록 좁히면 됨, 여유 시) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+**S1 theme_match 라이브 검증까지 완료**, pytest 698. **잔여 = 종목 레벨 5주체 수급 collector(F-Score 세 축 실측 승급) / S2 매핑 임계·theme_authority production 튜닝 / S3 ATH 근처 목표 measured-move / buy_score·S-Score 후속 배선 / inflow_speed market_cap 미주입**) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐** (커밋 메시지에 "pytest" 단어 있으면 차단 — 훅 정규식을 명령 시작 토큰만 보도록 좁히면 됨, 여유 시) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
 
-**마지막 작업일**: 2026-05-31 (INFRA-SCORE-INPUTS-001 SLOT S1 theme_match 2-Stage 골격 — 시장 프록시 MVP)
-**마지막 세션 로그**: [2026-05-31_theme-match-slot-s1.md](c_worked/2026-05-31_theme-match-slot-s1.md). 직전 = [2026-05-30_score-inputs-rr-slot-s3.md](c_worked/2026-05-30_score-inputs-rr-slot-s3.md).
-**산출**: `collectors/theme_match.py`(신규, classify/score/resolve) + `flow_inputs.py` 배선 + `config/score_inputs.yaml`(flow.theme_*) + `score_inputs_config` 로더 3 + tests +18. **라이브 미검증**(다음 세션 첫 확인).
+**마지막 작업일**: 2026-05-31 (SLOT S1 theme_match 라이브 검증 + Gemini thinking 예산 잠식 버그 시스템 수정)
+**마지막 세션 로그**: [2026-05-31_gemini-thinking-budget-fix-2.md](c_worked/2026-05-31_gemini-thinking-budget-fix-2.md). 직전 = [2026-05-31_theme-match-slot-s1.md](c_worked/2026-05-31_theme-match-slot-s1.md).
+**산출**: `core/llm/client.py`(thinking_budget 파라미터) + `theme_match.py`/`anchors.py`(thinking_budget=0 + max_tokens↑) + tests +3. **라이브 검증 GREEN**(005930 → AI_semiconductor llm 4.5).
 **Git**: main 직접 커밋·push (코드 feat + wrap-up docs, 솔로 프로젝트).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 라이브 확인 + 종목 레벨 수급
+## 🎯 다음에 할 일 (Top 3) — 종목 레벨 수급 → F-Score 실측 승급
 
-우선순위 순. theme_match 골격 코드 완성(green) 직후. **다음 = 라이브 확인 → F-Score 실측 승급.**
+우선순위 순. theme_match 라이브 검증 완료(GREEN) 직후. **다음 = 시장 프록시 → 종목 레벨 실측.**
 
-### 1. theme_match 라이브 검증 ⭐ (이번 세션 미실시분)
-- **왜**: SLOT S1 코드는 pytest 695 green 이나 실 LLM 호출 end-to-end 미확인. 서버 8000 좀비 소켓으로 보류 → 재부팅 후 첫 확인
-- **범위**: 서버 8000 정상 기동(`just server` / uvicorn --reload) → `POST /api/analysts/flow_analyzer/chat` body `{messages, target_ticker:"005930"}` → 응답 metadata `flow_inputs_failures` 의 `theme_match: <테마> (<source>) → <score>` 노출 확인
-- **예상 산출**: 테마 분류(LLM) + theme_match score + source(manual/llm/neutral_fallback) 라이브 작동 확인
-
-### 2. 종목 레벨 5주체 수급 collector ⭐
+### 1. 종목 레벨 5주체 수급 collector ⭐
 - **왜**: 현재 F-Score 세 데이터 축(momentum/inflow_speed/theme_match) 전부 **시장 레벨 프록시** — 진짜 변별력은 종목 레벨 수급이 들어와야. theme_match 골격은 `net_sums` 입력만 교체하면 재사용
-- **범위**: SPEC(가칭 `INFRA-STOCK-SUPPLY-001`) + KRX/KIS 종목별 투자자 매매동향 collector + 테이블 + flow_inputs `net_sums` 소스 교체
+- **범위**: SPEC(가칭 `INFRA-STOCK-SUPPLY-001`) + KRX/KIS 종목별 투자자 매매동향 collector + 테이블 + flow_inputs `net_sums` 소스 교체 (+ inflow_speed 용 market_cap 주입도 같이)
 - **예상 산출**: F-Score 세 축 동시 시장→종목 실측 승급
 
-### 3. SLOT S2 임계 + SLOT S3 목표 정밀화
+### 2. SLOT S2 임계 + SLOT S3 목표 정밀화
 - **왜**: `config/score_inputs.yaml` theme_match/breakpoints/theme_authority·rr_rule floor/cap 은 placeholder. + R/R ATH 근처 목표 과소평가
 - **범위**: 실 분포 수집 후 breakpoints·theme_authority·floor/cap 정정 + `compute_rr` ATH 근처 measured-move 보강
 - **예상 산출**: 점수 production 정합 + 돌파 케이스 정확도
+
+### 3. buy_score·S-Score 후속 배선
+- **왜**: F/T-Score 인프라는 라이브까지 도달, buy_score(stock_picker)·S-Score 는 아직 미배선. scoring.py 정식 가중치(SLOT S7)와 함께
+- **범위**: scoring.py s_score·buy_score 순수 함수 + SCREEN-RS-EXTENSION-001(rs 축, prism #289 draft) 같이 + run_analyst hook
+- **예상 산출**: 5 점수 체계 완전 (S/T/α/buy/F) 라이브
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
