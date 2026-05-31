@@ -9,20 +9,19 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **SLOT S1 theme_match 라이브 검증 완료 + Gemini thinking 예산 잠식 버그 시스템 수정 ✨ (2026-05-31)**. 직전 세션의 theme_match 2-Stage 골격이 라이브에서 항상 `neutral_fallback` 으로 떨어지던 근본 원인 = **Gemini-2.5 thinking 토큰이 max_output_tokens 예산을 잠식**해 짧은 JSON 출력이 잘림(`tokens_out=8`) → JSONDecodeError. `call_llm` 에 per-call `thinking_budget` 파라미터 신설로 theme_match·anchors 양쪽 동시 해소. **라이브 검증 GREEN**: 005930 → `theme_match: AI_semiconductor (llm) → 4.5` (HTTP 서버 + in-process 둘 다). pytest 698.
+**현재 위치**: **INFRA-STOCK-SUPPLY-001 종목 레벨 수급 collector 라이브 점등 ✨ (2026-05-31)**. F-Score 세 축(theme_match·momentum·inflow_speed)이 전부 시장 프록시라 종목 변별력 0이던 것을, 종목 레벨 5주체 수급으로 실측 승급. SPEC→구현→KRX 로그인 벽 발견→KIS 3주체 피벗→**KIS 순매수 단위 버그(÷1e6, 이미 백만원) 정정**까지 한 사이클. **라이브 GREEN**(실서버 005930): 외인 30일 -1,661억/기관 +801억 → theme_match **4.0**(종목 실측, 시장 평균 4.5와 다름) / advisory_f 2.5. pytest 714.
 
 **본 세션 산출**:
-- `core/llm/client.py` — `call_llm`/`_dispatch_provider`/`_call_gemini_real` 에 `thinking_budget: int|None` 스레딩. None=모델 기본(분석가 추론 보존), 0=비활성(flash), anthropic/claude_code/mock no-op. `types.ThinkingConfig` 조건부 주입.
-- `collectors/theme_match.py` + `collectors/anchors.py` — Stage 2 호출 `thinking_budget=0` + max_tokens(200→512 / 400→512). WAVE-ALPHA anchors deterministic_fallback 결함도 동시 해소.
-- 테스트 +3 (theme_match/anchors forwarding + client thinking_budget Gemini 전달). **pytest 695→698, 회귀 0.**
+- `docs/specs/INFRA-STOCK-SUPPLY-001-stock-level-supply.md`(신규 SPEC, 면담 10건) + `core/db/schema.sql`(stock_supply_history v9) + `collectors/stock_supply.py`(신규 collector, KIS 1콜 멱등) + `connectors/kis/client.py`(stock_investor_history + **단위 버그 정정**) + `connectors/krx/client.py`(stock_investor_supply 휴면 helper) + `collectors/flow_inputs.py`(종목 우선→시장 프록시 fallback + market_cap + source 라벨) + `tests/test_stock_supply.py`(신규 16, 단위 회귀 가드 포함).
+- **pytest 698→714, 회귀 0.** 커밋 4 (SPEC/구현/KIS 피벗/단위fix) push 완료.
 
 **이번 세션에 굳힌 판단 (영구 권위)**:
-- **Gemini-2.5 결정론 JSON 호출 = `thinking_budget=0` 필수** (메모리 `feedback_gemini_thinking_budget_json`): thinking 토큰이 max_output_tokens 예산을 잠식 → 짧은 max_tokens 로 구조화 JSON 요청 시 출력 잘림. 분류/선택 등 짧은 JSON 은 thinking 비활성 + max_tokens≥512, 분석가 긴 추론은 thinking 보존(None). `call_llm` per-call 파라미터로 제어. 같은 결함이 anchors·`test_executive.py:136`(8000 우회)에도 있었음.
+- **종목 레벨 수급 = KIS 3주체 (외인·기관·개인)**: KRX getJsonData STAT 통계가 로그인 벽+안티봇("LOGOUT")으로 차단(기존 market_breadth 도 동일 잠복 고장). theme_authority 영향 거의 0(pension=defense_nuclear 1개·institution 동반, financial_inv=0개). theme_match 골격은 net_sums 입력만 교체해 무수정 재사용.
+- **KIS 순매수 거래대금(`*_ntby_tr_pbmn`)은 이미 백만원 — ÷1e6 금지** (메모리 `feedback_gemini_thinking_budget_json` 류 부채). 레퍼런스 = `market_investor_total`(동일 필드 백만원 무변환). 새 KIS 금액 필드는 이걸 기준 삼을 것.
 
 **직전 세션 판단 (2026-05-31)**:
-- **theme_match 골격 = 분류(LLM 직관) ⊥ 채점(결정론) 분리**: classify_theme=manual→결정론 후보→LLM 선택→캐싱(`feedback_llm_intuition_distribution`), score_theme_match=권위 주체 net 비율 결정론. 데이터 소스 무관 골격 → **종목 레벨 수급 도입 시 `net_sums` 입력만 교체**. 사전·임계는 `config/score_inputs.yaml::flow.theme_*`.
-- **MVP 한계 = 시장 레벨 프록시**: F-Score 세 축(momentum/inflow_speed/theme_match) 전부 시장 레벨(KOSPI/KOSDAQ 집계). 위력은 종목 레벨 수급 collector 후 발현 — **순서: 골격 → 종목 수급**(사용자 결정).
-- **R/R advisory baseline = 스윙+ATR risk-cap clamp**: 손절=직전 스윙저점을 `[floor,cap]×ATR` risk 밴드로 clamp. 임계 `config/score_inputs.yaml::technicals.rr_rule`.
+- **Gemini-2.5 결정론 JSON 호출 = `thinking_budget=0` 필수** (메모리 `feedback_gemini_thinking_budget_json`): thinking 토큰이 max_output_tokens 예산 잠식 → 짧은 max_tokens JSON 잘림. `call_llm` per-call 파라미터. anchors·`test_executive.py:136`도 동일 결함.
+- **theme_match 골격 = 분류(LLM 직관) ⊥ 채점(결정론) 분리**: 데이터 소스 무관 → 종목 수급 도입 시 `net_sums` 입력만 교체(이번 세션 실증). 사전·임계 `config/score_inputs.yaml::flow.theme_*`.
 - **점수 collapse 게이트키핑 금지 → advisory 강등**: 원시 지표=권위, collapse=참고선. = `feedback_score_collapse_advisory`.
 
 **WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
@@ -47,28 +46,28 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+**S1 theme_match 라이브 검증까지 완료**, pytest 698. **잔여 = 종목 레벨 5주체 수급 collector(F-Score 세 축 실측 승급) / S2 매핑 임계·theme_authority production 튜닝 / S3 ATH 근처 목표 measured-move / buy_score·S-Score 후속 배선 / inflow_speed market_cap 미주입**) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐** (커밋 메시지에 "pytest" 단어 있으면 차단 — 훅 정규식을 명령 시작 토큰만 보도록 좁히면 됨, 여유 시) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+**INFRA-STOCK-SUPPLY-001 종목 레벨 수급(KIS 3주체) 라이브 점등**, pytest 714. **잔여 = S2 매핑 임계·theme_authority production 튜닝(이제 실 종목 수급 들어옴) / 다종목 라이브 변별 검증 / S3 ATH 근처 목표 measured-move / buy_score·S-Score 후속 배선**) / **KRX 5주체 + market_breadth 복구** (KRX getJsonData STAT 통계 로그인 벽+안티봇 "LOGOUT" → `market_breadth`(INFRA-SNAPSHOT-EXTEND-001)도 동일 잠복 고장·silent fallback 중. devtools 실요청 캡처(방법 A)로 둘 동시 복구. 종목 수급은 KIS 3주체로 우회 완료, KRX 5주체는 휴면 helper 보존) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐** (커밋 메시지에 "pytest" 단어 있으면 차단 — 훅 정규식을 명령 시작 토큰만 보도록 좁히면 됨, 여유 시) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
 
-**마지막 작업일**: 2026-05-31 (SLOT S1 theme_match 라이브 검증 + Gemini thinking 예산 잠식 버그 시스템 수정)
-**마지막 세션 로그**: [2026-05-31_gemini-thinking-budget-fix-2.md](c_worked/2026-05-31_gemini-thinking-budget-fix-2.md). 직전 = [2026-05-31_theme-match-slot-s1.md](c_worked/2026-05-31_theme-match-slot-s1.md).
-**산출**: `core/llm/client.py`(thinking_budget 파라미터) + `theme_match.py`/`anchors.py`(thinking_budget=0 + max_tokens↑) + tests +3. **라이브 검증 GREEN**(005930 → AI_semiconductor llm 4.5).
+**마지막 작업일**: 2026-05-31 (INFRA-STOCK-SUPPLY-001 종목 레벨 수급 collector — KIS 3주체 피벗 + 단위 버그 정정, 라이브 점등)
+**마지막 세션 로그**: [2026-05-31_stock-supply-collector-kis-pivot-3.md](c_worked/2026-05-31_stock-supply-collector-kis-pivot-3.md). 직전 = [2026-05-31_gemini-thinking-budget-fix-2.md](c_worked/2026-05-31_gemini-thinking-budget-fix-2.md).
+**산출**: SPEC + `stock_supply.py`(신규) + `stock_supply_history` v9 + `stock_investor_history`(KIS, 단위fix) + `flow_inputs` 종목 우선/fallback + tests +16. **라이브 GREEN**(005930 stock_kis: 외인 -1,661억/기관 +801억 → theme_match 4.0).
 **Git**: main 직접 커밋·push (코드 feat + wrap-up docs, 솔로 프로젝트).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 종목 레벨 수급 → F-Score 실측 승급
+## 🎯 다음에 할 일 (Top 3) — 종목 수급 production 정합 + KRX 복구
 
-우선순위 순. theme_match 라이브 검증 완료(GREEN) 직후. **다음 = 시장 프록시 → 종목 레벨 실측.**
+우선순위 순. 종목 레벨 수급(KIS 3주체) 라이브 점등 직후. **다음 = 실 분포로 임계 정합 + 다종목 검증.**
 
-### 1. 종목 레벨 5주체 수급 collector ⭐
-- **왜**: 현재 F-Score 세 데이터 축(momentum/inflow_speed/theme_match) 전부 **시장 레벨 프록시** — 진짜 변별력은 종목 레벨 수급이 들어와야. theme_match 골격은 `net_sums` 입력만 교체하면 재사용
-- **범위**: SPEC(가칭 `INFRA-STOCK-SUPPLY-001`) + KRX/KIS 종목별 투자자 매매동향 collector + 테이블 + flow_inputs `net_sums` 소스 교체 (+ inflow_speed 용 market_cap 주입도 같이)
-- **예상 산출**: F-Score 세 축 동시 시장→종목 실측 승급
+### 1. SLOT S2 임계 + theme_authority production 튜닝 ⭐
+- **왜**: 이제 실 종목 수급(외인 -1,661억 등)이 들어오니, `config/score_inputs.yaml` theme_match breakpoints·theme_authority가 placeholder인 채로는 점수 정합이 안 맞음. + 다종목 변별 확인 필요
+- **범위**: 현대차/하이닉스 등 다종목 라이브로 theme_match·momentum·inflow_speed 분포 수집 → breakpoints·theme_authority 정정 + (선택) defense_nuclear pension→institution 명시 정리
+- **예상 산출**: 종목별 F-Score production 정합 + 다종목 변별 실증
 
-### 2. SLOT S2 임계 + SLOT S3 목표 정밀화
-- **왜**: `config/score_inputs.yaml` theme_match/breakpoints/theme_authority·rr_rule floor/cap 은 placeholder. + R/R ATH 근처 목표 과소평가
-- **범위**: 실 분포 수집 후 breakpoints·theme_authority·floor/cap 정정 + `compute_rr` ATH 근처 measured-move 보강
-- **예상 산출**: 점수 production 정합 + 돌파 케이스 정확도
+### 2. KRX 5주체 + market_breadth 복구 (방법 A)
+- **왜**: KRX getJsonData STAT 통계가 로그인 벽+안티봇("LOGOUT")으로 차단 — 종목 5주체뿐 아니라 기존 `market_breadth`(INFRA-SNAPSHOT-EXTEND-001)도 동일 잠복 고장(silent fallback 중)
+- **범위**: data.krx.co.kr 개별종목 투자자별 거래실적 페이지 devtools로 실 getJsonData 요청(bld/params/세션) 캡처 → `connectors/krx/client.py` 휴면 helper 활성 + market_breadth 동반 복구
+- **예상 산출**: 종목 5주체 승급(KIS 3주체→KRX 5주체) + market_breadth 복구
 
 ### 3. buy_score·S-Score 후속 배선
 - **왜**: F/T-Score 인프라는 라이브까지 도달, buy_score(stock_picker)·S-Score 는 아직 미배선. scoring.py 정식 가중치(SLOT S7)와 함께
