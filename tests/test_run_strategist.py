@@ -29,6 +29,7 @@ _insert_analyst_scores_block = strat_mod._insert_analyst_scores_block
 gather_analyst_scores = strat_mod.gather_analyst_scores
 load_strategist_spec = strat_mod.load_strategist_spec
 render_analyst_scores_block = strat_mod.render_analyst_scores_block
+render_prefetched_analyst_outputs = strat_mod.render_prefetched_analyst_outputs
 run_strategist = strat_mod.run_strategist
 
 
@@ -188,6 +189,94 @@ def test_render_analyst_scores_block_empty_returns_header_only() -> None:
     assert "## Analyst Scores" in md  # 헤더는 늘 박힘
     # 분석가별 ### 헤더는 없어야
     assert "###" not in md
+
+
+# ---------------------------------------------------------------------------
+# render_prefetched_analyst_outputs — 결정론 점수 구조 주입 (cited_scores 누수 방어)
+# 2026-06-01 production 시연 발견: 전략가 LLM 이 분석가 자유텍스트에서 점수를 재추출하다
+# buy_score=6.0 을 null 로 누락. 점수는 이미 metadata(advisory_*)에 결정론으로 존재하므로
+# 구조적으로 직접 주입해 LLM 재추출 의존을 제거. ([[project_cited_scores_extraction_leak]])
+# ---------------------------------------------------------------------------
+
+
+def test_render_prefetched_surfaces_deterministic_scores() -> None:
+    prefetched = [
+        {
+            "id": "stock_picker",
+            "text": "### [1] Stock Selection Grid\n| 매수 점수 | 6.0 |",
+            "metadata": {"advisory_s_score": 8.5, "advisory_buy_score": 6.0},
+            "error": None,
+        },
+        {
+            "id": "flow_analyzer",
+            "text": "수급 분석 본문 ...",
+            "metadata": {"advisory_f_score": 7.0},
+            "error": None,
+        },
+        {
+            "id": "trader",
+            "text": "트레이딩 관점 ...",
+            "metadata": {"advisory_t_score": 4.0},
+            "error": None,
+        },
+    ]
+    md = render_prefetched_analyst_outputs(prefetched)
+    # 결정론 점수가 구조적으로 노출되어 LLM 이 그대로 인용 가능
+    assert "s_score=8.5" in md
+    assert "buy_score=6.0" in md
+    assert "f_score=7.0" in md
+    assert "t_score=4.0" in md
+    # 권위 규칙 명시 (그대로 인용 / 추정 금지)
+    assert "그대로" in md
+    # raw text 도 여전히 보존
+    assert "수급 분석 본문" in md
+
+
+def test_render_prefetched_empty_text_but_scores_present() -> None:
+    """Gemini 빈 응답이어도 결정론 점수는 흐른다 (누수 방어 핵심)."""
+    prefetched = [
+        {
+            "id": "stock_picker",
+            "text": "",
+            "metadata": {"advisory_buy_score": 6.0},
+            "error": None,
+        },
+    ]
+    md = render_prefetched_analyst_outputs(prefetched)
+    assert "buy_score=6.0" in md
+    # 빈 응답이지만 점수는 살아있으므로 '미반영' 으로 폐기하지 않음
+    assert "미반영" not in md
+
+
+def test_render_prefetched_no_scores_no_score_line() -> None:
+    """점수 metadata 없는 분석가는 결정론 점수 줄을 만들지 않음."""
+    prefetched = [
+        {
+            "id": "market_state_analyzer",
+            "text": "시장 상태 분석 ...",
+            "metadata": {},
+            "error": None,
+        },
+    ]
+    md = render_prefetched_analyst_outputs(prefetched)
+    # per-analyst 주입 줄 고유 마커 "권위값" 은 헤더 규칙엔 없음 → 점수 줄 미생성 확인
+    assert "권위값" not in md
+    assert "시장 상태 분석" in md
+
+
+def test_render_prefetched_alpha_not_injected_as_single_score() -> None:
+    """alpha 는 단일 collapse 값이 없으므로 결정론 점수로 주입하지 않음 (WAVE-ALPHA 설계)."""
+    prefetched = [
+        {
+            "id": "stock_analyst",
+            "text": "α daily 1.42 / weekly ... / monthly 4.1",
+            "metadata": {"advisory_s_score": None, "advisory_buy_score": None},
+            "error": None,
+        },
+    ]
+    md = render_prefetched_analyst_outputs(prefetched)
+    # None 점수는 주입되지 않음 → per-analyst 점수 줄(마커 "권위값") 자체가 없어야
+    assert "권위값" not in md
 
 
 # ---------------------------------------------------------------------------

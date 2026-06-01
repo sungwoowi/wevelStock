@@ -236,12 +236,38 @@ def _insert_analyst_scores_block(blocks: list[dict], scores_md: str) -> list[dic
     return [*blocks, score_block]
 
 
+# 분석가 metadata 의 결정론 advisory 점수 → cited_scores 필드 매핑.
+# 점수 *값* 은 결정론 계산(advisory)이므로 LLM 재추출에 맡기지 않고 구조적으로 직접 주입한다
+# (2026-06-01 production 시연에서 buy_score=6.0 이 자유텍스트 재추출 단계에서 null 로 누락된
+# 결함 해소). alpha 는 단일 collapse 값이 없으므로(multi-timeframe) 여기 포함하지 않고
+# stock_analyst raw text 의 timeframe 별 해석을 LLM 이 따른다.
+_ADVISORY_SCORE_FIELDS: dict[str, str] = {
+    "advisory_s_score": "s_score",
+    "advisory_buy_score": "buy_score",
+    "advisory_t_score": "t_score",
+    "advisory_f_score": "f_score",
+}
+
+
+def _deterministic_scores_from_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """분석가 metadata 에서 None 이 아닌 결정론 advisory 점수만 cited_scores 키로 추출."""
+    out: dict[str, Any] = {}
+    for meta_key, cited_key in _ADVISORY_SCORE_FIELDS.items():
+        val = metadata.get(meta_key)
+        if val is not None:
+            out[cited_key] = val
+    return out
+
+
 def render_prefetched_analyst_outputs(prefetched: list[dict[str, Any]]) -> str:
     """PRODUCTION-UX-001 옵션 A — production-chat 라우터가 분석가 N명을 동시 호출해
     얻은 raw text 응답을 전략가 system prompt 에 직접 주입하는 블록.
 
     DB read (team_outputs) 우회 — 본 production-chat 흐름 내 일관성만 보장. prism-insight
     의 Orchestrator pass-through 패턴 + wevelStock 의 asyncio.gather 병렬 결합.
+
+    결정론 점수(`advisory_*`)는 raw text 와 별도로 **구조적으로 직접 주입**한다 — LLM 이
+    자유텍스트 격자에서 점수를 재추출하다 누락하는 결함 방어 (점수 값=결정론, 해석/verdict=LLM).
 
     Args:
         prefetched: list of {"id": str, "text": str, "metadata": dict, "error": str | None}
@@ -257,9 +283,13 @@ def render_prefetched_analyst_outputs(prefetched: list[dict[str, Any]]) -> str:
         "아래는 본 사용자 발화 직전에 reads_analysts 분석가들을 동시 호출하여 받은 raw 응답",
         "원문입니다. DB (`team_outputs`) read 우회 — 본 응답 흐름 내 일관성만 보장.",
         "",
-        "**권고 양식 cited_scores 인용 시**: 본 블록의 raw 응답 내 명제 ID / 점수 / verdict",
-        "/ confidence 만 사용. 다른 값 추정 금지. raw text 가 비어있거나 error 가 있는",
-        "분석가는 cited_scores 해당 필드 = null + reasons 에 '분석가 응답 누락' 명시.",
+        "**cited_scores 점수 필드 규칙 (중요)**: 각 분석가 아래의 '결정론 점수' 줄에 명시된",
+        "s_score / buy_score / t_score / f_score 값은 결정론 계산값이므로 cited_scores 에",
+        "**그대로** 인용하라 (LLM 추정·재계산 금지, raw text 격자에서 다시 읽지 말 것).",
+        "결정론 점수 줄에 없는 점수만 null. alpha 는 단일 collapse 값이 없으므로 stock_analyst",
+        "raw text 의 timeframe 별 해석을 따른다 (단일 값 강요 금지).",
+        "그 외 명제 ID / verdict / confidence 는 raw text 에서 인용. error 가 있는 분석가는",
+        "cited_scores 해당 필드 = null + reasons 에 '분석가 응답 누락' 명시.",
         "",
     ]
     for entry in prefetched:
@@ -271,8 +301,17 @@ def render_prefetched_analyst_outputs(prefetched: list[dict[str, Any]]) -> str:
             lines.append(f"**호출 실패** — {err}. 본 분석가 의견은 미반영.")
             lines.append("")
             continue
+        # 결정론 권위 점수 (metadata) 를 raw text 와 무관하게 먼저 주입 — 누수 방어.
+        det = _deterministic_scores_from_metadata(entry.get("metadata") or {})
+        if det:
+            pretty = ", ".join(f"{k}={v}" for k, v in det.items())
+            lines.append(f"**결정론 점수 (권위값, cited_scores 에 그대로 인용)**: {pretty}")
         if not text:
-            lines.append("**빈 응답** — 본 분석가 의견은 미반영.")
+            # raw 응답이 비어도 결정론 점수가 있으면 그 점수는 살린다 (점수 ⊥ LLM 서술).
+            if det:
+                lines.append("_(raw 응답 비어있음 — 위 결정론 점수만 권위값으로 사용)_")
+            else:
+                lines.append("**빈 응답** — 본 분석가 의견은 미반영.")
             lines.append("")
             continue
         # 길이 제한: 분석가 1명 당 max ~3000 chars (system prompt 폭발 방지).
