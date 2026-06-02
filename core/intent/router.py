@@ -91,22 +91,35 @@ def reload_subtasks_and_routing() -> None:
 def _resolve_analyst_ids_for_scenario(
     scenario_id: int, track_ids: list[str]
 ) -> list[str]:
-    """시나리오 ID 별 축약 매핑 우선, 없으면 track_ids 의 reads_analysts 합집합 fallback."""
+    """시나리오 ID 별 축약 매핑 우선, 없으면 track_ids 의 reads_analysts 합집합 fallback.
+
+    해석 후 track_required(config) 의 track 별 필수 분석가를 보강한다 — 시나리오 축약은
+    Track A 기준이라, swing(Track B) 라우팅 시 trader(T-Score) 같은 권위 발행자가
+    누락되던 결함을 방지(2026-06-01 시연 발견).
+    """
     routing = _load_scenario_routing()
     sc_map = (routing.get("scenarios") or {}).get(scenario_id)
-    if sc_map:
-        analysts_list = sc_map.get("analysts") or []
-        if analysts_list:
-            return list(analysts_list)
-    # fallback = track reads_analysts 합집합 (PROD-UX-1 기존 패턴)
-    aid_set: set[str] = set()
+    resolved: list[str]
+    if sc_map and (sc_map.get("analysts") or []):
+        resolved = list(sc_map["analysts"])
+    else:
+        # fallback = track reads_analysts 합집합 (PROD-UX-1 기존 패턴)
+        aid_set: set[str] = set()
+        for tid in track_ids:
+            try:
+                spec = load_strategist_spec(tid)
+                aid_set.update(spec.reads_analysts)
+            except StrategistNotFoundError:
+                continue
+        resolved = sorted(aid_set)
+
+    # track 별 필수 분석가 보강 (순서 보존 + 중복 skip)
+    required = routing.get("track_required") or {}
     for tid in track_ids:
-        try:
-            spec = load_strategist_spec(tid)
-            aid_set.update(spec.reads_analysts)
-        except StrategistNotFoundError:
-            continue
-    return sorted(aid_set)
+        for aid in required.get(tid) or []:
+            if aid not in resolved:
+                resolved.append(aid)
+    return resolved
 
 
 def _build_subtask_prompt(

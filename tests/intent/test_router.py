@@ -422,6 +422,56 @@ class TestScenarioRouting:
         assert len(ids_fallback) == 6
 
 
+class TestTrackRequiredAugmentation:
+    """track_required — Track B 경로 시 시나리오 축약이 떨어뜨린 권위 분석가(trader) 보강.
+
+    2026-06-01 시연 발견: 시나리오 2(신규 진입)가 Track A 기준이라 trader 누락 →
+    swing(Track B) 라우팅 시 cited_scores.t_score 항상 null. track 인지 보강으로 복구.
+    """
+
+    def test_track_b_appends_trader_for_scenario_2(self) -> None:
+        """시나리오 2(5명) + Track B → trader 보강 = 6명, trader 포함."""
+        ids = _resolve_analyst_ids_for_scenario(2, ["track_b"])
+        assert "trader" in ids
+        # 기존 5명 보존 + trader = 6
+        assert len(ids) == 6
+        assert {
+            "stock_picker",
+            "stock_analyst",
+            "market_state_analyzer",
+            "principle_guardian",
+            "flow_analyzer",
+        }.issubset(set(ids))
+
+    def test_track_b_no_duplicate_when_trader_present(self) -> None:
+        """시나리오 5는 이미 trader 포함 → 중복 추가 없이 5명 유지."""
+        ids = _resolve_analyst_ids_for_scenario(5, ["track_b"])
+        assert ids.count("trader") == 1
+        assert len(ids) == 5
+
+    def test_both_route_includes_trader(self) -> None:
+        """both(track_a+track_b) → trader 보강."""
+        ids = _resolve_analyst_ids_for_scenario(2, ["track_a", "track_b"])
+        assert "trader" in ids
+
+    def test_track_a_alone_does_not_add_trader(self) -> None:
+        """Track A 단독 경로는 trader 미추가 (축약 의미 보존, 회귀 0)."""
+        ids = _resolve_analyst_ids_for_scenario(2, ["track_a"])
+        assert "trader" not in ids
+        assert len(ids) == 5
+
+    def test_route_intent_track_b_prefetches_trader(
+        self, stub_strategist, stub_analyst
+    ) -> None:
+        """route_intent track_b 경로 → prefetch 분석가 호출에 trader 포함."""
+        c = _make_classification(
+            scenario_id=2, agent_route="track_b", ticker="005930"
+        )
+        asyncio.run(route_intent(c, [{"role": "user", "content": "삼성전자 단타 살까"}]))
+        called = {call["analyst_id"] for call in stub_analyst}
+        assert "trader" in called
+
+
 class TestErrorHandling:
     def test_strategist_exception_is_captured(
         self, monkeypatch: pytest.MonkeyPatch, stub_analyst

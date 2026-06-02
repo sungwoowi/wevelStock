@@ -79,3 +79,9 @@ docs/traceability.md
 
 # knowledge/reference: 사용자 자료 (큰 PDF 포함, GitHub 100MB 제한). repo 외부 보관.
 knowledge/reference/
+
+# === 디렉토리 백업 zip (R&D chat ↔ Claude Code 전송용 임시, 커밋 X) ===
+*.zip
+
+# === 루트 스크래치 산출물 (flow/screening distribution 진단 등, _ prefix 컨벤션) ===
+/_*.json

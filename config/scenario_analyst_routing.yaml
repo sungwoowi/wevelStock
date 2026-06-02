@@ -14,6 +14,18 @@
 #   1. 시나리오 ID 매칭 → 본 yaml 의 analysts list 사용
 #   2. 매칭 X (시나리오 0/11) → track_id 의 reads_analysts 풀세트 fallback
 
+# Track 별 필수 분석가 — 시나리오 축약(아래 scenarios 는 Track A 기준)이 떨어뜨리면 안 되는
+# 권위 점수 발행자. route 가 해당 track 을 포함하면(track_b / both) 시나리오 매핑 뒤에
+# append 한다(이미 있으면 skip). plugin 트랙은 자기 항목을 여기 드롭만 하면 됨.
+#
+# 근거: trader 는 Track B 의 타점 점수(T-Score) + 6 트리거 권위 발행자
+#       (agents/strategists/track_b/manifest.yaml reads_analysts). 시나리오 2(신규 진입) 등이
+#       Track A 기준이라 trader 가 빠져, swing(Track B) 라우팅 시 cited_scores.t_score 가
+#       항상 null 이 되던 결함(2026-06-01 production 시연 발견)을 해소.
+track_required:
+  track_b:
+    - trader                 # 타점 점수(T-Score) + 6 트리거
+
 scenarios:
   # 시나리오 1: 보유자 결정 (추매/홀딩/매도/손절)
   # = 종목 본질 + 7계명 검증 + 수급 흐름. trader 불필요 (이미 보유 중이라 진입 타점 X).
