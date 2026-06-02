@@ -345,9 +345,13 @@ def _get_today_macro(date_str: str, market: str) -> MarketMacro | None:
         is_distribution_day=bool(row["is_distribution_day"]),
         change_pct=float(row["change_pct"]) if row["change_pct"] is not None else None,
         volume_change_pct=float(row["volume_change_pct"]) if row["volume_change_pct"] is not None else None,
-        distribution_count_25d=0,           # DB에 따로 적재 안 함 — 호출 시 compute
+        # v9 — 영속된 분산일 카운트 + breadth 출처 복원 (computed run 과 일치).
+        #   pre-v9 row 는 NULL → 0/None (이전 하드코드와 동일). recent_distribution_days(상세 리스트)는
+        #   regime/scoring 미사용이라 캐시 복원 시 빈 리스트 유지.
+        distribution_count_25d=int(row["distribution_count_25d"]) if row["distribution_count_25d"] is not None else 0,
         recent_distribution_days=[],
         source="db",
+        breadth_source=row["breadth_source"],
     )
 
 
@@ -360,8 +364,9 @@ def upsert_market_macro(macro: MarketMacro) -> None:
             "(date, market, index_close, ma_36m, ma_60m, position, "
             " ma_20d, ma_60d, ma20_slope_pct_5d, ma60_slope_pct_20d, trend, "
             " advancing, declining, unchanged, breadth_ratio, "
-            " is_distribution_day, change_pct, volume_change_pct) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            " is_distribution_day, change_pct, volume_change_pct, "
+            " distribution_count_25d, breadth_source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(date, market) DO UPDATE SET "
             " index_close=excluded.index_close, "
             " ma_36m=excluded.ma_36m, ma_60m=excluded.ma_60m, position=excluded.position, "
@@ -371,7 +376,9 @@ def upsert_market_macro(macro: MarketMacro) -> None:
             " advancing=excluded.advancing, declining=excluded.declining, "
             " unchanged=excluded.unchanged, breadth_ratio=excluded.breadth_ratio, "
             " is_distribution_day=excluded.is_distribution_day, "
-            " change_pct=excluded.change_pct, volume_change_pct=excluded.volume_change_pct",
+            " change_pct=excluded.change_pct, volume_change_pct=excluded.volume_change_pct, "
+            " distribution_count_25d=excluded.distribution_count_25d, "
+            " breadth_source=excluded.breadth_source",
             (
                 macro.date,
                 macro.market,
@@ -391,6 +398,8 @@ def upsert_market_macro(macro: MarketMacro) -> None:
                 1 if macro.is_distribution_day else 0,
                 macro.change_pct,
                 macro.volume_change_pct,
+                macro.distribution_count_25d,
+                macro.breadth_source,
             ),
         )
 

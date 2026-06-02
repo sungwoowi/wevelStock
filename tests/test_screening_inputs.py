@@ -25,22 +25,24 @@ from collectors.screening_inputs import (
 # ============================================================
 
 
-def _ind(*, close, m7=None, w10=None, w20=None, w60=None, d20=None, d60=None):
+def _ind(*, close, m7=None, w10=None, w20=None, w60=None, d4=None, d7=None, d20=None, d60=None):
     return {
         "current_close": close,
         "monthly_ma": {"ma7": m7},
         "weekly_ma": {"ma10": w10, "ma20": w20, "ma60": w60},
-        "daily_ma": {"ma20": d20, "ma60": d60},
+        "daily_ma": {"ma4": d4, "ma7": d7, "ma20": d20, "ma60": d60},
     }
 
 
 class TestComputeAlignment:
     def test_full_stack_max(self) -> None:
-        # 월봉 위(4) + 주봉 정배열(3) + 일봉 정배열(3) = 10
-        ind = _ind(close=100, m7=90, w10=95, w20=90, w60=85, d20=92, d60=88)
+        # 월봉 위(4) + 주봉 정배열(3) + 일봉 4일선 타고 상승=초강세(3) = 10
+        ind = _ind(close=100, m7=90, w10=95, w20=90, w60=85, d4=98, d7=95, d20=92, d60=88)
         score, detail = compute_alignment(ind)
         assert score == 10.0
-        assert detail == {"monthly_7ma": True, "weekly_stack": True, "daily_stack": True}
+        assert detail["monthly_7ma"] is True and detail["weekly_stack"] is True
+        assert detail["daily_stack"] is True
+        assert detail["daily_leadership"] == "riding_ma4"
 
     def test_full_reverse_zero(self) -> None:
         # 모두 역배열 = 0
@@ -48,25 +50,48 @@ class TestComputeAlignment:
         score, detail = compute_alignment(ind)
         assert score == 0.0
         assert detail["monthly_7ma"] is False
+        assert detail["daily_leadership"] == "below_ma20"
 
     def test_partial_components_normalized(self) -> None:
         # 월봉만 산출 가능 + 정배열 → 4/4 비례 정규화 = 10.0 (결측 위계 평가 제외, 저평가 편향 제거)
         ind = _ind(close=100, m7=90)
         score, detail = compute_alignment(ind)
         assert score == 10.0
-        assert detail["weekly_stack"] is None and detail["daily_stack"] is None
+        assert detail["weekly_stack"] is None and detail["daily_leadership"] is None
 
     def test_partial_mixed_normalized(self) -> None:
-        # 월봉 정배열(4) + 일봉 역배열(0), 주봉 결측 → available_max 7, earned 4 → 4/7×10 = 5.714 → 5.5
-        ind = _ind(close=100, m7=90, d20=105, d60=110)  # close < d20 → 일봉 역배열
+        # 월봉 정배열(4) + 일봉 이탈(0), 주봉 결측 → available_max 7, earned 4 → 4/7×10 = 5.714 → 5.5
+        ind = _ind(close=100, m7=90, d20=105, d60=110)  # close < d20 → 일봉 이탈
         score, _ = compute_alignment(ind)
         assert score == 5.5
 
-    def test_daily_only_aligned_full(self) -> None:
-        # 일봉만 산출 + 정배열 → 3/3 = 10.0 (구 구현은 max 3 으로 막혔던 저평가 편향)
-        ind = _ind(close=100, d20=95, d60=90)
-        score, _ = compute_alignment(ind)
+    def test_daily_riding_ma4_full(self) -> None:
+        # 일봉만 + 4일선 타고 상승(초강세) → 3/3 = 10.0
+        ind = _ind(close=100, d4=98, d7=95, d20=92, d60=88)
+        score, detail = compute_alignment(ind)
         assert score == 10.0
+        assert detail["daily_leadership"] == "riding_ma4"
+
+    def test_daily_riding_ma7_strong(self) -> None:
+        # close>ma7>ma20 이지만 ma4 안 탐(close<ma4 또는 ma4<ma7) → 강세 2.5/3 → 8.5
+        ind = _ind(close=100, d4=101, d7=97, d20=92, d60=88)  # close<d4 → ma4 미탑승
+        score, detail = compute_alignment(ind)
+        assert detail["daily_leadership"] == "riding_ma7"
+        assert score == 8.5  # 2.5/3*10 = 8.33 → 8.5
+
+    def test_daily_normal_uptrend_not_leader(self) -> None:
+        # close>ma20>ma60 이지만 빠른 MA 미탑승(d4/d7 없음) → 정상 추세 2.0/3 → 6.5
+        ind = _ind(close=100, d20=95, d60=90)
+        score, detail = compute_alignment(ind)
+        assert detail["daily_leadership"] == "uptrend"
+        assert score == 6.5  # 2.0/3*10 = 6.67 → 6.5
+
+    def test_daily_above_ma20_weak(self) -> None:
+        # close>ma20 이지만 ma20<ma60 (정배열 아님) + 빠른 MA 미탑승 → 약한 추세 1.5/3 → 5.0
+        ind = _ind(close=100, d20=95, d60=98)
+        score, detail = compute_alignment(ind)
+        assert detail["daily_leadership"] == "above_ma20"
+        assert score == 5.0  # 1.5/3*10 = 5.0
 
     def test_all_missing_returns_none(self) -> None:
         ind = _ind(close=100)

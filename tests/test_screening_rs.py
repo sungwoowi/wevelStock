@@ -60,9 +60,29 @@ class TestExtensionScore:
         # 과대 이격 → 0 으로 clamp
         assert extension_score(200.0, 100.0, 0.05, k=1.0) == 0.0
 
-    def test_below_ma_above_ten_clamps(self) -> None:
-        # MA 아래 → 10 초과 → 10 clamp
+    def test_below_ma_within_deadband_healthy(self) -> None:
+        # 95/100, ADR 5% → normalized -1.0 = 정확히 deadband(1.0 ADR) 경계 → 감점 0 → 10
         assert extension_score(95.0, 100.0, 0.05, k=1.0) == 10.0
+
+    def test_shallow_below_ma_healthy(self) -> None:
+        # 97/100, ADR 5% → |normalized| 0.6 < deadband 1.0 → 얕은 눌림 = 건강 10
+        assert extension_score(97.0, 100.0, 0.05) == 10.0
+
+    def test_deep_below_ma_penalised(self) -> None:
+        # 85/100, ADR 5% → normalized -3.0, excess = 3.0 - 1.0 = 2.0 → 10 - 1.0*2.0 = 8.0
+        assert extension_score(85.0, 100.0, 0.05, k_below=1.0) == 8.0
+
+    def test_k_below_scaling(self) -> None:
+        # 위와 동일하나 k_below 2배 → excess 2.0 * 2.0 = 4.0 → 10 - 4.0 = 6.0
+        assert extension_score(85.0, 100.0, 0.05, k_below=2.0) == 6.0
+
+    def test_deadband_override_widens_penalty(self) -> None:
+        # 90/100, ADR 5% → normalized -2.0. deadband 0.5 → excess 1.5 → 10 - 1.5 = 8.5
+        assert extension_score(90.0, 100.0, 0.05, below_deadband_adr=0.5) == 8.5
+
+    def test_deep_below_floors_at_zero(self) -> None:
+        # 극단 broken → 0 으로 clamp (음수 방지)
+        assert extension_score(40.0, 100.0, 0.05, k_below=2.0) == 0.0
 
     def test_ma20_none_returns_none(self) -> None:
         assert extension_score(100.0, None, 0.05) is None
@@ -227,3 +247,35 @@ def test_missing_ticker_excluded(isolated_db) -> None:
     by_ticker = {r["ticker"]: r for r in result}
     assert by_ticker["A"]["rank"] == 1
     assert by_ticker["NOPE"]["rank"] is None
+
+
+def test_rank_row_exposes_raw_metrics(isolated_db) -> None:
+    """SCREEN-RS C — 행에 extension_pct/adr/normalized raw 노출 (포화 진단용)."""
+    from collectors.charts import persist_ohlcv_to_db
+    from collectors.screening import rank_candidates
+
+    # 가파른 하락 종목 → 최근가 < ma20 (extension_pct < 0)
+    persist_ohlcv_to_db("DOWN", _bars(10_000, -25.0, spread=0.02), adjusted=True)
+    persist_ohlcv_to_db("UP", _bars(10_000, 25.0, spread=0.02), adjusted=True)
+    row = {r["ticker"]: r for r in rank_candidates(["DOWN", "UP"], "moderate_bull")}["DOWN"]
+    assert row["extension_pct"] is not None and row["extension_pct"] < 0  # ma20 아래
+    assert row["normalized"] is not None and row["normalized"] < 0
+    assert row["adr"] is not None and row["adr"] > 0
+
+
+def test_rank_k_below_override_penalises_broken(isolated_db) -> None:
+    """SCREEN-RS C — k_below_override 가 ma20-아래 broken 의 과열도를 더 깎는다 (스윕 plumbing)."""
+    from collectors.charts import persist_ohlcv_to_db
+    from collectors.screening import rank_candidates
+
+    persist_ohlcv_to_db("DOWN", _bars(10_000, -25.0, spread=0.02), adjusted=True)
+    persist_ohlcv_to_db("UP", _bars(10_000, 25.0, spread=0.02), adjusted=True)
+
+    base = {r["ticker"]: r for r in rank_candidates(["DOWN", "UP"], "moderate_bull")}
+    steep = {
+        r["ticker"]: r
+        for r in rank_candidates(["DOWN", "UP"], "moderate_bull", k_below_override=3.0)
+    }
+    # ma20-아래(DOWN)는 k_below 가 클수록 과열도 ↓, ma20-위(UP)는 k_below 무관
+    assert steep["DOWN"]["extension_score"] < base["DOWN"]["extension_score"]
+    assert steep["UP"]["extension_score"] == base["UP"]["extension_score"]

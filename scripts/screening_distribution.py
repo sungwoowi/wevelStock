@@ -13,8 +13,13 @@ RS/extension 은 DB 일봉(load_ohlcv_from_db)만 read 하므로 fan-out KIS 없
 실행:
     uv run python scripts/screening_distribution.py                  # 기본 ~13종 바구니
     uv run python scripts/screening_distribution.py 005930 000660    # 커스텀 ticker
+    uv run python scripts/screening_distribution.py --k 2.0           # 과열도 k 스윕(진단 전용)
 
-산출: _screening_distribution.json (rows + 축별 분위수 통계 + regime 경계 근접도) + 콘솔 표 3종.
+`--k <value>` 는 config/screening.yaml 편집 없이 한 프로세스에서 과열도 채점 계수를
+override 해 분포 변화를 즉시 비교(캘리브레이션 스윕). 승리 k 는 config 에 별도 반영.
+
+산출: _screening_distribution.json (rows + 축별 분위수 통계 + 과열도 포화 진단 + regime
+경계 근접도) + 콘솔 표 4종.
 """
 from __future__ import annotations
 
@@ -140,7 +145,47 @@ def _boundary_proximity(macro: object, thresholds: dict[str, float]) -> dict[str
     }
 
 
-async def _run(basket: list[tuple[str, str]]) -> dict:
+def _saturation_diag(rows: list[dict]) -> dict[str, object]:
+    """과열도(extension_score) 천장 포화 원인 분리.
+
+    공식 `clamp(10 - k·extension/ADR)` 에서 ma20 아래(extension_pct ≤ 0)면 무조건 10 clamp
+    → k 무관. 따라서 ext==10 종목을 (B) ma20-아래 vs (A) ma20-위 과열도 압축으로 나눠
+    "k 조정으로 풀리는 포화"가 얼마인지 판정한다. ratio_above_at_ceiling 이 높을수록 k 상향 유효.
+    """
+    scored = [r for r in rows if r.get("extension_score") is not None]
+    n = len(scored)
+    if n == 0:
+        return {"n": 0}
+    below_ma20 = [r for r in scored if (r.get("extension_pct") or 0.0) <= 0.0]
+    at_ceiling = [r for r in scored if r["extension_score"] >= 10.0]
+    ceiling_below = [r for r in at_ceiling if (r.get("extension_pct") or 0.0) <= 0.0]
+    ceiling_above = [r for r in at_ceiling if (r.get("extension_pct") or 0.0) > 0.0]
+    # SCREEN-RS C 이후: ceiling 중 ma20-아래 = deadband 내 얕은 눌림(건강, 의도된 10).
+    # ma20 아래로 deadband 넘게 빠진 broken 은 이제 < 10 으로 감점됨 → ceiling 에 안 남음.
+    return {
+        "n": n,
+        "below_ma20": len(below_ma20),
+        "below_ma20_pct": round(len(below_ma20) / n * 100, 1),
+        "at_ceiling_10": len(at_ceiling),
+        "at_ceiling_pct": round(len(at_ceiling) / n * 100, 1),
+        "ceiling_within_deadband": len(ceiling_below),   # ma20 아래지만 deadband 내 = 건강(정상)
+        "ceiling_at_or_above_ma20": len(ceiling_above),  # ma20 정확히 위 = 과열 없음(정상)
+        "verdict": (
+            f"정상 — ceiling {len(at_ceiling)}종 = deadband 내 눌림 "
+            f"{len(ceiling_below)} + ma20 근접 위 {len(ceiling_above)} (C floor 적용)"
+            if at_ceiling
+            else "포화 없음"
+        ),
+    }
+
+
+async def _run(
+    basket: list[tuple[str, str]],
+    *,
+    k_override: float | None = None,
+    k_below_override: float | None = None,
+    deadband_override: float | None = None,
+) -> dict:
     name_map = {t: n for t, n in basket}
     tickers = [t for t, _ in basket]
     thresholds = get_regime_thresholds()
@@ -165,8 +210,21 @@ async def _run(basket: list[tuple[str, str]]) -> dict:
         print(f"      ⚠ 매크로 실패: {e} → regime=None(균등 가중 fallback)", flush=True)
 
     # 2) 후보 풀 랭킹 — DB 일봉만, 한 번 (RS = 풀 내 백분위)
-    print(f"후보 풀 {len(tickers)}종 랭킹 (regime={regime}, DB 일봉) ...", flush=True)
-    ranked = rank_candidates(tickers, regime)
+    parts = []
+    if k_override is not None:
+        parts.append(f"k={k_override}")
+    if k_below_override is not None:
+        parts.append(f"k_below={k_below_override}")
+    if deadband_override is not None:
+        parts.append(f"deadband={deadband_override}")
+    k_label = ("override " + " ".join(parts)) if parts else "k=config"
+    print(f"후보 풀 {len(tickers)}종 랭킹 (regime={regime}, {k_label}, DB 일봉) ...", flush=True)
+    ranked = rank_candidates(
+        tickers, regime,
+        k_override=k_override,
+        k_below_override=k_below_override,
+        deadband_override=deadband_override,
+    )
     rows: list[dict] = []
     for r in ranked:
         rows.append({**r, "name": name_map.get(r["ticker"], r["ticker"])})
@@ -175,15 +233,22 @@ async def _run(basket: list[tuple[str, str]]) -> dict:
         "rs_score": _stats([r["rs_score"] for r in rows]),
         "extension_score": _stats([r["extension_score"] for r in rows]),
         "screening_score": _stats([r["screening_score"] for r in rows]),
+        # 과열도 입력 raw 분포 (포화가 입력단에서 어디서 오는지)
+        "extension_pct": _stats([r.get("extension_pct") for r in rows]),
+        "normalized": _stats([r.get("normalized") for r in rows]),
     }
     excluded = [r["ticker"] for r in rows if r["rank"] is None]
     return {
         "regime": regime,
+        "k_override": k_override,
+        "k_below_override": k_below_override,
+        "deadband_override": deadband_override,
         "regime_weights": get_regime_weights().get(regime or "", {"w_rs": 0.5, "w_ext": 0.5}),
         "boundary": boundary,
         "macro_error": macro_err,
         "rows": rows,
         "stats": stats,
+        "saturation": _saturation_diag(rows),
         "excluded": excluded,
     }
 
@@ -196,26 +261,79 @@ def _fmt(v: object, width: int = 8) -> str:
     return str(v).rjust(width)
 
 
+_NUMERIC_FLAGS = {"--k": "k", "--k-below": "k_below", "--deadband": "deadband"}
+
+
+def _parse_args(argv: list[str]) -> tuple[dict[str, float], list[str]]:
+    """`--k 2.0`/`--k=2.0` 등 숫자 플래그 + 나머지 ticker. 소비 토큰은 ticker 에서 제외.
+
+    지원 플래그: --k(과열 계수) / --k-below(이탈 계수) / --deadband(완충대 ADR).
+    반환: ({flag_name: float}, [ticker, ...]).
+    """
+    overrides: dict[str, float] = {}
+    consumed: set[int] = set()
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        matched: str | None = None
+        raw: str | None = None
+        for flag, name in _NUMERIC_FLAGS.items():
+            if a == flag and i + 1 < len(argv):
+                matched, raw = name, argv[i + 1]
+                consumed.update({i, i + 1})
+                i += 1
+                break
+            if a.startswith(flag + "="):
+                matched, raw = name, a.split("=", 1)[1]
+                consumed.add(i)
+                break
+        if matched is not None and raw is not None:
+            try:
+                overrides[matched] = float(raw)
+            except ValueError:
+                print(f"⚠ {a} 값 파싱 실패: {raw!r} → config 사용", flush=True)
+        i += 1
+    tickers = [
+        a for j, a in enumerate(argv) if j not in consumed and not a.startswith("--")
+    ]
+    return overrides, tickers
+
+
 def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    overrides, args = _parse_args(sys.argv[1:])
     basket = [(t, t) for t in args] if args else DEFAULT_BASKET
 
-    result = asyncio.run(_run(basket))
+    result = asyncio.run(_run(
+        basket,
+        k_override=overrides.get("k"),
+        k_below_override=overrides.get("k_below"),
+        deadband_override=overrides.get("deadband"),
+    ))
     OUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # 표 1 — 종목별 점수
-    print("\n" + "=" * 92)
+    ov = []
+    if result.get("k_override") is not None:
+        ov.append(f"k={result['k_override']}")
+    if result.get("k_below_override") is not None:
+        ov.append(f"k_below={result['k_below_override']}")
+    if result.get("deadband_override") is not None:
+        ov.append(f"deadband={result['deadband_override']}")
+    k_label = ("override " + " ".join(ov)) if ov else "k=config"
+
+    # 표 1 — 종목별 점수 (ext% = ma20 대비 이격, 음수면 ma20 아래 → ext_score 10 clamp)
+    print("\n" + "=" * 100)
     print(f"종목별 RS + 과열도 + 합성 점수  (regime={result['regime']} "
-          f"weights={result['regime_weights']})")
-    print("=" * 92)
+          f"{k_label} weights={result['regime_weights']})")
+    print("=" * 100)
     hdr = (f"{'rank':>4} {'ticker':>7} {'name':>14} {'rs':>7} {'ext':>7} "
-           f"{'screen':>7}  reason")
+           f"{'ext%':>7} {'screen':>7}  reason")
     print(hdr)
-    print("-" * 92)
+    print("-" * 100)
     for r in sorted(result["rows"], key=lambda x: (x["rank"] is None, x["rank"] or 0)):
         print(
             f"{_fmt(r['rank'], 4)} {r['ticker']:>7} {r['name'][:14]:>14} "
             f"{_fmt(r['rs_score'], 7)} {_fmt(r['extension_score'], 7)} "
+            f"{_fmt(r.get('extension_pct'), 7)} "
             f"{_fmt(r['screening_score'], 7)}  {r.get('reason', '')}"
         )
 
@@ -235,7 +353,23 @@ def main() -> None:
         print(f"\n랭킹 제외(60일 데이터 부족) {len(result['excluded'])}종: "
               + ", ".join(result["excluded"]))
 
-    # 표 3 — regime 경계 근접도 (히스테리시스 필요성 진단)
+    # 표 3 — 과열도 천장 포화 진단 (k 재정합 유효성 판정)
+    print("\n" + "=" * 100)
+    print("과열도(extension_score) 천장 포화 진단 — k 조정으로 풀리는 포화인가?")
+    print("=" * 100)
+    sd = result.get("saturation") or {}
+    if not sd.get("n"):
+        print("(과열도 산출 종목 없음)")
+    else:
+        print(f"산출 {sd['n']}종 | ext_score==10 {sd['at_ceiling_10']}종 "
+              f"({sd['at_ceiling_pct']}%) | ma20-아래 {sd['below_ma20']}종 "
+              f"({sd['below_ma20_pct']}%)")
+        print(f"  ceiling 내역: deadband 내 눌림 {sd['ceiling_within_deadband']}종 / "
+              f"ma20 근접 위 {sd['ceiling_at_or_above_ma20']}종 (둘 다 건강=정상)")
+        verdict = sd.get("verdict", "")
+        print(f"  ✓ 판정: {verdict}")
+
+    # 표 4 — regime 경계 근접도 (히스테리시스 필요성 진단)
     print("\n" + "=" * 92)
     print("regime 경계 근접도 (진동/히스테리시스 필요성 진단)")
     print("=" * 92)

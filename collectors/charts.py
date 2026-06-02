@@ -629,31 +629,78 @@ def _seed_tickers() -> list[str]:
     return ["0001", "1001"] + [t for t, _ in DEFAULT_TRACKED_ETFS]
 
 
+async def _select_refresh_tickers(
+    db: Any, kis: KISClient
+) -> tuple[list[str], dict[str, Any]]:
+    """daily refresh 대상 선정 = seed + 당일 leading universe(항상) + 누적 DB(fetched_at 최신순, cap).
+
+    universe-backfill 2026-06-02: 거래대금 상위 종목 일봉을 상시 적재해 캘리브레이션 다일 누적의
+    데이터 공백을 메운다. KIS rate limit 보호를 위해 일일 refresh 종목 수를 max_tickers 로 상한:
+    seed + 당일 leading 은 무조건 포함, 남는 자리는 가장 최근 적재(fetched_at)된 누적 종목으로 채우고
+    오래된 종목은 daily refresh 에서만 제외(chart_ohlcv 데이터는 삭제 안 함).
+    """
+    from collectors.screening import fetch_universe_tickers, get_universe_max_tickers
+
+    rows = db.fetch_all(
+        "SELECT ticker, MAX(fetched_at) AS last_fetched FROM chart_ohlcv GROUP BY ticker"
+    )
+    last_fetched = {r["ticker"]: (r["last_fetched"] or "") for r in rows}
+    seed = _seed_tickers()
+
+    universe: list[str] = []
+    universe_error: str | None = None
+    try:
+        universe = await fetch_universe_tickers(kis=kis)
+    except Exception as e:  # noqa: BLE001 — leading fetch 실패해도 seed+DB refresh 는 진행
+        universe_error = f"{type(e).__name__}: {e}"
+        log.warning("chart_refresh_universe_fetch_failed", error=universe_error)
+
+    must = set(seed) | set(universe)            # 항상 refresh
+    optional = [t for t in last_fetched if t not in must]
+    optional.sort(key=lambda t: last_fetched.get(t, ""), reverse=True)  # 최신 fetched 우선
+    max_tickers = get_universe_max_tickers()
+    room = max(0, max_tickers - len(must))
+    kept = optional[:room]
+    dropped = len(optional) - len(kept)
+    tickers = sorted(must | set(kept))
+    meta = {
+        "seed": len(seed),
+        "universe": len(universe),
+        "universe_error": universe_error,
+        "db_total": len(last_fetched),
+        "kept_optional": len(kept),
+        "dropped_optional": dropped,
+        "max_tickers": max_tickers,
+        "selected": len(tickers),
+    }
+    if dropped:
+        log.info("chart_refresh_universe_capped", **{k: meta[k] for k in
+                 ("max_tickers", "selected", "dropped_optional")})
+    return tickers, meta
+
+
 async def refresh_all_tickers(*, period_days: int = 1825) -> dict[str, Any]:
-    """`chart_ohlcv` 테이블 ticker (DB distinct + seed list union) 모두 daily refresh.
+    """`chart_ohlcv` ticker (seed + 당일 leading universe + 누적 DB cap) daily refresh.
 
     APScheduler cron `0 18 * * 1-5` + `just refresh-charts` 진입점.
     rate limit 자체는 KISClient 의 _CALL_INTERVAL=1.1s 가 보장.
 
-    Seed ticker (INFRA-SNAPSHOT-EXTEND-001): 지수 0001/1001 + 14 섹터 ETF 자동 포함.
-    첫 cron 발동 시 KIS get_daily_chart 호출로 적재됨 (지수는 SLOT S5 = U div_code).
+    대상 선정 = `_select_refresh_tickers` (seed 지수 0001/1001 + 14 섹터 ETF + 당일 거래대금
+    상위 universe + 누적 DB 종목을 max_tickers 상한 내에서 fetched_at 최신순). 첫 발동 시 새 종목은
+    KIS get_daily_chart 로 백필됨.
 
     Returns:
-        {"refreshed": [...], "failed": [...], "elapsed_s": float}
+        {"refreshed": [...], "failed": [...], "elapsed_s": float, "universe": {...}}
     """
     db = get_db()
-    rows = db.fetch_all("SELECT DISTINCT ticker FROM chart_ohlcv ORDER BY ticker")
-    db_tickers = [r["ticker"] for r in rows]
-    seed = _seed_tickers()
-    tickers = sorted(set(db_tickers) | set(seed))
-    if not tickers:
-        log.info("chart_refresh_skipped", reason="no tickers (DB + seed empty)")
-        return {"refreshed": [], "failed": [], "elapsed_s": 0.0}
-
     started = time.monotonic()
     refreshed: list[str] = []
     failed: list[dict[str, Any]] = []
     async with KISClient() as kis:
+        tickers, uni_meta = await _select_refresh_tickers(db, kis)
+        if not tickers:
+            log.info("chart_refresh_skipped", reason="no tickers (DB + seed + universe empty)")
+            return {"refreshed": [], "failed": [], "elapsed_s": 0.0, "universe": uni_meta}
         for tk in tickers:
             try:
                 # 캐시 우회 강제 (cron 은 새로 받아오는 게 목적)
@@ -674,8 +721,15 @@ async def refresh_all_tickers(*, period_days: int = 1825) -> dict[str, Any]:
         refreshed=len(refreshed),
         failed=len(failed),
         elapsed_s=round(elapsed, 2),
+        universe=uni_meta.get("universe"),
+        selected=uni_meta.get("selected"),
     )
-    return {"refreshed": refreshed, "failed": failed, "elapsed_s": round(elapsed, 2)}
+    return {
+        "refreshed": refreshed,
+        "failed": failed,
+        "elapsed_s": round(elapsed, 2),
+        "universe": uni_meta,
+    }
 
 
 def _main_cli() -> None:

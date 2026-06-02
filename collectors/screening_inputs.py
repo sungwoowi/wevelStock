@@ -49,19 +49,62 @@ class ScreeningInputs:
     supply_chain_sector: str | None = None   # 채택된 최강 섹터명 (md 표기)
 
 
+# 일봉 단기 추세 주도강도 위계 (사용자 추세추종 doctrine 2026-06-02):
+#   빠른 이평을 "타고 오를"수록 강한 주도주. 4일선 타면 초강세(삼성·SK하이닉스),
+#   7일선이면 강세, 20일 정배열은 정상 추세, 20일 위지만 정배열 아니면 약한 추세.
+#   "타고 오른다" = 빠른 MA 스택(close>ma4>ma7>ma20) — MA 위계 순서가 곧 빠른 이평 상승 = 밀착 상승.
+#   과열도(이격 거리)는 별도 축(scoring.extension_score)이 담당 → 여기선 구조(어느 MA 타나)만.
+_DAILY_LEADERSHIP_POINTS = {
+    "riding_ma4": 3.0,    # 초강세 주도주 (4일선 타고 상승)
+    "riding_ma7": 2.5,    # 강세 (7일선 타고 상승)
+    "uptrend": 2.0,       # 정상 정배열 (close>ma20>ma60)
+    "above_ma20": 1.5,    # ma20 위지만 정배열/리딩 아님
+    "below_ma20": 0.0,    # ma20 아래 (단기 추세 이탈)
+}
+
+
+def _daily_leadership(
+    close: float | None,
+    d4: float | None,
+    d7: float | None,
+    d20: float | None,
+    d60: float | None,
+) -> tuple[float | None, str | None]:
+    """일봉 단기 주도강도 위계 → (0~3 점, label). d20 부재 시 (None, None) = 평가 불가.
+
+    가장 빠른(타이트한) 이평을 탈수록 높은 점수. 위계 순서가 곧 추세 강도.
+    """
+    if close is None or d20 is None:
+        return None, None
+    if close <= d20:
+        return _DAILY_LEADERSHIP_POINTS["below_ma20"], "below_ma20"
+    if d4 is not None and d7 is not None and close > d4 > d7 > d20:
+        return _DAILY_LEADERSHIP_POINTS["riding_ma4"], "riding_ma4"
+    if d7 is not None and close > d7 > d20:
+        return _DAILY_LEADERSHIP_POINTS["riding_ma7"], "riding_ma7"
+    if d60 is not None and d20 > d60:
+        return _DAILY_LEADERSHIP_POINTS["uptrend"], "uptrend"
+    return _DAILY_LEADERSHIP_POINTS["above_ma20"], "above_ma20"
+
+
 def compute_alignment(indicators: dict[str, Any]) -> tuple[float | None, dict[str, Any]]:
     """월·주·일봉 정배열 위계 → 0~10 + 컴포넌트 detail (순수).
 
-    월봉 종가 7MA 위 = 4점 + 주봉 10MA>20MA(>60MA) 정배열 = 3점 +
-    일봉 종가>20MA>60MA = 3점. **산출 가능 위계만 평가 → available_max 대비 비례 정규화**
-    (결측 위계는 0 기여가 아니라 *평가 제외* — 데이터 짧은 종목 저평가 편향 제거).
+    월봉 종가 7MA 위 = 4점 (시대적 중장기 주도) + 주봉 10MA>20MA(>60MA) 정배열 = 3점 (중기) +
+    **일봉 단기 주도강도 위계 = 0~3점 (graded)** — 4일선 타고 오름=초강세(3) / 7일선=강세(2.5) /
+    20일 정배열=정상(2) / 20일 위=약한 추세(1.5) / 20일 아래=이탈(0). (사용자 추세추종 doctrine 2026-06-02,
+    이전엔 close>ma20>ma60 이진 3점 — 초강세 주도주를 정상 추세와 구분 못함.)
+    **산출 가능 위계만 평가 → available_max 대비 비례 정규화** (결측 위계는 0 기여가 아니라 *평가 제외*).
     품질 측정(정배열 비율)이지 데이터 양 측정이 아니므로 정규화가 본질. 모든 컴포넌트 불가 → (None, detail).
     """
     monthly = indicators.get("monthly_ma") or {}
     weekly = indicators.get("weekly_ma") or {}
     daily = indicators.get("daily_ma") or {}
     close = indicators.get("current_close")
-    detail: dict[str, Any] = {"monthly_7ma": None, "weekly_stack": None, "daily_stack": None}
+    detail: dict[str, Any] = {
+        "monthly_7ma": None, "weekly_stack": None,
+        "daily_stack": None, "daily_leadership": None,
+    }
     if close is None:
         return None, detail
 
@@ -82,12 +125,14 @@ def compute_alignment(indicators: dict[str, Any]) -> tuple[float | None, dict[st
         available_max += 3.0
         points += 3.0 if ok else 0.0
 
+    d4, d7 = daily.get("ma4"), daily.get("ma7")
     d20, d60 = daily.get("ma20"), daily.get("ma60")
-    if d20 is not None and d60 is not None:
-        ok = close > d20 > d60
-        detail["daily_stack"] = ok
+    dpts, dlabel = _daily_leadership(close, d4, d7, d20, d60)
+    if dpts is not None:
+        detail["daily_stack"] = bool(d60 is not None and close > d20 > d60)  # 기존 이진 (호환·렌더)
+        detail["daily_leadership"] = dlabel
         available_max += 3.0
-        points += 3.0 if ok else 0.0
+        points += dpts
 
     if available_max <= 0:
         return None, detail
@@ -282,6 +327,21 @@ def _align_cell(v: Any) -> str:
     return "정배열 ✓" if v else "역배열 ✗"
 
 
+_LEADERSHIP_LABEL_KO = {
+    "riding_ma4": "4일선 타고 상승 — 초강세 주도주",
+    "riding_ma7": "7일선 타고 상승 — 강세",
+    "uptrend": "20일 정배열 — 정상 추세",
+    "above_ma20": "20일 위 — 약한 추세",
+    "below_ma20": "20일 아래 — 단기 추세 이탈",
+}
+
+
+def _leadership_cell(label: Any) -> str:
+    if label is None:
+        return "산출 불가"
+    return _LEADERSHIP_LABEL_KO.get(label, str(label))
+
+
 def render_s_score_inputs_md(si: ScreeningInputs, *, name: str | None = None) -> str:
     """`score-inputs-v1` md 블록 — 원시 주도주 지표(권위) + advisory S-Score(참고선)."""
     name_part = f" ({name})" if name else ""
@@ -315,7 +375,10 @@ def render_s_score_inputs_md(si: ScreeningInputs, *, name: str | None = None) ->
     lines.append("|---|---|")
     lines.append(f"| 월봉 종가 7MA 위 (4점) | {_align_cell(si.alignment_detail.get('monthly_7ma'))} |")
     lines.append(f"| 주봉 정배열 10>20(>60)MA (3점) | {_align_cell(si.alignment_detail.get('weekly_stack'))} |")
-    lines.append(f"| 일봉 종가>20>60MA (3점) | {_align_cell(si.alignment_detail.get('daily_stack'))} |")
+    lines.append(
+        f"| 일봉 단기 주도강도 (0~3점) | "
+        f"{_leadership_cell(si.alignment_detail.get('daily_leadership'))} |"
+    )
     lines.append("")
     adv = "null" if si.advisory_s_score is None else f"{si.advisory_s_score:.1f}"
     lines.append(

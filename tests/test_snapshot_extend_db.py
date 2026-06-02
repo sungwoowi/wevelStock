@@ -58,6 +58,7 @@ def test_new_tables_and_columns(isolated_db: Database) -> None:
         "ma_20d", "ma_60d", "ma20_slope_pct_5d", "ma60_slope_pct_20d", "trend",
         "advancing", "declining", "unchanged", "breadth_ratio",
         "is_distribution_day", "change_pct", "volume_change_pct",
+        "distribution_count_25d", "breadth_source",  # v9 macro 캐시 충실도
     }
     assert macro_names == expected_macro
 
@@ -114,6 +115,30 @@ def test_market_macro_upsert_idempotent(isolated_db: Database) -> None:
     assert rows[0]["index_close"] == 2750.0     # 덮어쓰기
     assert rows[0]["breadth_ratio"] == 0.667
     assert rows[0]["is_distribution_day"] == 1
+
+
+def test_macro_distribution_and_breadth_source_round_trip(isolated_db: Database) -> None:
+    """v9 — distribution_count_25d + breadth_source 가 upsert → _get_today_macro 복원에 보존.
+
+    이전엔 복원 시 dist=0/source=None 하드코드라 computed run(dist=3) 과 불일치 → regime 흔들림.
+    """
+    macro = MarketMacro(
+        date="2026-06-02", market="KOSPI",
+        index_close=2700.0, ma_36m=2500.0, ma_60m=2400.0, position="above_both",
+        ma_20d=2680.0, ma_60d=2600.0, ma20_slope_pct_5d=1.2, ma60_slope_pct_20d=0.8,
+        trend="uptrend",
+        advancing=500, declining=350, unchanged=100, breadth_ratio=0.588,
+        is_distribution_day=True, change_pct=0.5, volume_change_pct=2.0,
+        distribution_count_25d=3,
+        breadth_source="kis_index",
+    )
+    upsert_market_macro(macro)
+
+    restored = mm._get_today_macro("2026-06-02", "KOSPI")
+    assert restored is not None
+    assert restored.distribution_count_25d == 3        # 이전엔 0 으로 깨졌음
+    assert restored.breadth_source == "kis_index"      # 이전엔 None 누락
+    assert restored.source == "db"
 
 
 # ---------------------------------------------------------------------------

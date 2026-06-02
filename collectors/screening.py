@@ -32,6 +32,8 @@ _CONFIG_CACHE: dict[str, Any] | None = None
 _DEFAULTS: dict[str, Any] = {
     "rs_window": 60,
     "k": 1.0,
+    "k_below": 1.0,
+    "below_deadband_adr": 1.0,
     "adr_window": 14,
     "regime_weights": {},
 }
@@ -79,11 +81,62 @@ def get_k() -> float:
         return 1.0
 
 
+def get_k_below() -> float:
+    """이탈(ma20 아래) 감점 스케일 계수 (SCREEN-RS C). 부재 시 1.0."""
+    try:
+        return float(_load_screening_config().get("k_below", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def get_below_deadband_adr() -> float:
+    """ma20 아래 완충대 (ADR 단위, SCREEN-RS C). 부재 시 1.0."""
+    try:
+        return float(_load_screening_config().get("below_deadband_adr", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def get_adr_window() -> int:
     try:
         return int(_load_screening_config().get("adr_window", 14))
     except (TypeError, ValueError):
         return 14
+
+
+def get_universe_limits() -> tuple[int, int]:
+    """universe 백필 시 거래대금 상위 (kospi_limit, kosdaq_limit). 부재 시 (30, 20)."""
+    cfg = _load_screening_config().get("universe") or {}
+    try:
+        return int(cfg.get("kospi_limit", 30)), int(cfg.get("kosdaq_limit", 20))
+    except (TypeError, ValueError):
+        return 30, 20
+
+
+def get_universe_max_tickers() -> int:
+    """일일 chart_ohlcv refresh 상한 (rate limit 보호). 부재 시 200."""
+    cfg = _load_screening_config().get("universe") or {}
+    try:
+        return int(cfg.get("max_tickers", 200))
+    except (TypeError, ValueError):
+        return 200
+
+
+async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
+    """거래대금 상위(leading) 종목 ticker 평탄화 — universe 백필 입력.
+
+    `kr_leading_stocks.fetch_kr_leading_stocks` 재사용 (KIS 3콜). config universe limit 적용.
+    중복 제거(순서 보존) + 빈 ticker 제외. KIS 실패 시 호출부(refresh_all_tickers)가 graceful 처리.
+    """
+    from collectors.kr_leading_stocks import fetch_kr_leading_stocks
+
+    kospi_limit, kosdaq_limit = get_universe_limits()
+    data = await fetch_kr_leading_stocks(
+        kis, kospi_limit=kospi_limit, kosdaq_limit=kosdaq_limit
+    )
+    tickers = [i.get("ticker", "") for i in data.get("kospi", [])]
+    tickers += [i.get("ticker", "") for i in data.get("kosdaq", [])]
+    return [t for t in dict.fromkeys(tickers) if t]
 
 
 def get_regime_thresholds() -> dict[str, float]:
@@ -184,6 +237,9 @@ def rank_candidates(
     regime: str | None,
     *,
     cutoff_date: str | None = None,
+    k_override: float | None = None,
+    k_below_override: float | None = None,
+    deadband_override: float | None = None,
 ) -> list[dict[str, Any]]:
     """후보 풀 종목별 RS + 과열도 + regime 가중 합성 → 랭킹 (screening-rank-v1).
 
@@ -191,15 +247,22 @@ def rank_candidates(
         tickers: 스크리닝 대상 universe (호출부 제공).
         regime: 시장 체제 6단계 중 하나. None/미정의 → 균등 가중 fallback.
         cutoff_date: 지정 시 그 시점까지 OHLCV 만 (백테스팅 재현).
+        k_override: 지정 시 config `k`(과열) 대신 이 값으로 채점 (진단/캘리브레이션
+            스윕 전용 — config 편집 없이 한 프로세스에서 여러 값 비교). production 은 None.
+        k_below_override: 지정 시 config `k_below`(이탈) 대신 이 값. 스윕 전용.
+        deadband_override: 지정 시 config `below_deadband_adr` 대신 이 값. 스윕 전용.
 
     Returns:
         종목별 dict 리스트. 각 = {ticker, rs_score, extension_score, screening_score,
-        rank, reason}. screening_score 내림차순 정렬 (산출 가능 종목 우선), 랭킹 불가
-        종목(60일 데이터 부족)은 rank=None + reason 으로 뒤에. DB 저장 X.
+        rank, reason, extension_pct, adr, normalized}. screening_score 내림차순 정렬
+        (산출 가능 종목 우선), 랭킹 불가 종목(60일 데이터 부족)은 rank=None + reason 으로
+        뒤에. extension_pct/adr/normalized 는 과열도 포화 원인 진단용 raw 값. DB 저장 X.
     """
     rs_window = get_rs_window()
     adr_window = get_adr_window()
-    k = get_k()
+    k = k_override if k_override is not None else get_k()
+    k_below = k_below_override if k_below_override is not None else get_k_below()
+    deadband = deadband_override if deadband_override is not None else get_below_deadband_adr()
     weights = get_regime_weights()
     regime_key = regime or ""
 
@@ -231,14 +294,29 @@ def rank_candidates(
                 "screening_score": None,
                 "rank": None,
                 "reason": "60일 데이터 부족 (랭킹 제외)",
+                "extension_pct": None,
+                "adr": None,
+                "normalized": None,
             })
             continue
 
         rs = stock_rs_score(ret, pool_returns)
-        ext = extension_score(m["price"], m["ma20"], m["adr"], k=k)
+        ext = extension_score(
+            m["price"], m["ma20"], m["adr"],
+            k=k, k_below=k_below, below_deadband_adr=deadband,
+        )
         ext_axis = ext if ext is not None else 5.0
         score = screening_score(rs, ext_axis, regime_key, weights)
         reason = "" if ext is not None else "과열도 미산출 → 중립 5.0"
+        # 과열도 포화 원인 진단용 raw — ma20 대비 이격(%) + ADR 정규화 값.
+        # ma20 아래(ext_pct ≤ 0)면 공식상 extension_score 가 무조건 10 clamp → k 무관.
+        price, ma20, adr = m["price"], m["ma20"], m["adr"]
+        ext_pct: float | None = None
+        normalized: float | None = None
+        if ma20 is not None and ma20 > 0 and price is not None:
+            ext_pct = (price - ma20) / ma20 * 100.0
+            if adr is not None and adr > 0:
+                normalized = (price - ma20) / ma20 / adr
         ranked.append({
             "ticker": ticker,
             "rs_score": rs,
@@ -246,6 +324,9 @@ def rank_candidates(
             "screening_score": score,
             "rank": None,  # 정렬 후 부여
             "reason": reason,
+            "extension_pct": round(ext_pct, 4) if ext_pct is not None else None,
+            "adr": round(adr, 6) if adr is not None else None,
+            "normalized": round(normalized, 4) if normalized is not None else None,
         })
 
     # 3) screening_score 내림차순 정렬 + rank 부여 (동점 시 ticker 안정 정렬)

@@ -12,11 +12,30 @@
 # RS 윈도우 (거래일). 종목 60일 수익률 산출 + MA20·ADR 입력 봉 수 기준.
 rs_window: 60
 
-# 과열도 스케일 계수 k (extension_score = clamp(10 - k × extension/ADR)). 클수록 과열 페널티 강함.
+# 과열도(ma20 위) 스케일 계수 k (extension_score = clamp(10 - k × normalized)). 클수록 과열 페널티 강함.
 k: 1.0
+
+# 이탈(ma20 아래) 스케일 계수 + 완충대 (SCREEN-RS C 결정 2026-06-02 — 양방향 건강도 축).
+#   ma20 아래로 below_deadband_adr(ADR 단위) 넘게 빠지면 거리 비례 감점: 10 - k_below × (|normalized| - deadband).
+#   이전엔 ma20 아래가 무조건 10 clamp 라 broken 종목이 Leader 축 만점 → 포화. C = 거리 비례 감점으로 변별.
+#   deadband = ma20 살짝 밑(지지선 눌림)은 건강(10)으로 보는 완충 구간. SLOT — 다일 분포로 튜닝.
+k_below: 1.0
+below_deadband_adr: 1.0
 
 # ADR(평균 일중 변동폭) 윈도우 N (거래일). mean((high-low)/close) 최근 N봉.
 adr_window: 14
+
+# 스크리닝 universe 백필 (universe-backfill 2026-06-02).
+#   매일 refresh_all_tickers 가 거래대금 상위(leading) 종목을 chart_ohlcv 에 적재 → leading 일봉
+#   상시 확보(캘리브레이션 다일 누적의 전제). 이전엔 시드가 지수+14섹터ETF만이라 leading 은
+#   분석될 때만 적재돼 분포 진단 시 수동 백필 필요했음.
+#   kospi_limit/kosdaq_limit = 매일 거래대금 상위 몇 종목을 universe 에 넣을지.
+#   max_tickers = 일일 refresh 상한(KIS rate limit 보호). seed + 당일 leading 은 항상 포함,
+#     남는 자리는 fetched_at 최신순으로 채우고 오래된 누적 종목은 daily refresh 에서 제외(데이터는 보존).
+universe:
+  kospi_limit: 30
+  kosdaq_limit: 20
+  max_tickers: 200
 
 # regime(시장 체제 6단계, market_state_analyzer 발행)별 RS vs 과열도 가중.
 #   강세장 = RS(주도주) 강조·과열 허용 / 횡보·약세 = 과열 페널티 강조 (막판 불꽃 회피).

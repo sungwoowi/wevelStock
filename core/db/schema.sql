@@ -351,6 +351,8 @@ CREATE TABLE IF NOT EXISTS market_macro_snapshot (
     is_distribution_day  INTEGER NOT NULL DEFAULT 0,
     change_pct      REAL,
     volume_change_pct REAL,
+    distribution_count_25d INTEGER,            -- v9: 25일 분산일 카운트 (regime/buy_score M축 입력)
+    breadth_source  TEXT,                      -- v9: "krx"|"kis_index"|"kis_volrank_top30"|"unavailable"
     PRIMARY KEY (date, market)
 );
 CREATE INDEX IF NOT EXISTS idx_macro_date ON market_macro_snapshot(date);

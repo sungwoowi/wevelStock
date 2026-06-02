@@ -439,26 +439,41 @@ def extension_score(
     adr: float | None,
     *,
     k: float = 1.0,
+    k_below: float = 1.0,
+    below_deadband_adr: float = 1.0,
 ) -> float | None:
-    """과열도 점수 (ADR 정규화) — 높을수록 건강(덜 과열), 낮을수록 과열(막판 불꽃).
+    """과열도/이탈 점수 (ADR 정규화) — 높을수록 건강, 낮을수록 과열 또는 이탈(broken).
 
-        extension = (price - ma20) / ma20
-        extension_score = clamp(10 - k × (extension / ADR), 0, 10)
+        extension  = (price - ma20) / ma20
+        normalized = extension / ADR          # ADR(평균 일중 변동폭) 단위 = 종목별 변동성 흡수
 
-    ADR(평균 일중 변동폭) 단위 정규화 → 종목별 변동성 차이 흡수.
+        ma20 위(normalized ≥ 0, 과열):   score = clamp(10 - k × normalized)
+        ma20 아래(normalized < 0, 이탈):  excess = |normalized| - below_deadband_adr
+                                          score = clamp(10 - k_below × excess)   (excess>0)
+                                                = 10                              (deadband 안)
+
+    **양방향 건강도 축** (SCREEN-RS C 결정, 2026-06-02): 과열(ma20 위)만이 아니라 ma20 **아래
+    이탈(broken)도 거리 비례 감점**한다. 단 deadband(ADR 단위) 안의 얕은 눌림은 건강(10)으로 본다.
+    이전(C 이전)에는 ma20 아래가 무조건 10 clamp 라 약세 broken 이 Leader 축에서 만점이 되는
+    포화가 있었음 (k 무관 — `scripts/screening_distribution.py` 진단으로 ma20-아래 100% 실증).
+
     RS Score 와 합성 시 부호 일관성 위해 **건강도 방향**(높을수록 좋음).
 
     Args:
         price: 현재가.
         ma20: 20일 이평. None → None (MA 산출 불가, 랭킹 제외).
         adr: 평균 일중 변동폭 (비율). None/0/음 → 5.0 (중립, division-by-zero 가드).
-        k: 스케일 계수 (config 권위, SLOT R2).
+        k: 과열(ma20 위) 스케일 계수 (config 권위, SLOT R2).
+        k_below: 이탈(ma20 아래) 스케일 계수 (config 권위). 클수록 broken 감점 강함.
+        below_deadband_adr: ma20 아래 deadband (ADR 단위). 이 안의 눌림은 건강(10). config 권위.
 
     Returns:
         0~10, 0.5 단위 또는 None (ma20 부재·이상).
     """
     p = _validate_number("price", price)
     kk = _validate_number("k", k)
+    kb = _validate_number("k_below", k_below)
+    dead = _validate_number("below_deadband_adr", below_deadband_adr)
     if ma20 is None:
         return None
     m = _validate_number("ma20", ma20)
@@ -471,7 +486,14 @@ def extension_score(
         return _clamp(_round_to_half(5.0))
     extension = (p - m) / m
     normalized = extension / a
-    return _clamp(_round_to_half(10.0 - kk * normalized))
+    if normalized >= 0:
+        # 과열 (ma20 위): 위로 갈수록 감점 (기존 동작 불변)
+        raw = 10.0 - kk * normalized
+    else:
+        # 이탈 (ma20 아래): deadband 안은 건강(10), 넘으면 거리 비례 감점
+        excess = (-normalized) - dead
+        raw = 10.0 - kb * excess if excess > 0 else 10.0
+    return _clamp(_round_to_half(raw))
 
 
 def screening_score(

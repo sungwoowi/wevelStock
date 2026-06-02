@@ -56,6 +56,21 @@ class Database:
         except Exception:  # noqa: BLE001 — 새 DB 등 컬럼 정의 안 된 경우 schema.sql 가 처리
             pass
 
+        # v9 — macro DB 캐시 충실도 (2026-06-02): distribution_count_25d + breadth_source 영속.
+        #   이전엔 _get_today_macro 복원 시 dist=0/source=None 하드코드 → computed run 과 불일치
+        #   (regime 분류에 dist 영향). 두 컬럼을 round-trip 하도록 ALTER (멱등).
+        for col, ddl in (
+            ("distribution_count_25d", "INTEGER"),
+            ("breadth_source", "TEXT"),
+        ):
+            try:
+                if not _column_exists(conn, "market_macro_snapshot", col):
+                    conn.execute(
+                        f"ALTER TABLE market_macro_snapshot ADD COLUMN {col} {ddl}"
+                    )
+            except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+                pass
+
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, timeout=10.0, isolation_level=None)
