@@ -9,18 +9,20 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **Track B trader 라우팅 결함 수정 ✅ (2026-06-02)**. 2026-06-01 시연에서 발견한 결함 해소 — swing(Track B)이 시나리오 2로 분류되면 trader가 prefetch에서 빠져 `cited_scores.t_score`가 항상 null이던 문제를, `config/scenario_analyst_routing.yaml`의 `track_required.track_b=[trader]` 블록 + `_resolve_analyst_ids_for_scenario` 보강(track 포함 시 append, 중복 skip)으로 복구. **실 분류기→라우터 통합 검증**(LLM 0): swing→trader 포함 / long→미포함(의도) / both→포함. Track A는 manifest 권위대로 trader 미포함 유지. 직전 = MS1/MS2 production 시연 + cited_scores 누수 수정(2026-06-01). **잔여는 임계 캘리브레이션 + 공백 2축 데이터 확장.**
+**현재 위치**: **임계 캘리브레이션 진단 도구 + 베이스라인 1회 ✅ (2026-06-02)**. 5점수 라이브 후 본질 = "점수가 맞느냐". `scripts/screening_distribution.py` 신규(flow_distribution 미러, 단 RS는 풀 백분위라 `rank_candidates` 한 번으로 풀 전체 랭킹) → 라이브 regime + rs/extension/screening 분위수 + **regime 경계 근접도**(히스테리시스 필요성 진단) 출력. 베이스라인 n=13 실증으로 **extension_score 천장 포화(median=10.0, k=1.0 약함)** = 재정합 1순위 발견. **부수 발견·처리**: `chart_ohlcv`가 leading 종목 11/13 일봉 0개 → 수동 백필로 메움(스크리닝 universe 시드 공백 부채화). regime은 경계서 멀어 오늘 진동 위험 낮음 확인. 직전 = Track B trader 라우팅 수정(2026-06-02 1세션). **잔여는 extension k 재정합 + universe 백필 + 공백 2축.**
 
-**본 세션 산출** (Track B trader 라우팅 보강 + 스테일 정리):
-- `config/scenario_analyst_routing.yaml` — `track_required.track_b=[trader]` 블록 신설(plugin 트랙은 자기 항목 드롭만으로 확장)
-- `core/intent/router.py` — `_resolve_analyst_ids_for_scenario` 재구성: 시나리오/fallback 해석 후 track_required append(순서 보존+중복 skip). route_intent·route_intent_stream 공유 헬퍼
-- `tests/intent/test_router.py` +5(track_b 보강/중복 방지/both/track_a 미추가/route_intent prefetch). **808→813, 회귀 0, validate 0 errors.**
-- `.gitignore` `*.zip`+`/_*.json` + 스테일 zip 8 + `_flow_distribution.json` 삭제
+**본 세션 산출** (screening 분포 진단 도구 + 베이스라인):
+- `scripts/screening_distribution.py` — **신규** 진단 도구. `compute_market_macro("KOSPI")` regime 1콜 → `rank_candidates(pool, regime)` 한 번 → 축별 분위수(p10~p90) + regime 경계 근접도. CLI 기본 13종 / 커스텀 ticker
+- (백필) `chart_ohlcv` 누락 11종 KIS 적재(각 ~400봉) — `build_chart_data`. n=2 → n=13 베이스라인 확보
+- (산출) `_screening_distribution.json` — gitignore. 회귀 813 passed 유지(신규 일회성 도구라 전용 UT 없음)
 
 **이번 세션에 굳힌 판단**:
-- **track별 필수 분석가 = `track_required` config 블록**(하드코딩 X): 라우팅은 scenario_id로만 정하던 것을, route가 해당 track 포함 시 필수 발행자 append. 시나리오 축약(Track A 기준)이 떨어뜨린 권위를 track 인지로 복구.
-- **trader는 Track B 전용 권위**(T-Score+6트리거): 단기 타점 신호 = Track A frame 밖(cited_scores에 t_score 자리 없음) + 축약 목적(본질 분석가만). track_a manifest reads_analysts에 trader 없음이 권위 — 수정이 그것을 mirror.
-- **결함 검증 = 실 경로 결정론 통합**(서버·토큰 0): `classify_intent("swing:...")`→`_resolve_...` 직접 태워 trader 포함 확인. 하류 t_score 인용은 2026-06-01 render_prefetched로 이미 실증.
+- **RS 분포 진단 = 풀 한 번 랭킹**(종목 루프 X): F-Score는 종목별 독립 probe지만 RS는 풀 내 백분위라 `rank_candidates(pool, regime)` 한 호출이 단위. 절대 점수 아님 → 풀 크기·구성이 점수에 직접 영향.
+- **extension_score 천장 포화 실증**(median=10.0): `clamp(10 - k·ext/ADR)`에서 ma20 아래·근처면 10 clamp. `k=1.0`이 약해 변별 상실 = config 재정합 첫 타깃(도구 재실행으로 즉시 검증 루프).
+- **캘리브레이션 전제 = 데이터 커버리지**: chart_ohlcv 시드가 지수+14섹터ETF만 → leading은 분석될 때만 적재. universe 백필 없이는 다일 누적 불가(임계값보다 데이터가 먼저 막음).
+
+**직전 세션 판단 (2026-06-02 Track B 라우팅)**:
+- **track별 필수 분석가 = `track_required` config 블록**(하드코딩 X): route가 해당 track 포함 시 필수 발행자 append. 시나리오 축약(Track A 기준)이 떨어뜨린 권위를 track 인지로 복구. **trader는 Track B 전용**(T-Score+6트리거, Track A frame 밖). 813 passed.
 
 **직전 세션 판단 (2026-06-01 4세션 production 시연 + cited_scores 누수)**:
 - **production 시연 = production-chat 엔드포인트 구동**(`POST /api/chat/production`, CLI 없음). provider=gemini가 실 배포 경로(claude_code는 이상화 → 누수 은폐).
@@ -67,33 +69,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(A 연간 EPS 3년 / N 뉴스부)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(A 연간 EPS 3년 / N 뉴스부)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / **chart_ohlcv 시드 universe 공백** (2026-06-02 — `_seed_tickers()`가 지수+14섹터ETF만 → leading 종목은 분석될 때만 적재. 캘리브레이션 베이스라인 시 13종 중 11종 일봉 0개라 수동 백필함. universe refresh 메커니즘 부재 = Top 2) / **macro DB 캐시 충실도** (2026-06-02 — `_get_today_macro` 복원 시 `breadth_source`/`distribution_count_25d` 누락. computed run dist=3 → cached run dist=0. regime 작업 때 같이) / **extension_score 천장 포화** (2026-06-02 — k=1.0 약해 median=10.0, 변별 상실. config k 상향 = Top 1).
 
-**마지막 작업일**: 2026-06-02 (Track B trader 라우팅 보강 + 스테일 정리)
-**마지막 세션 로그**: [2026-06-02_track-b-trader-routing-fix.md](c_worked/2026-06-02_track-b-trader-routing-fix.md). 직전 = [2026-06-01_production-score-demo-cited-fix-4.md](c_worked/2026-06-01_production-score-demo-cited-fix-4.md).
-**산출**: `track_required` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 보강(`route_intent`·`route_intent_stream` 공유) + 테스트 +5 + 스테일 zip 8·`_flow_distribution.json` 삭제·gitignore. 실 분류기→라우터 검증 swing→trader 포함. **808→813, 회귀 0, validate 0 errors.**
-**Git**: main 직접 커밋(router/yaml/test/.gitignore + wrap-up docs)·push(솔로).
+**마지막 작업일**: 2026-06-02 (screening 분포 진단 도구 + 베이스라인 1회)
+**마지막 세션 로그**: [2026-06-02_screening-distribution-baseline-2.md](c_worked/2026-06-02_screening-distribution-baseline-2.md). 직전 = [2026-06-02_track-b-trader-routing-fix.md](c_worked/2026-06-02_track-b-trader-routing-fix.md).
+**산출**: `scripts/screening_distribution.py` 신규(RS 풀 한 번 랭킹 + regime 경계 근접도) + chart_ohlcv 11종 백필 + n=13 베이스라인(`_screening_distribution.json`, gitignore). **extension_score 천장 포화(median 10.0) = k 재정합 1순위 발견.** 회귀 813 유지.
+**Git**: 미커밋 — `scripts/screening_distribution.py` + wrap-up docs를 이 wrap-up에서 1커밋 예정.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 캘리브레이션 + 데이터 확장 + 라이브 재시연
+## 🎯 다음에 할 일 (Top 3) — extension k 재정합 + universe 백필 + 공백 2축
 
-우선순위 순. **Track B trader 라우팅 결함 수정 직후.** 잔여는 튜닝·데이터·시연.
+우선순위 순. **screening 진단 도구 + 베이스라인 직후.** 베이스라인이 extension 천장 포화 + universe 데이터 공백을 드러냄.
 
-### 1. 임계 production 캘리브레이션 (RS·regime·buyscore) ⭐
-- **왜**: SCREEN-RS R1/R2/R3 + regime_thresholds + buyscore breakpoints 전부 초기값. 라이브 분포 정합 필요(다일 누적). regime이 같은 종목에 run간 strong/moderate 흔들림(경계 인접)도 같이 점검
-- **범위**: `screening_distribution.py` 신규(`scripts/flow_distribution.py` 미러) + leading 종목으로 rs/extension/regime 분포 수집 → config 1차 정합 + regime 경계 히스테리시스
-- **예상 산출**: 점수 캘리브레이션 진단 도구 + 1차 정합
+### 1. extension k 재정합 (천장 포화 해소) ⭐
+- **왜**: 베이스라인 n=13에서 **extension_score median=10.0 포화**(13종 중 7+가 10.0). `clamp(10 - k·ext/ADR)`에서 `k=1.0`이 약해 과열 페널티가 거의 안 걸림 = 변별 상실. 가장 명확한 첫 재정합 타깃
+- **범위**: `config/screening.yaml::k` 상향(1.0→후보 1.5~2.5) + `scripts/screening_distribution.py` 재실행 즉시 검증 루프. 다종목·다일로 ext가 0~10 변별 회복하는 k 탐색. regime 경계 히스테리시스는 분포상 급하지 않음(오늘 breadth가 weak서 0.10 멂) → 보류
+- **예상 산출**: extension 변별 회복 k + before/after 분포 비교
 
-### 2. 공백 2축 데이터 확장 (A 연간 EPS / N 뉴스부)
+### 2. 스크리닝 universe 백필 메커니즘
+- **왜**: `chart_ohlcv` 시드가 지수+14섹터ETF만 → leading 종목은 분석될 때만 적재(이번엔 13종 수동 백필). 캘리브레이션 다일 누적의 전제. 임계값보다 데이터 커버리지가 먼저 막음
+- **범위**: `collectors/charts._seed_tickers()` 확장 or 별도 universe refresh(거래대금 상위 N 종목 일봉 상시 적재 cron). + macro DB 캐시 충실도(`breadth_source`/`distribution_count_25d` 복원 누락) 같이
+- **예상 산출**: leading universe 상시 chart_ohlcv 적재 + 다일 분포 가능
+
+### 3. 공백 2축 데이터 확장 (A 연간 EPS / N 뉴스부)
 - **왜**: buy_score A(연간 EPS 3년·fundamentals 5분기만)·N 뉴스부(0시드)는 중립 fallback. 실측화 필요
 - **범위**: fundamentals 연간 3년 소스(KIS/별도) / NEWS-SOURCE-001(news_curator 신제품 판정) → 공백 2축 실측
 - **예상 산출**: buy_score 7축 전부 실측
-
-### 3. (선택) 라이브 production-chat 재시연 — t_score 최종 확인
-- **왜**: 이번 라우팅 수정은 결정론 통합 검증까지 완료. 실 Gemini로 `swing: 삼성전자`→`cited_scores.t_score` null→실값까지 눈으로 확인하면 MS1 Track B 권고 완성형 마무리
-- **범위**: 서버 기동(기존 프로세스 확인 필수) + `POST /api/chat/production` `swing:` 호출 → t_score 인용 확인
-- **예상 산출**: Track B 권고에 T-Score 실값 인용 시연 캡처
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
