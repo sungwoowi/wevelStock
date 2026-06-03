@@ -50,7 +50,8 @@ def _fake_bi():
     from collectors.buy_score_inputs import BuyScoreInputs
 
     return BuyScoreInputs(
-        ticker="005930", eps_yoy_pct=30.0, high_proximity_pct=-2.0,
+        ticker="005930", eps_yoy_pct=30.0, annual_eps_yoy_pct=28.0,
+        annual_eps=[1200.0, 940.0, 700.0], high_proximity_pct=-2.0,
         inflow_speed_raw=80.0, demand_momentum=7.0, volume_spike=2.5,
         institution_ratio=0.6, regime="strong_bull",
         breadth_ratio=0.55, distribution_count=0, screening_score=8.0,

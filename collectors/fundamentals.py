@@ -70,6 +70,8 @@ class Fundamentals:
     fetched_db_iso: str | None
     stale_hours: float
     failures: list[str] = field(default_factory=list)
+    annual_eps: list[float | None] = field(default_factory=list)    # 연간 EPS 4년 recent-first (CAN SLIM A)
+    annual_labels: list[str] = field(default_factory=list)          # ["2025", "2024", ...]
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +140,8 @@ def load_fundamentals_from_db(ticker: str) -> Fundamentals | None:
         source=row["source"],
         fetched_db_iso=fetched_iso,
         stale_hours=stale_hours,
+        annual_eps=qd.get("annual_eps") or [],
+        annual_labels=qd.get("annual_labels") or [],
     )
 
 
@@ -149,6 +153,8 @@ def persist_fundamentals_to_db(f: Fundamentals) -> None:
         "operating_income": f.quarterly_operating_income,
         "eps": f.quarterly_eps,
         "quarter_labels": f.quarter_labels,
+        "annual_eps": f.annual_eps,
+        "annual_labels": f.annual_labels,
     }
     with db.connect() as conn:
         conn.execute(
@@ -277,6 +283,8 @@ async def get_fundamentals(
         fetched_db_iso=fetched_at_iso_utc,
         stale_hours=0.0,
         failures=failures,
+        annual_eps=raw.get("annual_eps") or [],
+        annual_labels=raw.get("annual_labels") or [],
     )
     persist_fundamentals_to_db(f)
 

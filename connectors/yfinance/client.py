@@ -152,8 +152,12 @@ class YFinanceClient:
         """분기 5분기 매출·영업이익·EPS + quarter_labels."""
         return await asyncio.to_thread(self._fetch_quarterly_sync, yf_ticker)
 
+    async def fetch_annual(self, yf_ticker: str) -> dict[str, Any]:
+        """연간 EPS (최근 4년, recent-first) + annual_labels (CAN SLIM A 입력)."""
+        return await asyncio.to_thread(self._fetch_annual_sync, yf_ticker)
+
     async def fetch_full(self, ticker: str, market: str = "KS") -> dict[str, Any]:
-        """info + quarterly 결합. 표준 dict 반환.
+        """info + quarterly + annual 결합. 표준 dict 반환.
 
         Raises:
             FundamentalNotAvailable: yfinance info 가 empty (delisted / invalid).
@@ -166,12 +170,14 @@ class YFinanceClient:
                 f"yfinance returned empty info for {yf_t}: {err}"
             )
         quarterly = await self.fetch_quarterly(yf_t)
+        annual = await self.fetch_annual(yf_t)
         return {
             "ticker": ticker,
             "market": market,
             "yf_ticker": yf_t,
             **info,
             **quarterly,
+            **annual,
         }
 
     @staticmethod
@@ -262,5 +268,48 @@ class YFinanceClient:
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "yfinance_quarterly_fetch_failed", ticker=yf_ticker, error=str(e)
+            )
+            return empty_result
+
+    @staticmethod
+    def _fetch_annual_sync(yf_ticker: str) -> dict[str, Any]:
+        """연간 income statement 의 Diluted/Basic EPS row → 최근 4년 (recent-first).
+
+        CAN SLIM A (연간 EPS 3년 가속) 입력. 결측·API drift 시 빈 리스트(정직).
+        """
+        import yfinance as yf
+
+        empty_result: dict[str, Any] = {"annual_eps": [], "annual_labels": []}
+        try:
+            ticker = yf.Ticker(yf_ticker)
+            # income_stmt ↔ financials API drift 대응 (둘 다 연간 income statement)
+            af = None
+            for attr in ("income_stmt", "financials"):
+                try:
+                    val = getattr(ticker, attr, None)
+                    if val is not None and not val.empty:
+                        af = val
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+            if af is None or af.empty:
+                return empty_result
+
+            cols = list(af.columns)[:4]  # 최근 4년 (descending)
+            labels = [
+                str(c.year) if hasattr(c, "year") else str(c) for c in cols
+            ]
+            eps: list[float | None] = []
+            for row_key in ("Diluted EPS", "Basic EPS", "DilutedEPS", "BasicEPS"):
+                if row_key in af.index:
+                    for col in cols:
+                        eps.append(_clean_float(af.at[row_key, col]))
+                    break
+            if not eps:
+                return {"annual_eps": [], "annual_labels": labels}
+            return {"annual_eps": eps, "annual_labels": labels}
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "yfinance_annual_fetch_failed", ticker=yf_ticker, error=str(e)
             )
             return empty_result

@@ -10,6 +10,7 @@ import pytest
 
 from collectors.buy_score_inputs import (
     BuyScoreInputs,
+    compute_annual_eps_yoy,
     compute_demand_score,
     compute_eps_yoy,
     compute_institution_ratio,
@@ -47,6 +48,33 @@ class TestComputeEpsYoy:
 
     def test_empty(self) -> None:
         assert compute_eps_yoy(None) is None
+
+
+class TestComputeAnnualEpsYoy:
+    def test_positive_yoy(self) -> None:
+        # 최근 연 1300, 전년 1000 → +30% (3년 시계열)
+        assert compute_annual_eps_yoy([1300, 1000, 800]) == pytest.approx(30.0)
+
+    def test_negative_yoy(self) -> None:
+        assert compute_annual_eps_yoy([500, 1000, 1200]) == pytest.approx(-50.0)
+
+    def test_base_negative_abs(self) -> None:
+        # 적자→흑자: (50 - (-50))/50 = +200%
+        assert compute_annual_eps_yoy([50, -50, -80]) == pytest.approx(200.0)
+
+    def test_too_few_years(self) -> None:
+        # 2년만 → 다년 추세 확인 불가 → None
+        assert compute_annual_eps_yoy([1300, 1000]) is None
+
+    def test_base_zero(self) -> None:
+        assert compute_annual_eps_yoy([1300, 0, 800]) is None
+
+    def test_none_value(self) -> None:
+        assert compute_annual_eps_yoy([None, 1000, 800]) is None
+
+    def test_empty(self) -> None:
+        assert compute_annual_eps_yoy(None) is None
+        assert compute_annual_eps_yoy([]) is None
 
 
 class TestComputeDemandScore:
@@ -184,6 +212,43 @@ async def test_eps_and_regime_live(isolated_db, monkeypatch: pytest.MonkeyPatch)
     assert bi.demand_momentum == 7.0
     assert bi.i > 5.0   # 기관 매수 우위
     assert bi.axis_source["c"].startswith("fundamentals")
+
+
+@pytest.mark.asyncio
+async def test_annual_eps_axis_live(isolated_db, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 연간 EPS 3년 +30% → A축 실측(중립 탈피) + 원시 시계열 노출
+    from collectors import buy_score_inputs as bsi
+    from collectors.fundamentals import Fundamentals
+
+    async def _fake_fund(ticker: str, *a, **kw):
+        return Fundamentals(
+            ticker=ticker, market="KS", fetched_at=0.0, fetched_at_iso="",
+            eps_ttm=1300.0, pe_ratio=10.0, roe=15.0, operating_margin=20.0, debt_to_equity=0.5,
+            quarterly_revenue=[], quarterly_operating_income=[], quarterly_eps=[],
+            quarter_labels=[], source="yfinance", fetched_db_iso=None, stale_hours=0.0,
+            annual_eps=[1300, 1000, 800, 600], annual_labels=["2025", "2024", "2023", "2022"],
+        )
+
+    async def _fake_flow(**kw):
+        from collectors.flow_inputs import FlowInputs
+        return FlowInputs(
+            ticker="A", market="KOSPI", actual_days=0, net_sums={},
+            momentum_raw=None, inflow_speed_raw=None, agreement=0.0,
+            momentum_score=None, inflow_score=None, theme_match_score=None, advisory_f_score=None,
+        )
+
+    monkeypatch.setattr("collectors.fundamentals.get_fundamentals", _fake_fund)
+    monkeypatch.setattr("collectors.flow_inputs.build_flow_inputs", _fake_flow)
+
+    bi = await bsi.build_buy_score_inputs(ticker="A", pool_tickers=["A"], market_macro=None)
+    assert bi.annual_eps_yoy_pct == pytest.approx(30.0)
+    assert bi.a >= 9.0  # +30% 연간 → 높은 A
+    assert bi.axis_source["a"].startswith("fundamentals")
+    assert bi.annual_eps == [1300, 1000, 800, 600]
+    # render 에 연간 시계열 노출
+    md = render_buy_score_inputs_md(bi)
+    assert "연간 EPS YoY" in md
+    assert "1300" in md
 
 
 @pytest.mark.asyncio

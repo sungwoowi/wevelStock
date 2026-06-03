@@ -25,7 +25,7 @@ canon_categories:
 reads_screening: true
 
 # INFRA-SCORE-INPUTS-001 v3 — buy_score CAN SLIM 7축 원시 지표 주입 활성.
-# _maybe_build_buy_score_inputs_md 가 [5e] 매수 입력 지표 블록 생성 (C=EPS YoY / A=공백 중립 /
+# _maybe_build_buy_score_inputs_md 가 [5e] 매수 입력 지표 블록 생성 (C=EPS YoY / A=연간 EPS YoY(yfinance) /
 # N=52주 / S·I=flow collector / L=SCREEN-RS / M=regime). cross-agent 축은 collector 직접 호출.
 reads_buyscore: true
 

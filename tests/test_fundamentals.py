@@ -54,6 +54,8 @@ class _MockYFinance:
             "quarter_labels": [
                 "2026Q1", "2025Q4", "2025Q3", "2025Q2", "2025Q1",
             ],
+            "annual_eps": [3650.0, 3100.0, 2700.0, 2200.0],
+            "annual_labels": ["2025", "2024", "2023", "2022"],
         }
 
     async def fetch_full(
@@ -105,6 +107,9 @@ async def test_yfinance_fetch_persists_to_db(
     assert f.source == "yfinance"
     assert f.eps_ttm == 9512.0
     assert len(f.quarter_labels) == 5
+    # 연간 EPS(CAN SLIM A) 보존
+    assert f.annual_eps == [3650.0, 3100.0, 2700.0, 2200.0]
+    assert f.annual_labels == ["2025", "2024", "2023", "2022"]
     # DB 적재 확인
     row = isolated_db.fetch_one(
         "SELECT ticker, eps_ttm FROM fundamentals WHERE ticker = ?",
@@ -112,6 +117,10 @@ async def test_yfinance_fetch_persists_to_db(
     )
     assert row is not None
     assert row["eps_ttm"] == 9512.0
+    # 연간 EPS DB round-trip (quarterly_data JSON)
+    reloaded = fm_mod.load_fundamentals_from_db("005930")
+    assert reloaded is not None
+    assert reloaded.annual_eps == [3650.0, 3100.0, 2700.0, 2200.0]
 
 
 # ---------------------------------------------------------------------------

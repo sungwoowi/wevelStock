@@ -11,7 +11,7 @@ generates:
   - collectors/flow_inputs.py       # F-Score 원시 지표 (60일 수급 momentum·inflow_speed) compute + render_flow_inputs_md (agreement 은 supply_demand_history 재사용)
   - collectors/theme_match.py       # SLOT S1 — theme_match 2-Stage 하이브리드 (classify_theme 결정론 후보+LLM+캐싱 / score_theme_match 결정론 / resolve_theme_match). anchors.py 패턴 mirror
   - collectors/screening_inputs.py  # v2 — S-Score 원시 지표 (rs=SCREEN-RS rank / supply_chain·alignment) compute + render_s_score_inputs_md (flow_inputs.py 패턴 mirror). stock_picker 발행
-  - collectors/buy_score_inputs.py  # v3 — buy_score CAN SLIM 7축 (C=EPS YoY / A=공백 중립 / N=52주 / S·I=flow / L=SCREEN-RS / M=regime) compute + render_buy_score_inputs_md. stock_picker 발행
+  - collectors/buy_score_inputs.py  # v3 — buy_score CAN SLIM 7축 (C=EPS YoY / A=연간 EPS YoY(yfinance income_stmt ≥3년) / N=52주 / S·I=flow / L=SCREEN-RS / M=regime) compute + render_buy_score_inputs_md. stock_picker 발행
   - config/score_inputs.yaml        # 원시 지표 → 0~10 축 매핑 임계 + advisory 가중 외부화 + flow.theme_authority/taxonomy/manual (하드코딩 금지, watchdog 반영)
   - tests/test_technicals.py        # 결정론 검증 (cutoff_date + 같은 입력 → 같은 출력 ±0)
   - tests/test_flow_inputs.py       # 결정론 검증

@@ -208,7 +208,7 @@ cited: []
 | 축 | 약어 의미 | 정의 · 실 산출 소스 |
 |----|----------|------|
 | **C** | Current quarterly earnings | 현재 분기 EPS YoY — +25%+ = 10, +10% = 6, 0% = 3, 음 = 0. **`fundamentals.quarterly_eps[0] vs [4]` 실측**. |
-| **A** | Annual earnings | 연간 EPS 3년 가속 — **데이터 공백(fundamentals 5분기만) → 중립 5.0** (SLOT: KIS/별도 소스). |
+| **A** | Annual earnings | 연간 EPS YoY — **`fundamentals.annual_eps` (yfinance income_stmt, ≥3년) 실측**. 최근 회계연도 vs 전년 (+25%→10·0%→3·음수→0, 분기 C의 연간판). **3년 원시 시계열 노출 → 가속·일관성은 본인 판단**. 3년 미만/부재 시 중립. |
 | **N** | New | 신고가 + 신제품 — **52주 신고가 이격(`charts.fifty_two_week.pct_from_high`) 실측**. 뉴스부(신제품) 0시드 (SLOT: NEWS-SOURCE-001). |
 | **S** | Supply & demand | 수급·자금 유입 — **`build_flow_inputs` inflow_score(외인·기관 자금 유입, collector 직접 호출)**. |
 | **L** | Leader or laggard | 업종 선도주 — **종목 RS + 과열도** 합성 (`screening.rank_candidates` screening_score, SCREEN-RS). 과열(막판 불꽃) 페널티 반영. |

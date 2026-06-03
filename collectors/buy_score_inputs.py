@@ -6,7 +6,7 @@ advisory buy_score 는 참고선(override 가능, 메모리 feedback_score_colla
 
 7축 (C·A·N·S·L·I·M) 소싱 (사용자 결정 = collector 직접 호출 + regime 분류기):
     C(현재 분기 EPS YoY) — fundamentals.quarterly_eps[0] vs [4] (실측)
-    A(연간 EPS 3년 가속) — fundamentals 5분기만 → **데이터 공백, 중립 5.0**(정직)
+    A(연간 EPS 3년) — fundamentals.annual_eps YoY (yfinance income_stmt, ≥3년) — 실측, <3년 중립
     N(52주 신고가)       — charts.compute_indicators fifty_two_week.pct_from_high (실측, 뉴스부 0시드)
     S(수급)              — flow_inputs.inflow_score (외인·기관 자금 유입, collector 직접 호출)
     L(주도주)            — screening.rank_candidates screening_score (RS+과열도)
@@ -38,6 +38,8 @@ class BuyScoreInputs:
     ticker: str
     # 원시 지표 (LLM 주입 = 권위)
     eps_yoy_pct: float | None        # C: 분기 EPS YoY %
+    annual_eps_yoy_pct: float | None  # A: 연간 EPS YoY %
+    annual_eps: list[float | None]    # A: 연간 EPS 4년 recent-first (가속/일관성 raw)
     high_proximity_pct: float | None  # N: 52주 고가 대비 이격 % (0=신고가)
     inflow_speed_raw: float | None    # S: 외인+기관 자금 유입 bp (누적 level)
     demand_momentum: float | None     # S: 최근 수급 turnaround 점수 (이벤트 포착)
@@ -77,6 +79,20 @@ def compute_eps_yoy(quarterly_eps: list[float | None] | None) -> float | None:
     if not quarterly_eps or len(quarterly_eps) < 5:
         return None
     cur, base = quarterly_eps[0], quarterly_eps[4]
+    if cur is None or base is None or base == 0:
+        return None
+    return (cur - base) / abs(base) * 100.0
+
+
+def compute_annual_eps_yoy(annual_eps: list[float | None] | None) -> float | None:
+    """연간 EPS YoY % — 최근 회계연도[0] vs 전년[1]. CAN SLIM A (≥3년 시계열 요구).
+
+    yoy = (eps[0] - eps[1]) / |eps[1]| × 100. **≥3년** 데이터(다년 추세 확인 가능)와
+    [0]·[1] 유효성 필수 — 부족 시 None(중립). 가속/3년 일관성 판단은 md 원시 시계열로 LLM.
+    """
+    if not annual_eps or len(annual_eps) < 3:
+        return None
+    cur, base = annual_eps[0], annual_eps[1]
     if cur is None or base is None or base == 0:
         return None
     return (cur - base) / abs(base) * 100.0
@@ -142,8 +158,10 @@ async def build_buy_score_inputs(
     axis_source: dict[str, str] = {}
     source = "db"
 
-    # ---- C / A — fundamentals (EPS) ----
+    # ---- C / A — fundamentals (EPS 분기 + 연간) ----
     eps_yoy: float | None = None
+    annual_yoy: float | None = None
+    annual_eps_series: list[float | None] = []
     c = a = _NEUTRAL
     axis_source["c"] = axis_source["a"] = "neutral_fallback"
     if ticker_s:
@@ -157,11 +175,17 @@ async def build_buy_score_inputs(
                 axis_source["c"] = f"fundamentals({f.source})"
             else:
                 reasons.append("C(분기 EPS YoY) 중립 — EPS 5분기 미만/부재")
+            # A — 연간 EPS YoY (≥3년 시계열). 가속/일관성은 원시 시계열로 LLM 판단.
+            annual_eps_series = list(f.annual_eps or [])
+            annual_yoy = compute_annual_eps_yoy(f.annual_eps)
+            if annual_yoy is not None:
+                a = map_to_axis(annual_yoy, _bps("buyscore", "a_annual_eps_yoy")) or _NEUTRAL
+                axis_source["a"] = f"fundamentals({f.source})"
+            else:
+                reasons.append("A(연간 EPS) 중립 — 연간 EPS 3년 미만/부재")
         except Exception as e:  # noqa: BLE001
             log.warning("buyscore_fundamentals_failed", ticker=ticker_s, error=str(e))
             reasons.append(f"C/A 산출 실패 ({type(e).__name__}) → 중립")
-    # A — 연간 EPS 3년 가속 = fundamentals 5분기만(데이터 공백) → 중립 (SLOT)
-    reasons.append("A(연간 EPS 3년) 중립 5.0 — fundamentals 5분기만(SLOT: KIS/별도 소스)")
 
     # ---- N — 52주 신고가 (charts) + 거래량 spike(S 거래량 동반 입력) ----
     high_prox: float | None = None
@@ -277,7 +301,8 @@ async def build_buy_score_inputs(
 
     return BuyScoreInputs(
         ticker=ticker_s,
-        eps_yoy_pct=eps_yoy, high_proximity_pct=high_prox,
+        eps_yoy_pct=eps_yoy, annual_eps_yoy_pct=annual_yoy, annual_eps=annual_eps_series,
+        high_proximity_pct=high_prox,
         inflow_speed_raw=inflow_raw, demand_momentum=demand_momentum, volume_spike=vol_spike,
         institution_ratio=inst_ratio,
         regime=regime, breadth_ratio=breadth, distribution_count=dist,
@@ -327,7 +352,12 @@ def render_buy_score_inputs_md(bi: BuyScoreInputs, *, name: str | None = None) -
     lines.append("| 축 | 의미 | 원시값 | 점수 | 출처 |")
     lines.append("|---|---|---|---|---|")
     lines.append(f"| C | 분기 EPS YoY | {_fmt(bi.eps_yoy_pct, '%', plus=True)} | {bi.c:.1f} | {bi.axis_source.get('c','')} |")
-    lines.append(f"| A | 연간 EPS 3년 | (공백) | {bi.a:.1f} | {bi.axis_source.get('a','')} |")
+    if bi.annual_eps:
+        series = "/".join("null" if v is None else f"{v:.0f}" for v in bi.annual_eps[:4])
+        a_raw = f"YoY {_fmt(bi.annual_eps_yoy_pct, '%', plus=True)} (연간 {series})"
+    else:
+        a_raw = "(공백)"
+    lines.append(f"| A | 연간 EPS YoY (3년) | {a_raw} | {bi.a:.1f} | {bi.axis_source.get('a','')} |")
     lines.append(f"| N | 52주 신고가 이격 | {_fmt(bi.high_proximity_pct, '%')} | {bi.n:.1f} | {bi.axis_source.get('n','')} |")
     vol_s = "null" if bi.volume_spike is None else f"{bi.volume_spike:.1f}배"
     mom_s = "null" if bi.demand_momentum is None else f"{bi.demand_momentum:.1f}"
@@ -350,7 +380,7 @@ def render_buy_score_inputs_md(bi: BuyScoreInputs, *, name: str | None = None) -
     adv = "null" if bi.advisory_buy_score is None else f"{bi.advisory_buy_score:.1f}"
     lines.append(
         f"> **advisory buy_score: {adv}** — 참고선일 뿐이며 권위 아님. 위 원시 지표로 **직접 판단**·override 가능. "
-        f"A(연간)·N 뉴스부는 데이터 공백 중립."
+        f"N 뉴스부(신제품)는 데이터 공백 중립. A(연간 EPS)는 3년 미만 시 중립."
     )
     if bi.reasons:
         lines.append("")
