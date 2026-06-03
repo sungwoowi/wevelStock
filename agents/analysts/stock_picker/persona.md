@@ -186,7 +186,9 @@ cited: []
 |----|------|------------|
 | **rs (Relative Strength)** | 상대강도 — **종목 레벨** 오닐식 후보 풀 정규화 (`collectors/scoring.py:stock_rs_score` + `collectors/screening.py:rank_candidates`, SCREEN-RS-EXTENSION-001). 풀 최강 = 10, 중앙값 = 5, 최약 = 0. 섹터 레벨 RS 는 snapshot.sector_rs 보조. | screening.rank_candidates(종목 풀) + snapshot.sector_rs |
 | **supply_chain** | 수급망 일치도 — 종목이 강세 산업 (AI·반도체·방산·원전 등) 의 공급망 중심에 있는가. 단순 종목 단가 X, **산업 트렌드 정합** 측정. 종목 theme 분류(`classify_theme`) → 매핑 섹터의 현재 RS 강도(`snapshot.sector_rs`) 최강값 실측. 매핑 없는 테마 → 중립. | classify_theme → sector_rs 실측 (config theme_sector_mapping) |
-| **alignment** | 정배열 — 월봉 (7월선 위) + 주봉 (MFI) + 일봉 (Vol Osc) 위계 정합. 월봉 종가 7월선 위 = 4점 + 주봉 MFI 정배열 = 3점 + 일봉 Vol Osc 양의 영역 = 3점. | snapshot.price_alignment (3 시간축) |
+| **alignment** | 정배열 — 월봉 (7월선 위) + 주봉 (정배열) + 일봉 (MA-ride 주도강도 위계) 정합. 월봉 종가 7월선 위 = 4점(시대적 장기 주도) + 주봉 정배열 = 3점(중기) + **일봉 MA-ride 위계 = `daily_leadership` 0~3점**(riding_ma4=3.0 초강세 / riding_ma7=2.5 강세 / uptrend=2.0 정상추세 / above_ma20=1.5 / below_ma20=0.0). 산출 가능 위계만 비례 정규화해 0~10. canon 출처 = `stock_selection/momentum_leaders` (MA-ride doctrine — 빠른 이평 탈수록 강한 주도주). 이 축은 *구조*(어느 MA를 타나)만 본다 — *과열도*(거리)는 별도 `extension_score`, 둘은 상호 보완. | snapshot.price_alignment (3 시간축) + screening_inputs.compute_alignment |
+
+**MA-ride 위계 해석 (alignment 축 doctrine, advisory)**: raw `daily_leadership` label 을 직접 읽어 가중한다 — **일봉 4일선 타는 종목(riding_ma4) = 단기 초강세 주도주**, 7일선 타는 종목(riding_ma7) = 강세, **20일 정배열만(uptrend/above_ma20) = "정상 추세"일 뿐 주도주 아님**. 월봉 7월선 위는 시대적 중장기 주도주(보유 시간축 길게). 이 위계는 alignment 점수의 advisory 베이스라인이되, label 을 보고 LLM 이 override 가능 (`stock_selection/momentum_leaders` ma_ride doctrine). 과열도(`extension_score`)와 교차로 "강하게 타되 과열은 아닌가"를 함께 본다.
 
 **verdict 매핑** (S-Score 기준):
 
@@ -250,7 +252,7 @@ for ticker in snapshot.candidate_universe:
 manifest 의 `canon_categories` 와 동기. 종목선정부 4 카테고리 전체를 받는다. **현재 자료 0 시드** — canon md 부재. 페르소나만으로 추론 시작, 자료는 KNOWLEDGE-SYNC-001 Phase 3 흐름으로 점진 보강.
 
 - `stock_selection/sector_rotation` — 섹터 로테이션 룰 (강세 섹터 식별·로테이션 시그널·체제별 섹터 우선순위). S-Score 의 rs 축 권위 원천 (자료 들어오면).
-- `stock_selection/momentum_leaders` — 주도주 정배열 원리 + CAN SLIM 7축 framework 원천. S-Score 의 alignment 축 + buy_score 전체 권위 원천.
+- `stock_selection/momentum_leaders` — 주도주 정배열 원리 + CAN SLIM 7축 framework 원천. S-Score 의 alignment 축 + buy_score 전체 권위 원천. **`01-ma-ride-leadership.md` 활성** (MA-ride 주도강도 위계 doctrine — 빠른 이평 탈수록 강한 주도주, 4일선=초강세 / 7일선=강세 / 월봉 7MA=시대적 장기. alignment 축 일봉 컴포넌트 `daily_leadership` 의 권위 출처). 나머지 CAN SLIM 명제는 자료 들어온 후.
 - `stock_selection/theme_play` — 테마 분류 + 권위 주체 매핑 (AI·반도체·방산·원전·화장품 등). S-Score 의 supply_chain 축 권위 원천. `flow_analyzer` 의 theme_authority dictionary 와 정합.
 - `stock_selection/swing_candidates` — 1 파 사이클 후보군 패턴 (저점 시그널 분류·1 파 완성 패턴). buy_score 의 N·S 축 권위 원천 (자료 들어오면).
 

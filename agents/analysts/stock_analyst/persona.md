@@ -282,6 +282,8 @@ yesterday_delta: "<어제 α·F1~F5·목표가 3 단 과 차이 + 변화 트리�
 
 Track A 진입 시 `holding_period=장기/중기` 권장, Track B 진입 시 `holding_period=단기` 권장.
 
+**MA-ride 주도강도 위계 보강 (cross-agent read)**: "빠른 이평 탈수록 강한 주도주"라는 추세추종 위계 — **chart_data_md [4] 월봉 7MA 위에서 밀착 상승하는 종목 = 시대적 장기 주도주**(holding_period `monthly→장기` 매핑 강화) / 월봉 7MA 이탈은 F1 장기추세 broken 시그널과 정합. 단, MA-ride **결정론 점수(alignment 축, `daily_leadership` 0~3점)는 `stock_picker` 영역**(stock_selection/momentum_leaders canon 수령자)이며 본 분석가는 chart_data_md [4] 월봉 7MA 출처로만 grounding — 해당 canon 명제 ID 직접 인용 X(부서 밖).
+
 ### Module A 목표가 3 단 (보수 / 중립 / 공격) — SLOT S1 후속
 
 본 cycle (14.3) = **target_prices 미발행**. `WAVE-ALPHA-TARGETS-001` SLOT S1 후속 SPEC 결단 후 정식.

@@ -9,22 +9,21 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **extension floor(C) + universe 백필 + macro round-trip + MA-ride 위계 ✅ (2026-06-02 3세션)**. 직전 "extension 천장 포화 = k 약함" 진단은 **오진**이었음 — 진단 계측 보강으로 포화 7종 **100%가 ma20-아래**(`clamp(10-k·ext/ADR)`서 ext 음수→무조건 10 clamp = k 무관) 실증. 사용자 결정 **C = ma20-아래 거리비례 감점 floor + deadband 완충대**(`extension_score` 양방향 재설계). + **universe 백필**(refresh_all_tickers가 거래대금 상위 50종 매일 적재, chart_ohlcv 31→71) + **macro round-trip**(distribution_count_25d/breadth_source 영속). 세션 중 사용자 추세추종 doctrine → **MA-ride 주도강도 위계**(alignment 일봉 이진→graded, 4일선=초강세 — 삼성·하이닉스 라이브 검증). **회귀 829 passed.** 직전 = screening 진단 도구+베이스라인(2026-06-02 2세션).
+**현재 위치**: **persona MA-ride 위계 인용 ✅ (2026-06-04)**. 2026-06-02 구현한 MA-ride 주도강도 위계(빠른 이평=주도강도)가 결정론 점수·canon엔 살아있으나 **분석가 persona가 미인용** + `stock_picker/persona.md` alignment 축 stale(일봉을 "Vol Osc"로 적어 실제 MA-ride 구현과 불일치) → persona 정합. **핵심 제약 발견**: canon 주입은 분석가별 `canon_categories` 필터(`compose.load_shared_canon`)라 stock_picker만 `stock_selection/momentum_leaders` 수령, **stock_analyst는 미수령 → 직접 canon ID 인용 불가, cross-ref만**. **persona 양식 회귀 106 passed.** 직전 = extension floor(C) + universe 백필 + macro round-trip + MA-ride 위계 구현(2026-06-02 3세션, 829 passed).
 
-**본 세션 산출** (extension floor + universe + macro + MA-ride):
-- `collectors/scoring.py` — `extension_score` 양방향 재설계(ma20 위 과열 불변 + ma20 아래 deadband 넘으면 `10-k_below·excess` 감점)
-- `collectors/screening_inputs.py` — `compute_alignment` 일봉을 graded MA-ride 위계(riding_ma4=3/ma7=2.5/uptrend=2/above=1.5/below=0)
-- `collectors/screening.py` — `fetch_universe_tickers` + override 인자 + 새 getter들; `collectors/charts.py` — `_select_refresh_tickers`(seed+universe+cap)
-- `collectors/market_macro.py` + `core/db/{schema.sql,connection.py}` — macro 2컬럼 round-trip(v9 멱등 ALTER)
-- `config/screening.yaml` — k_below/below_deadband_adr/universe 블록 / `scripts/screening_distribution.py` — 계측 보강 + --k/--k-below/--deadband
-- `knowledge/canon/stock_selection/momentum_leaders/01-ma-ride-leadership.md` — **신규** 사용자 추세추종 doctrine
-- 테스트 +16(universe 5 + floor 7 + MA-ride 위계 + macro round-trip). 813→829 passed
+**본 세션 산출** (persona MA-ride 인용):
+- `agents/analysts/stock_picker/persona.md` — (1) alignment 축 row stale 정정(일봉 "Vol Osc"→MA-ride 위계 `daily_leadership`: riding_ma4=3.0 초강세/ma7=2.5/uptrend=2.0/above=1.5/below=0.0 + canon 출처 + 구조⊥과열도) (2) S-Score Doctrine MA-ride 해석 지침(4·7일선=초강세·강세, 20일 정배열만=정상추세 주도주 아님, advisory override) (3) Knowledge Categories momentum_leaders를 `01-ma-ride-leadership.md` 활성으로 갱신
+- `agents/analysts/stock_analyst/persona.md` — holding_period 맥락 경량 cross-ref(월봉 7MA 밀착=시대적 장기 주도주→`monthly→장기` WL3+F1 broken 정합, chart_data_md [4] 출처 grounding, canon ID 직접 인용 금지)
+- 코드 변경 0(persona 문서 2파일만). persona 양식 회귀 106 passed
 
 **이번 세션에 굳힌 판단**:
+- **canon 주입 = 분석가별 `canon_categories` 필터**(`core/knowledge/compose.py::load_shared_canon`): stock_picker=`stock_selection/*`, stock_analyst=`stock-analysis/*`. **부서 밖 canon은 cross-ref만, ID 직접 인용 X**. persona doctrine "다른 학습부 canon 미주입"이 코드와 정합.
+- **MA-ride mechanism은 라이브, magnitude는 다일 튜닝 잔여**: persona 인용으로 LLM doctrine 연결 완료. 점수 간격 캘리브레이션은 universe 누적 후(Top 1).
+
+**직전 세션 판단 (2026-06-02 3세션 extension floor + MA-ride 구현)**:
 - **"천장 포화 = k 약함"은 오진**: ma20-아래 종목은 `10-k·(음수)≥10`→무조건 clamp = **k 무관**. lever는 k가 아니라 **ma20-아래 floor**(C). 계측으로 원인 분리(ma20-위 과열 vs ma20-아래) 후 결정 — 직전 진단 맹신 금지.
-- **MA-ride 위계 = 사용자 추세추종 framework**: 빠른 이평 탈수록 주도 강함(4일선=초강세=삼성·하이닉스 / 7일선=강세 / 월봉7MA=시대적 장기). "타고 오름"=MA 스택 순서(latest 값만, slope 불필요). 과열도(거리)⊥구조(어느 MA). ma4/ma7은 compute_indicators에 이미 있던 것 활용.
+- **MA-ride 위계 = 사용자 추세추종 framework**: 빠른 이평 탈수록 주도 강함(4일선=초강세=삼성·하이닉스 / 7일선=강세 / 월봉7MA=시대적 장기). "타고 오름"=MA 스택 순서(latest 값만, slope 불필요). 과열도(거리)⊥구조(어느 MA).
 - **magnitude는 다일 튜닝**: k_below/deadband(1.0/1.0)·MA-ride 점수 간격은 보수적 기본만 커밋, single-day overfitting 금지([[feedback_backtest_essence]]). universe 백필로 누적 시작 → `--k-below` 스윕으로 확정.
-- **KIS 토큰 1분당 1회**: 같은 1분에 연속 KIS 프로세스 띄우면 둘째 토큰 실패(graceful 폴백). 1825일 차트 ~22s/ticker.
 
 **직전 세션 판단 (2026-06-02 2세션 screening 진단)**:
 - **RS 분포 진단 = 풀 한 번 랭킹**(종목 루프 X): RS는 풀 내 백분위라 `rank_candidates(pool, regime)` 한 호출이 단위. 절대 점수 아님 → 풀 크기·구성이 점수에 직접 영향.
@@ -77,33 +76,33 @@
 - **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
 - **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(A 연간 EPS 3년 / N 뉴스부)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / **persona MA-ride 인용** (stock_picker/stock_analyst persona에 4일선=초강세 위계+canon 인용 명시, 별 작업).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(A 연간 EPS 3년 / N 뉴스부)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed).
 
-**마지막 작업일**: 2026-06-02 (extension floor C + universe 백필 + macro round-trip + MA-ride 위계)
-**마지막 세션 로그**: [2026-06-02_extension-floor-universe-backfill-ma-ride-3.md](c_worked/2026-06-02_extension-floor-universe-backfill-ma-ride-3.md). 직전 = [2026-06-02_screening-distribution-baseline-2.md](c_worked/2026-06-02_screening-distribution-baseline-2.md).
-**산출**: `extension_score` 양방향 재설계(ma20-아래 floor+deadband) + `compute_alignment` MA-ride 위계 + universe 백필(chart_ohlcv 31→71) + macro round-trip + canon momentum_leaders doctrine. 라이브: 삼성·하이닉스=riding_ma4(10.0), broken=감점. **회귀 829 passed.**
-**Git**: 코드+docs 1커밋 + push (사용자 요청).
+**마지막 작업일**: 2026-06-04 (persona MA-ride 위계 인용)
+**마지막 세션 로그**: [2026-06-04_persona-ma-ride-citation.md](c_worked/2026-06-04_persona-ma-ride-citation.md). 직전 = [2026-06-02_extension-floor-universe-backfill-ma-ride-3.md](c_worked/2026-06-02_extension-floor-universe-backfill-ma-ride-3.md).
+**산출**: `stock_picker/persona.md` alignment 축 stale 정정(Vol Osc→MA-ride 위계) + S-Score Doctrine 해석 지침 + Knowledge Categories 갱신 / `stock_analyst/persona.md` 경량 cross-ref. **persona 양식 회귀 106 passed**, validate 0 errors.
+**Git**: 코드(persona 2)+docs 1커밋 + push (사용자 요청).
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — magnitude 다일 튜닝 + persona MA-ride + 공백 2축
+## 🎯 다음에 할 일 (Top 3) — magnitude 다일 튜닝 + 공백 2축 + regime 히스테리시스
 
-우선순위 순. **extension floor(C) + universe 백필 직후.** universe 백필로 leading 일봉이 매일 누적되기 시작 → 다일 튜닝의 데이터 전제가 풀림.
+우선순위 순. **persona MA-ride 인용 완료 직후.** MA-ride mechanism·persona doctrine 모두 라이브 → 남은 건 magnitude 캘리브레이션(다일 누적 의존)과 공백 데이터.
 
 ### 1. k_below / MA-ride magnitude 다일 튜닝 ⭐
-- **왜**: 이번에 mechanism은 라이브(ma20-아래 floor + 4일선 초강세 위계)지만 magnitude(k_below/deadband 1.0/1.0, MA-ride 점수 간격)는 보수적 기본만 커밋. single-day overfitting 회피로 미룬 것. universe 백필로 다일 누적이 시작됨
+- **왜**: mechanism·persona는 라이브(ma20-아래 floor + 4일선 초강세 위계)지만 magnitude(k_below/deadband 1.0/1.0, MA-ride 점수 간격)는 보수적 기본만 커밋. single-day overfitting 회피로 미룬 것. universe 백필로 다일 누적이 시작됨(2026-06-02~, 며칠 쌓였는지 먼저 확인)
 - **범위**: `scripts/screening_distribution.py --k-below <v>` / `--deadband <v>` 스윕으로 broken 변별폭 + 0~10 분포 확정 → `config/screening.yaml` 반영. MA-ride 점수 간격도 다종목 분포 보고 정합
 - **예상 산출**: 다일 분포 기반 k_below/deadband 확정 + before/after
 
-### 2. persona MA-ride 위계 인용 (stock_picker / stock_analyst)
-- **왜**: MA-ride 위계(canon `momentum_leaders/01-ma-ride-leadership.md`)는 결정론 점수로 살아있으나 persona가 "4일선=초강세 주도주" 위계를 명시 인용하지 않음. LLM이 raw `daily_leadership` label을 해석하도록 doctrine 연결 필요
-- **범위**: `agents/analysts/{stock_picker,stock_analyst}/persona.md`에 MA-ride 위계 + canon 인용 1~2줄. 양식 검증 테스트 정합
-- **예상 산출**: persona가 MA-ride 위계 인용 (별 작업, 작음)
-
-### 3. 공백 2축 데이터 확장 (A 연간 EPS / N 뉴스부)
+### 2. 공백 2축 데이터 확장 (A 연간 EPS / N 뉴스부)
 - **왜**: buy_score A(연간 EPS 3년·fundamentals 5분기만)·N 뉴스부(0시드)는 중립 fallback. 실측화 필요
 - **범위**: fundamentals 연간 3년 소스(KIS/별도) / NEWS-SOURCE-001(news_curator 신제품 판정) → 공백 2축 실측
 - **예상 산출**: buy_score 7축 전부 실측
+
+### 3. regime run간 흔들림 히스테리시스 점검
+- **왜**: 같은 종목 strong/moderate 경계 인접 시 run간 regime 라벨 흔들림(2026-06-02 진단, breadth 0.30이 weak 0.40에서 0.10 떨어짐 — 현재 경계서 멂이라 급하지 않음)
+- **범위**: `collectors/market_macro.py` regime 분류에 히스테리시스 밴드(직전 라벨 sticky) 검토. 분포 본 뒤 결정
+- **예상 산출**: regime 안정성 진단 + (필요 시) 히스테리시스 밴드
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
