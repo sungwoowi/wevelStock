@@ -62,6 +62,17 @@ def _executive_model_override(tier: Literal["balanced", "deep"] | None) -> str |
     return None
 
 
+def _is_discovery(classification: Any) -> bool:
+    """종목 미지정 추천(발굴) 질의 — formatter 가 셔틀리스트 양식으로 답변하도록 신호.
+
+    route ∈ track + ticker 부재 = "단타/주도주 추천해줘" 류 (라우터 발굴 모드와 동일 조건).
+    """
+    return (
+        getattr(classification, "ticker", None) is None
+        and getattr(classification, "agent_route", None) in ("track_a", "track_b", "both")
+    )
+
+
 class FormattedAnswer(BaseModel):
     text: str
     model: str
@@ -153,6 +164,7 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
                     analyst_outputs=analyst_outputs,
                     strategist_outputs=strategist_outputs,
                     provider=payload.provider,
+                    discovery=_is_discovery(classification),
                 )
             formatted = FormattedAnswer(
                 text=fmt.text,
@@ -288,6 +300,7 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
                             analyst_outputs=list(analyst_buffer.values()),
                             strategist_outputs=list(strategist_buffer.values()),
                             provider=payload.provider,
+                            discovery=_is_discovery(classification),
                         )
                     fmt_event = {
                         "type": "formatted",

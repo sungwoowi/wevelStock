@@ -596,6 +596,66 @@ def _regime_from_snapshot(snapshot: MarketSnapshot, resolved_ticker: str) -> str
         return None
 
 
+async def build_discovery_shortlist_md(
+    *, track: str = "track_b", top_n: int = 5,
+) -> tuple[str | None, dict[str, Any]]:
+    """종목 미지정 추천 질의용 — 스크리닝 랭킹 상위 N 후보 셔틀리스트 md.
+
+    snapshot 주도주 풀(부재 시 DB universe, index/ETF seed 제외) → regime(KOSPI 기준)
+    → rank_candidates(결정론 권위) → render_screening_shortlist_md. stock_picker
+    sub-task 에 컨텍스트로 주입(큐레이션·근거는 LLM). 실패 시 (None, meta).
+    """
+    meta: dict[str, Any] = {
+        "discovery_pool_size": 0, "discovery_regime": None, "discovery_top": [],
+    }
+    try:
+        snapshot, _ = await build_market_snapshot()
+    except Exception as e:  # noqa: BLE001
+        log.warning("discovery_snapshot_failed", error=str(e))
+        return None, {**meta, "discovery_error": f"snapshot:{type(e).__name__}"}
+
+    pool = _leading_pool_tickers(snapshot)
+    if not pool:
+        try:
+            from collectors.charts import _seed_tickers
+            from core.db import get_db
+
+            seed = set(_seed_tickers())
+            rows = get_db().fetch_all("SELECT DISTINCT ticker FROM chart_ohlcv")
+            pool = [r["ticker"] for r in rows if r["ticker"] not in seed]
+        except Exception as e:  # noqa: BLE001
+            log.warning("discovery_universe_fallback_failed", error=str(e))
+            pool = []
+    if not pool:
+        return None, {**meta, "discovery_error": "empty_pool"}
+
+    regime: str | None = None
+    macro_map = snapshot.market_macro if isinstance(snapshot.market_macro, dict) else {}
+    macro = macro_map.get("KOSPI")
+    if macro:
+        try:
+            from collectors.market_macro import classify_market_regime
+            from collectors.screening import get_regime_thresholds
+
+            regime = classify_market_regime(macro, thresholds=get_regime_thresholds())
+        except Exception as e:  # noqa: BLE001
+            log.warning("discovery_regime_failed", error=str(e))
+
+    from collectors.screening import rank_candidates, render_screening_shortlist_md
+
+    ranked = rank_candidates(pool, regime)
+    top = [r for r in ranked if r.get("rank") is not None][:top_n]
+    names = {r["ticker"]: KR_TICKER_TO_NAME.get(r["ticker"], "") for r in top}
+    md = render_screening_shortlist_md(
+        ranked, names, top_n=top_n, track=track, regime=regime
+    )
+    return md, {
+        "discovery_pool_size": len(pool),
+        "discovery_regime": regime,
+        "discovery_top": [r["ticker"] for r in top],
+    }
+
+
 async def _maybe_build_s_score_inputs_md(
     spec: AnalystSpec, target_ticker: str | None, snapshot: MarketSnapshot
 ) -> tuple[str | None, dict[str, Any]]:

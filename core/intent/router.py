@@ -129,10 +129,19 @@ def _build_subtask_prompt(
     ticker_display: str | None,
     original_input: str,
     scenario_id: int,
+    discovery_md: str | None = None,
 ) -> str:
-    """분석가 별 sub-task prompt 생성. template 에 placeholder 치환."""
+    """분석가 별 sub-task prompt 생성. template 에 placeholder 치환.
+
+    discovery_md 가 있고 analyst_id == stock_picker 이면 종목 미지정 추천(발굴) 모드
+    템플릿(`stock_picker_discovery`)을 사용 — 결정론 스크리닝 셔틀리스트 주입.
+    """
     data = _load_analyst_subtasks()
-    template = (data.get("analysts") or {}).get(analyst_id)
+    analysts = data.get("analysts") or {}
+    template_key = analyst_id
+    if discovery_md and analyst_id == "stock_picker" and analysts.get("stock_picker_discovery"):
+        template_key = "stock_picker_discovery"
+    template = analysts.get(template_key)
     common = data.get("common_directives", "")
     scenario_routing = _load_scenario_routing()
     sc_meta = (scenario_routing.get("scenarios") or {}).get(scenario_id, {})
@@ -147,6 +156,7 @@ def _build_subtask_prompt(
         ticker_display=ticker_display or "",
         original_input=original_input,
         scenario_name=scenario_name,
+        discovery_md=discovery_md or "",
     ) + ("\n" + common if common else "")
 
 
@@ -314,6 +324,22 @@ async def _prefetch_analysts_for_tracks(
     ordered = _resolve_analyst_ids_for_scenario(
         classification.scenario_id, track_ids
     )
+
+    # 종목 미지정 추천(발굴) 모드 — 결정론 스크리닝 셔틀리스트를 stock_picker 에 주입.
+    # (route ∈ track + ticker 부재 = "단타/주도주 추천해줘" 류. 시장 질의는 analyst_direct 라 무관.)
+    discovery_md: str | None = None
+    if classification.ticker is None:
+        track_label = track_ids[0] if len(track_ids) == 1 else "track_b"
+        try:
+            from core.inference.run_analyst import build_discovery_shortlist_md
+
+            discovery_md, _disc_meta = await build_discovery_shortlist_md(track=track_label)
+        except Exception as e:  # noqa: BLE001
+            log.warning("discovery_shortlist_build_failed", error=str(e))
+            discovery_md = None
+        if discovery_md and "stock_picker" not in ordered:
+            ordered = ["stock_picker", *ordered]
+
     if not ordered:
         return []
 
@@ -328,6 +354,7 @@ async def _prefetch_analysts_for_tracks(
             ticker_display=classification.ticker_display,
             original_input=classification.raw_input,
             scenario_id=classification.scenario_id,
+            discovery_md=discovery_md,
         )
         subtask_prompts.append(prompt)
         # messages 의 마지막 user 메시지 prompt 로 치환

@@ -335,3 +335,64 @@ def rank_candidates(
         row["rank"] = idx
 
     return ranked + excluded
+
+
+# ---------------------------------------------------------------------------
+# 발굴 셔틀리스트 렌더 (screening-shortlist-v1) — 종목 미지정 추천 질의용
+# ---------------------------------------------------------------------------
+
+
+_TRACK_LABEL = {"track_a": "중장기 주도주", "track_b": "단기 트레이딩"}
+
+
+def render_screening_shortlist_md(
+    ranked: list[dict[str, Any]],
+    names: dict[str, str] | None = None,
+    *,
+    top_n: int = 5,
+    track: str | None = None,
+    regime: str | None = None,
+) -> str:
+    """rank_candidates 결과 → 발굴 후보 셔틀리스트 md (stock_picker 컨텍스트 주입용).
+
+    결정론 랭킹(권위)이 상위 후보를 제시하고, stock_picker LLM 이 큐레이션·근거를 발행한다.
+    rank=None(60일 데이터 부족) 종목은 제외. 산출 가능 후보 0개면 안내 문구.
+    """
+    names = names or {}
+    track_label = _TRACK_LABEL.get(track or "", "종목 발굴")
+    rankable = [r for r in ranked if r.get("rank") is not None
+                and r.get("screening_score") is not None]
+    top = rankable[:max(1, top_n)]
+
+    lines: list[str] = []
+    lines.append(f"## [발굴] 스크리닝 랭킹 상위 후보 ({track_label})")
+    lines.append("")
+    regime_part = f" · 시장 체제 `{regime}`" if regime else ""
+    lines.append(
+        f"> 결정론 스크리닝(상대강도 RS + 과열도, 60일 기준{regime_part}) 상위 {len(top)}종. "
+        "아래 후보 중에서 추천 셔틀리스트를 큐레이션·발행하라 — 점수는 결정론 권위, "
+        "선정·근거·경고는 본인 판단."
+    )
+    lines.append("")
+    if not top:
+        lines.append("_산출 가능한 후보 없음 (후보 풀 60일 데이터 부족) — 추천 보류 안내._")
+        return "\n".join(lines)
+
+    lines.append("| 순위 | 종목 | 상대강도(RS) | 과열도 | 종합 |")
+    lines.append("|---|---|---|---|---|")
+    for r in top:
+        tk = r["ticker"]
+        nm = names.get(tk) or tk
+        rs = r.get("rs_score")
+        ext = r.get("extension_score")
+        sc = r.get("screening_score")
+        rs_s = "—" if rs is None else f"{rs:.1f}"
+        ext_s = "—" if ext is None else f"{ext:.1f}"
+        sc_s = "—" if sc is None else f"{sc:.1f}"
+        lines.append(f"| {r['rank']} | {nm} ({tk}) | {rs_s} | {ext_s} | {sc_s} |")
+    lines.append("")
+    lines.append(
+        "> 과열도 = 높을수록 건강(낮으면 과열·이탈). 상대강도 = 풀 내 백분위(10=최강). "
+        "종합 = 두 축 regime 가중 합성. **신고가 추격·과열 종목은 경고 병기.**"
+    )
+    return "\n".join(lines)
