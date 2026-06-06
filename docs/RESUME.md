@@ -9,7 +9,7 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **buy_score A축 배선 — 연간 EPS YoY 실측 ✅ (2026-06-04 2세션)**. buy_score CAN SLIM A축(연간 EPS)이 중립 5.0 fallback이던 마지막 데이터 공백을 yfinance 연간 income_statement로 실측 닫음. **buy_score 7축 중 6.5축 라이브**(C·A·N(52주)·S·L·I·M, 남은 공백=N 뉴스부 신제품 절반=NEWS-SOURCE-001 SPEC 게이트). **핵심 판단**: A점수=최근 연간 EPS YoY breakpoint 매핑(C의 연간판) + 3년 시계열 raw 노출 → 가속·일관성 고차 판단은 LLM(brittle O'Neil 공식 회피, [[feedback_score_collapse_advisory]]). **회귀 837 passed.** 라이브 005930 A 5.0→10.0(YoY +33.4%). 직전 = persona MA-ride 위계 인용(2026-06-04 1세션, 106 passed).
+**현재 위치**: **본질 전환 + 왼쪽 뇌 거버넌스 착수 ✅ (2026-06-06)**. 사용자 본질 점검("실전 도움 단계 미달")으로 북극성 재확인 = **매일 도는 책임지는 페이퍼 트레이딩 데스크**(주도주·순환매·타이밍·비중·채점). 시스템을 **왼쪽 뇌(수집→분석→답변 ~65%)/오른쪽 뇌(비중→가상매매→채점→복리 0%)**로 나누고 **왼쪽 뇌 먼저 완성** 결정. 산출 3덩이: ① **SPEC 2-tier 거버넌스**(roadmap=점검용/implementation=코딩용 + 마스터 `PROJECT-NORTH-STAR-001` + `LEFT-BRAIN-COMPLETION-001`) ② **단계 지도 drift 감시**(`scripts/project_status.py` 진행도 자동 파생 + resume/wrap-up 통합) ③ **`ANSWER-FIDELITY-001`(LB-MS1) 답변 누수 봉합** F1(raw/코드라벨/잘림 echo)+F2(근거축 가변)+F3(비교 양종목) 전부 **라이브 검증·verified**. **회귀 868 passed.** 직전 = buy_score A축 연간 EPS(2026-06-04, 837 passed).
 
 **본 세션 산출** (buy_score A축 = 연간 EPS):
 - `connectors/yfinance/client.py` — `fetch_annual`(income_stmt/financials "Diluted EPS" 4년) + `fetch_full` 결합
@@ -18,10 +18,14 @@
 - `config/score_inputs.yaml` — `buyscore.a_annual_eps_yoy` breakpoints / persona·manifest·SPEC A축 "공백 중립"→실측 갱신
 - 테스트 +8(순수 7 + A축 라이브 1 + DB round-trip). 829→837 passed. 코드 1커밋 `b84af9e` + push
 
-**이번 세션에 굳힌 판단**:
-- **A점수 = 최근 연간 EPS YoY breakpoint 매핑 + 3년 raw 노출**: O'Neil 가속·3년 일관성을 brittle 공식으로 안 박고 LLM이 원시 시계열로 판단(advisory doctrine). C(분기)와 같은 앵커, 계절성 평탄화 차이.
-- **universe 누적은 dev에서 자기치유 X**: `refresh_all_tickers` cron(`0 18 * * 1-5`)이 서버 떠야 돎. magnitude 다일 튜닝(Top 1)은 매일 장후 수동 refresh 또는 서버 상주로 누적 먼저 쌓아야 풀림(현재 2026-06-02 단일일).
-- **입력 배관 충분히 좋음(6.5/7축)**: 미세튜닝 수 세션 누적 = 한계효용 구간. 본질(회사처럼 작동·적중률 고도화)로 가려면 end-to-end 가이드 품질 검증 / MS4 적중률 루프가 한 단계 위 레버(사용자 점검 환기).
+**이번 세션에 굳힌 판단 (2026-06-06)**:
+- **시스템 = 왼쪽 뇌/오른쪽 뇌**: 왼쪽(수집→분석→답변, ~65%)은 부품 있으나 종합 판단 미상승+답변 누수, 오른쪽(비중→가상매매→채점→복리, 0%) 미착수. **왼쪽 먼저 완성** 후 오른쪽. "실전 도움" 선 = 채점 루프(책임) + 푸시 + 숙의형 협업.
+- **SPEC 2-tier 거버넌스**: roadmap(level=roadmap, 큰 방향·마일스톤·코드 X, children) ↔ implementation(generates 코드, parent). 혼자 PM의 "디테일 늪 길잃음" 방지. 애자일 규칙 = "이 디테일이 현재 마일스톤 전진시키나? 아니면 백로그"(roadmap 범위밖이 기준).
+- **단계 지도는 SPEC status에서 파생**: `project_status.py`가 roadmap 트리 읽어 진행도/ACTIVE/drift 자동. 손으로 % 적지 말고 **SPEC status 정확히 유지 = 진행도 갱신**. resume/wrap-up이 세션마다 호출(훅 아님=판단은 LLM, 게이트 아님=지도만).
+- **답변 누수 = formatter 영역 (echo·축 과적합)**: 약한 모델(flash-lite)이 긴 analyst-only 입력을 압축 않고 echo → scrub *이전* raw에 탐지+재시도. 근거축은 질의 유형별 가변+빈 축 생략. 비교는 classifier secondary_ticker로 양종목 prefetch.
+
+**직전 세션 판단 (2026-06-04 buy_score A축)**:
+- **A점수 = 최근 연간 EPS YoY breakpoint 매핑 + 3년 raw 노출**: O'Neil 가속·일관성은 brittle 공식 대신 LLM이 원시 시계열로 판단(advisory). universe 누적은 dev 자기치유 X(cron 서버 의존). 입력 배관 6.5→6.5/7축=한계효용, 본질로 전환.
 
 **직전 세션 판단 (2026-06-04 1세션 persona MA-ride 인용)**:
 - **canon 주입 = 분석가별 `canon_categories` 필터**(`core/knowledge/compose.py::load_shared_canon`): stock_picker=`stock_selection/*`, stock_analyst=`stock-analysis/*`. **부서 밖 canon은 cross-ref만, ID 직접 인용 X**.
@@ -84,31 +88,31 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / N 뉴스부=NEWS-SOURCE-001 SPEC 게이트)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요).
 
-**마지막 작업일**: 2026-06-04 (buy_score A축 = 연간 EPS YoY 실측, 같은 날 2세션)
-**마지막 세션 로그**: [2026-06-04_buy-score-a-axis-annual-eps-2.md](c_worked/2026-06-04_buy-score-a-axis-annual-eps-2.md). 직전 = [2026-06-04_persona-ma-ride-citation.md](c_worked/2026-06-04_persona-ma-ride-citation.md).
-**산출**: yfinance `fetch_annual` + `Fundamentals.annual_eps` round-trip + `compute_annual_eps_yoy` + A축 배선(중립 탈피) + config breakpoints + persona/manifest/SPEC 갱신. **회귀 837 passed**(+8), validate 0 errors. 라이브 005930 A 5.0→10.0(YoY +33.4%). 코드 1커밋 `b84af9e`+push.
-**Git**: 코드 `b84af9e`(이미 push) + 이 wrap-up docs 별도 커밋 + push (사용자 요청).
+**마지막 작업일**: 2026-06-06 (왼쪽 뇌 거버넌스 + ANSWER-FIDELITY LB-MS1 답변 누수 봉합)
+**마지막 세션 로그**: [2026-06-06_left-brain-roadmap-answer-fidelity.md](c_worked/2026-06-06_left-brain-roadmap-answer-fidelity.md). 직전 = [2026-06-04_buy-score-a-axis-annual-eps-2.md](c_worked/2026-06-04_buy-score-a-axis-annual-eps-2.md).
+**산출**: SPEC 2-tier(roadmap/implementation) + 마스터 roadmap + `project_status.py` 단계지도/drift 감시(resume·wrap-up 통합) + ANSWER-FIDELITY-001 F1/F2/F3(formatter echo guard·근거축 가변·비교 양종목). **회귀 868 passed**(+21), validate 0 errors. 라이브 #4 비교 양종목·#8 환율 축 가변 검증.
+**Git**: 코드 5커밋 push(`9389b00`/`8bf0303`/`56bcc00`/`d9c6bfb`/`2000175`) + 이 wrap-up docs 별도 커밋 + push.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 가이드 품질/MS4 본질 전환 + N 뉴스부 SPEC + magnitude 튜닝
+## 🎯 다음에 할 일 (Top 3) — 왼쪽 뇌 완성(LEFT-BRAIN-COMPLETION-001 roadmap)
 
-우선순위 순. **buy_score A축 완료 직후 = 입력 배관 6.5/7축 라이브.** 입력 미세튜닝은 한계효용 구간 → 본질(회사처럼 작동·적중률 고도화) 한 단계 위 레버 또는 마지막 공백(N) SPEC.
+우선순위 순. **LB-MS1(답변 누수) 완료 ✅.** 왼쪽 뇌 = 분석·답변 절반의 신뢰성 종결이 현 거버넌스 단계. `uv run python scripts/project_status.py`로 단계 지도 확인.
 
-### 1. end-to-end 가이드 품질 검증 / MS4 적중률 루프 (본질 전환)
-- **왜**: 입력 배관 충분히 좋음(6.5/7축). user_want_spec "핵심" = ① 회사처럼 작동 ② 적중률 기반 고도화 — 입력 튜닝은 어느 쪽도 직접 전진 X. ①=실 종목 몇 개로 buy/sell/hold 가이드 말 되는지 눈으로(반나절) / ②=Layer 4 계좌관리자 + GUIDANCE-ACCURACY-TRACKER-001(2~3세션, "고도화"가 데이터로 가능해지는 전제)
-- **범위**: A=production-chat 실 종목 시연 + 가이드 품질 평가 / B=MS4 착수(Layer 4 + 적중률 추적). **사용자 의향 먼저 확인**
-- **예상 산출**: 가이드 품질 진단 또는 MS4 베이스라인
+### 1. LB-MS2 시장관 종합 (`MARKET-VIEW-SYNTHESIS-001` SPEC 작성)
+- **왜**: 왼쪽 뇌 채점표상 순환매(~40%)·시장 타이밍(~50%)이 *종합 판단*으로 안 올라옴. 섹터 RS·regime·매크로를 **상시 시장관 한 줄**(순환매 방향 + "지금 들어갈 때냐")로 종합하는 종합자가 비어 있음
+- **범위**: `LEFT-BRAIN-COMPLETION-001`의 자식 implementation SPEC 작성 → 구현. 입력 `INFRA-US-MACRO-SNAPSHOT-001`(미장 매크로) 흡수
+- **예상 산출**: MARKET-VIEW-SYNTHESIS-001 SPEC frozen → 시장관 종합 라이브
 
-### 2. N 뉴스부 = NEWS-SOURCE-001 SPEC 착수 (buy_score 마지막 공백)
-- **왜**: buy_score N의 뉴스부(신제품) 절반이 마지막 데이터 공백(0시드). "배선"이 아니라 SPEC 설계 프로젝트
-- **범위**: `/spec-interview` — Perplexity MCP + 유튜브 요약 + 시간축 라벨 + 학습부 DB + UX/UI(메모리 [[project_news_source_decision]] 방향성). news_curator SLOT S2 해소
-- **예상 산출**: NEWS-SOURCE-001 SPEC frozen → buy_score 7축 전부 실측 경로
+### 2. LB-MS3 뉴스부 = NEWS-SOURCE-001 SPEC 착수 (가장 무거움)
+- **왜**: 6/5형 "버블 붕괴냐 조정이냐" 내러티브의 핵심 입력 + buy_score N 마지막 축(0시드). LB-MS2 시장관에 먹일 재료. 멀티세션 SPEC 프로젝트
+- **범위**: `/spec-interview` — Perplexity MCP + 유튜브 요약 + 시간축 라벨 + 학습부 DB + UX/UI([[project_news_source_decision]]). news_curator SLOT S2 해소
+- **예상 산출**: NEWS-SOURCE-001 SPEC frozen → buy_score 7축 전부 실측
 
-### 3. k_below / MA-ride magnitude 다일 튜닝
-- **왜**: mechanism·persona는 라이브지만 magnitude(k_below/deadband 1.0/1.0)는 보수적 기본만. **전제 = universe 다일 누적인데 dev에서 cron 미작동 → 단일일(2026-06-02)만**. 매일 장후 수동 `python -m collectors.charts refresh` 또는 서버 상주로 며칠 쌓아야 풀림
-- **범위**: 누적 ≥2~3일 후 `scripts/screening_distribution.py --k-below <v>` 스윕 → `config/screening.yaml` 반영
-- **예상 산출**: 다일 분포 기반 k_below/deadband 확정 (누적 선행 필수)
+### 3. k_below / MA-ride magnitude 다일 튜닝 (함정 주의 — 후순위)
+- **왜**: mechanism·persona 라이브, magnitude(k_below/deadband 1.0/1.0)만 보수적 기본. **전제 = universe 다일 누적인데 dev cron 미작동 → 단일일만**. "시급해 보이는 함정"(roadmap 범위밖 명시), 누적 선행 필수
+- **범위**: 매일 장후 수동 refresh로 ≥2~3일 누적 후 `scripts/screening_distribution.py --k-below <v>` 스윕 → `config/screening.yaml`
+- **예상 산출**: 다일 분포 기반 k_below/deadband 확정
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
