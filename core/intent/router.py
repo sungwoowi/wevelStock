@@ -44,6 +44,10 @@ SCENARIO_ROUTING_PATH = REPO_ROOT / "config" / "scenario_analyst_routing.yaml"
 _ANALYST_SUBTASKS_CACHE: dict | None = None
 _SCENARIO_ROUTING_CACHE: dict | None = None
 
+# 종목별 점수 지표를 내는 분석가 — 비교 질의(F3)에서 2번째 종목도 호출 대상.
+# market_state_analyzer 등 종목 무관 분석가는 1회만 호출(중복 회피).
+_TICKER_SCORED_ANALYSTS = {"stock_picker", "stock_analyst"}
+
 
 def _load_analyst_subtasks() -> dict:
     """analyst_subtasks.yaml lazy 로드. 캐시."""
@@ -524,13 +528,18 @@ async def route_intent(
             log.warning("router_analyst_direct_no_ids", scenario=classification.scenario_id)
             responses.append(await _call_refuse_or_guide(classification, provider))
         else:
-            results = await asyncio.gather(
-                *(
-                    _call_analyst_safe(aid, messages, target_ticker=ticker, provider=provider)
-                    for aid in analyst_ids
-                ),
-                return_exceptions=False,
-            )
+            calls = [
+                _call_analyst_safe(aid, messages, target_ticker=ticker, provider=provider)
+                for aid in analyst_ids
+            ]
+            # F3 비교 질의 — 2번째 종목도 종목 점수 분석가에 추가 호출 (한쪽만 분석되던 결함 해소)
+            sec = classification.secondary_ticker
+            if sec:
+                calls += [
+                    _call_analyst_safe(aid, messages, target_ticker=sec, provider=provider)
+                    for aid in analyst_ids if aid in _TICKER_SCORED_ANALYSTS
+                ]
+            results = await asyncio.gather(*calls, return_exceptions=False)
             responses.extend(results)
     elif route == "refuse_or_guide":
         responses.append(await _call_refuse_or_guide(classification, provider))
@@ -769,10 +778,20 @@ async def route_intent_stream(
             async for ev in _stream_refuse_or_guide(classification, provider, "guide"):
                 yield ev
         else:
-            for aid in analyst_ids:
-                yield {"type": "agent_start", "agent": aid, "kind": "analyst"}
+            # (primary 종목, 그리고 비교 시 2번째 종목 — 종목 점수 분석가만 추가) F3
+            sec = classification.secondary_ticker
+            stream_jobs: list[tuple[str, str | None, str]] = [
+                (aid, ticker, aid) for aid in analyst_ids
+            ]
+            if sec:
+                stream_jobs += [
+                    (aid, sec, f"{aid}:{sec}")
+                    for aid in analyst_ids if aid in _TICKER_SCORED_ANALYSTS
+                ]
+            for aid, tk, label in stream_jobs:
+                yield {"type": "agent_start", "agent": label, "kind": "analyst"}
                 async for ev in _stream_analyst_safe(
-                    aid, messages, target_ticker=ticker, provider=provider, agent_label=aid
+                    aid, messages, target_ticker=tk, provider=provider, agent_label=label
                 ):
                     yield ev
     elif route == "refuse_or_guide":

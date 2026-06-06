@@ -162,3 +162,53 @@ async def test_format_answer_market_query_uses_macro_axes(monkeypatch):
                         route="analyst_direct", scenario_id=3, ticker=None)
     assert "[시장 국면]" in captured["system"]
     assert "[거시 지표]" in captured["system"]
+
+
+# ============================================================
+# F3 — 비교 양종목 (classifier 2종목 추출 + 라우터 양종목 호출)
+# ============================================================
+
+
+def test_extract_tickers_two_in_order():
+    from core.intent.classifier import _extract_tickers_from_text
+
+    out = _extract_tickers_from_text("삼성전자랑 SK하이닉스 중에 뭐가 나아?", limit=2)
+    tickers = [t for t, _ in out]
+    assert tickers == ["005930", "000660"]  # 등장 순서
+
+
+def test_extract_tickers_dedup_and_overlap():
+    from core.intent.classifier import _extract_tickers_from_text
+
+    # 같은 종목 반복 → 1회 / 부분문자열(삼성 ⊂ 삼성전자) 중복 없음
+    out = _extract_tickers_from_text("삼성전자 삼성전자 좋아?", limit=3)
+    assert [t for t, _ in out] == ["005930"]
+
+
+@pytest.mark.asyncio
+async def test_router_comparison_prefetches_both_tickers(monkeypatch):
+    import core.intent.router as rt
+    from core.intent.classifier import IntentClassification
+
+    seen: list[tuple[str, str | None]] = []
+
+    async def fake_call(aid, messages, *, target_ticker, provider):
+        seen.append((aid, target_ticker))
+        return {"kind": "analyst", "id": aid, "target": target_ticker, "text": "ok", "metadata": {}}
+
+    monkeypatch.setattr(rt, "_call_analyst_safe", fake_call)
+
+    cls = IntentClassification(
+        scenario_id=4, ticker="000660", ticker_display="SK하이닉스",
+        agent_route="analyst_direct", analyst_ids=["stock_picker", "market_state_analyzer"],
+        confidence=0.9, manual_fallback_required=False, stage="llm", latency_ms=0,
+        raw_input="삼성 vs 하이닉스", reasoning="",
+        secondary_ticker="005930", secondary_ticker_display="삼성전자",
+    )
+    await rt.route_intent(cls, [{"role": "user", "content": "삼성 vs 하이닉스"}], provider="mock")
+
+    # stock_picker 는 양 종목(000660+005930), market_state_analyzer 는 1회만
+    assert ("stock_picker", "000660") in seen
+    assert ("stock_picker", "005930") in seen
+    assert seen.count(("market_state_analyzer", "000660")) == 1
+    assert ("market_state_analyzer", "005930") not in seen

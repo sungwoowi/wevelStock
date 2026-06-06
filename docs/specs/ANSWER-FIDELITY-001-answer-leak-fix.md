@@ -3,7 +3,7 @@ spec_id: ANSWER-FIDELITY-001
 title: 답변 누수 봉합 — analyst-only 경로 raw/코드라벨/잘림 차단 + 근거축 가변 + 비교 양종목
 team: shared
 type: feature
-status: implementing
+status: verified
 level: implementation
 parent: LEFT-BRAIN-COMPLETION-001       # LB-MS1
 generates:
@@ -88,8 +88,10 @@ production-chat 가이드 품질 검증(`docs/guide_quality_review_2026-06-04.md
 
 - **F1 ✅ 완료·라이브 검증** — anti-echo system 규칙 + scrub *이전* raw 에 echo 탐지(`_looks_like_echo`) + 1회 강제 재시도 + 최후 `_strip_echo` 결정론 정리. scrub 사전 확장(`leader`/`buy_candidate`/`moderate_bull`/`supply_chain`/`alignment`/`CAN SLIM` 등). 라이브 #4 비교 = raw 헤더·코드라벨·잘림 **0**.
 - **F2 ✅ 완료·라이브 검증** — `config/evidence_axes.yaml` + `select_evidence_axes()` + 축-가변 `_formatter_system()` + 빈 축 생략 규칙. 라이브 #8 환율=`[거시 지표]` 단일, #5 시장=`시장 국면/시장 폭/거시 지표`. "정보 부족" 빈 줄 **0**.
-- **F3 ⏳ 미착수** — 비교 질의 양종목 prefetch. classifier 가 종목 1개만 반환(현 `IntentClassification.ticker` 단수)하는 구조라 **분류기 dual-ticker 확장 + 라우터 양종목 prefetch** 필요(golden 분류 테스트 영향). F1 으로 raw 누수는 막혔고 답변이 두 종목을 언급은 하나, 깊은 비교는 한쪽 지표만 — 다음 sub-step.
-- 테스트 `tests/intent/test_answer_fidelity.py` 15 신규, 전체 862 passed.
+- **F3 ✅ 완료·라이브 검증** — classifier `_extract_tickers_from_text`(등장순·중복/겹침 제거) + `IntentClassification.secondary_ticker` + 비교 scenario(4) return 주입. 라우터(`route_intent`+stream) analyst_direct 가 `secondary_ticker` 있으면 종목 점수 분석가(`_TICKER_SCORED_ANALYSTS`=stock_picker/stock_analyst)를 2번째 종목으로도 호출(market_state_analyzer 등은 1회). 라이브 #4 = 삼성·하이닉스 **양쪽이 각 근거축에서 나란히 비교**.
+- 테스트 `tests/intent/test_answer_fidelity.py` 18 신규(F1·F2·F3), 전체 **868 passed**.
+
+**LB-MS1 완료**: F1+F2+F3 모두 라이브 검증. status `verified`.
 
 ## 범위 밖 (의도적)
 

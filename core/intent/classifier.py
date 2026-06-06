@@ -97,6 +97,8 @@ class IntentClassification:
     latency_ms: int
     raw_input: str
     reasoning: str | None = None
+    secondary_ticker: str | None = None            # 비교 질의(scenario 4) 2번째 종목
+    secondary_ticker_display: str | None = None
     upstream_error: str | None = None
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -164,6 +166,48 @@ def _extract_ticker_from_text(text: str) -> tuple[str | None, str | None]:
             if ticker is not None:
                 return ticker, display
     return None, None
+
+
+# 비교 질의 — 본문에 등장한 모든 종목을 등장 순서대로 (ANSWER-FIDELITY-001 F3)
+COMPARISON_SCENARIO_ID = 4
+
+
+def _extract_tickers_from_text(text: str, limit: int = 2) -> list[tuple[str, str | None]]:
+    """발화에서 종목 여러 개를 **등장 위치 순서**로 추출 (중복·겹침 제거).
+
+    "삼성전자랑 SK하이닉스 중에" → [(005930, 삼성전자), (000660, SK하이닉스)].
+    비교 질의(scenario 4)에서 양 종목 prefetch 용. limit 개까지.
+    """
+    from core.inference.run_analyst import KR_TICKER_TO_NAME
+
+    found: list[tuple[int, str, str | None]] = []
+    seen: set[str] = set()
+
+    # 6자리 코드
+    for m in re.finditer(r"\b(\d{6})\b", text):
+        t = m.group(1)
+        if t not in seen:
+            found.append((m.start(), t, KR_TICKER_TO_NAME.get(t)))
+            seen.add(t)
+
+    # 종목명 — 긴 이름 먼저로 매칭하되, 이미 매칭된 span 과 겹치면 skip (부분문자열 중복 방지)
+    text_lower = text.lower()
+    occupied: list[tuple[int, int]] = []
+    for name in sorted(KR_NAME_TO_TICKER.keys(), key=len, reverse=True):
+        idx = text_lower.find(name.lower())
+        if idx == -1:
+            continue
+        span = (idx, idx + len(name))
+        if any(not (span[1] <= s or span[0] >= e) for s, e in occupied):
+            continue
+        ticker, display = resolve_ticker(name)
+        if ticker and ticker not in seen:
+            found.append((idx, ticker, display))
+            seen.add(ticker)
+            occupied.append(span)
+
+    found.sort(key=lambda x: x[0])
+    return [(t, d) for _, t, d in found[:limit]]
 
 
 def _stage1_classify(normalized: str) -> dict[str, Any] | None:
@@ -412,6 +456,14 @@ async def classify_intent(
     # ticker 추출은 Stage 와 무관하게 미리
     text_ticker, text_display = _extract_ticker_from_text(raw)
 
+    # 비교 질의용 2번째 종목 (primary 와 다른 첫 종목) — scenario 4 return 에만 주입 (F3)
+    sec_ticker: str | None = None
+    sec_display: str | None = None
+    for _t, _d in _extract_tickers_from_text(raw, limit=3):
+        if _t != text_ticker:
+            sec_ticker, sec_display = _t, _d
+            break
+
     # Stage 1 — 결정론
     s1 = _stage1_classify(normalized)
     if s1 is not None and s1["confidence"] >= 0.80:
@@ -430,6 +482,8 @@ async def classify_intent(
             latency_ms=int((time.monotonic() - started) * 1000),
             raw_input=raw,
             reasoning=s1.get("reasoning"),
+            secondary_ticker=sec_ticker if sid == COMPARISON_SCENARIO_ID else None,
+            secondary_ticker_display=sec_display if sid == COMPARISON_SCENARIO_ID else None,
         )
 
     if skip_stage2:
@@ -494,6 +548,8 @@ async def classify_intent(
         latency_ms=int((time.monotonic() - started) * 1000),
         raw_input=raw,
         reasoning=s2.get("reasoning"),
+        secondary_ticker=sec_ticker if sid == COMPARISON_SCENARIO_ID else None,
+        secondary_ticker_display=sec_display if sid == COMPARISON_SCENARIO_ID else None,
         upstream_error=extras.get("upstream_error"),
         extras=extras,
     )
