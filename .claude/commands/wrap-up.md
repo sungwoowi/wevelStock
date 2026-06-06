@@ -88,6 +88,15 @@ plan_file: <관련 플랜 파일 경로 있으면>
 - <커밋 여부 + 해시 또는 "아직 안 됨">
 ```
 
+### Step 2.5 — 프로젝트 단계 지도 갱신 + drift 기록 (필수)
+`Bash` 로 `PYTHONIOENCODING=utf-8 uv run python scripts/project_status.py` 실행 후:
+
+1. **SPEC status 갱신**: 이번 세션이 어떤 implementation SPEC 을 전진시켰으면, 그 SPEC frontmatter `status` 를 실제에 맞게 올린다 (draft→implementing, implementing→verified 등). 마일스톤의 자식이 완료됐으면 roadmap 의 자식 상태판 행도 갱신. 새 작업이 **roadmap 에 안 매달린 implementation SPEC** 을 만들었으면 `parent:` 를 채워 연결(미연결 = drift).
+2. **단계 위치 확정**: 이번 세션이 **어느 roadmap / 마일스톤**을 전진시켰는지 한 줄로 정리 (c_worked 배경 + 아래 Step 7 요약에 포함).
+3. **drift 점검**: 이번 작업이 ACTIVE roadmap 밖으로 샜으면 (의도된 전환이 아닌데 미연결 SPEC 증가) c_worked "다음에 이어서 할 작업" 에 "단계 복귀" 항목을 박는다.
+
+> 단계 지도는 roadmap SPEC 에서 파생되므로, 손으로 % 를 적지 말고 **SPEC status 를 정확히 유지**하는 것이 곧 진행도 갱신이다.
+
 ### Step 3 — docs/RESUME.md 갱신
 기존 RESUME.md 를 읽고 다음 섹션을 **교체**:
 
@@ -164,6 +173,7 @@ git -C "<메인 worktree 루트>" merge --ff-only <현재-브랜치>
 📝 새 로그: docs/c_worked/YYYY-MM-DD_<slug>.md
 📋 SESSIONS.md: 새 행 추가됨
 🔄 RESUME.md: Top 3 / 마지막 작업일 / 맥락 섹션 갱신
+🗺  단계: {{전진시킨 roadmap/마일스톤 + SPEC status 변화 (예: ANSWER-FIDELITY-001 implementing→verified) / drift 없음}}
 🧠 MEMORY.md: {{갱신 or 변경 없음}}
 💾 커밋: {{<해시> <메시지> or "커밋 대상 없음"}}
 🚀 main: {{FF merge → <새 tip> or "이미 최신" or "skip (사용자 요청)"}}

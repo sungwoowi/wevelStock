@@ -446,6 +446,7 @@ knowledge/
 |---|---|
 | `scaffold.py` | 새 파이프라인/MCP/SPEC 자동 생성 |
 | `validate.py` | 전체 구조 정합성 검증 |
+| `project_status.py` | roadmap SPEC 트리 → 프로젝트 단계 지도 (진행도·ACTIVE·drift 후보). `/resume`·`/wrap-up` 이 세션마다 호출 (§ SPEC 2-tier) |
 | `trace.py` | SPEC ↔ 코드 양방향 매핑 (`docs/traceability.md` 생성) |
 | `generate_domain_doc.py` | SPEC + 코드 → 도메인 문서 자동 생성 |
 | `db_init.py` | SQLite 스키마 초기화 |

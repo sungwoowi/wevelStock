@@ -21,13 +21,21 @@ description: 지난 세션 맥락을 한방에 로드하고, 플랜모드로 브
 
 `MEMORY.md` 는 자동 로드되므로 재읽기 불필요.
 
+### Step 1.5 — 프로젝트 단계 지도 (필수)
+`Bash` 로 `PYTHONIOENCODING=utf-8 uv run python scripts/project_status.py` 실행. 출력은 roadmap SPEC 트리에서 파생한 **단계 지도** = 마스터 roadmap(PROJECT-NORTH-STAR-001) → 각 roadmap → 자식 SPEC 상태 + 진행도(완료 X/N) + **현재 ACTIVE 작업**(implementing) + **roadmap 미연결 미완 SPEC**(drift 후보).
+
+이 출력으로 다음을 파악:
+- 지금 전체 단계 중 **어디**인가 (ACTIVE 작업이 속한 roadmap/마일스톤).
+- 오늘 하려는 후보가 ACTIVE 단계 또는 그 roadmap 의 다음 자식과 **맞는가** (딴 roadmap·미연결 SPEC 으로 새려 하면 인터뷰에서 짚는다).
+
 선택 사항 (필요시에만):
 - `docs/b_plan/` 의 활성 설계 문서 (RESUME.md 에서 링크된 것만)
 - `C:\Users\HOME\.claude\plans\` 의 최신 플랜 파일 (RESUME.md 에 언급된 경우)
 
 **Step 1 마치고 Step 2 가기 전에, 마음속으로 다음을 확인하세요**:
 - 지금 고려 중인 작업 후보들이 `user_want_spec.md` 의 본질(두뇌 이식 + 자동 수집 + 연속 판단 + 적중률 기반 고도화 등)에 부합하는가?
-- 본질과 어긋나면 인터뷰에서 "이 방향이 맞습니까?" 를 물어야 합니다.
+- **단계 지도(Step 1.5) 기준 drift 점검**: 후보가 현재 ACTIVE roadmap/마일스톤 안인가, 아니면 다른 roadmap·미연결 SPEC 으로 새는가? 샌다면 의도된 전환인지 인터뷰에서 확인.
+- 본질·단계와 어긋나면 인터뷰에서 "이 방향이 맞습니까?" 를 물어야 합니다.
 
 ### Step 2 — 플랜 모드 진입
 `EnterPlanMode` 도구를 호출하여 플랜 모드로 들어갑니다.
@@ -44,6 +52,12 @@ description: 지난 세션 맥락을 한방에 로드하고, 플랜모드로 브
 - 주제: {{토픽}}
 - 완료한 것: {{짧게}}
 - 미완/공백: {{짧게}}
+
+## 프로젝트 단계 위치 (project_status.py 파생)
+- 현재 ACTIVE: {{ACTIVE 작업 SPEC + 속한 roadmap/마일스톤}}
+- roadmap 진행도: {{예: LEFT-BRAIN-COMPLETION-001 완료 0/4, ANSWER-FIDELITY-001 진행중}}
+- 전체 단계 중 위치: {{마스터 roadmap 기준 한 줄 — 왼쪽 뇌 진행 중 / 오른쪽 뇌 미착수 등}}
+- drift 경고: {{미연결 미완 SPEC 이 지난 세션 대비 늘었으면 표시, 아니면 "없음"}}
 
 ## 현재 레포 상태
 - 활성 파이프라인: {{list_all_pipelines 결과 요약 — 이건 실제로 확인하지 말고 RESUME.md 서술 인용}}
