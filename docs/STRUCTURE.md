@@ -218,6 +218,18 @@ mcp-servers/<id>/
 
 ## 📜 SPEC 문서 규약
 
+### SPEC 2-tier (큰 방향 ↔ 다음다음 디테일 분리)
+혼자 하는 프로젝트에서 "디테일의 디테일"에 빠져 PM이 길을 잃지 않도록, SPEC을 2층으로 구분한다 (frontmatter `level`).
+
+| level | 역할 | `generates` | 연결 | PM 용도 |
+|---|---|---|---|---|
+| **roadmap** | 큰 방향 + 마일스톤 + 우선순위(시급도×중요도)만 못 박음. 코드 직접 생성 X | 비움 `[]` | `children:` 로 자식 implementation SPEC 나열 | "지금 어느 마일스톤인가 / 다음은 무엇인가" 중간 점검 |
+| **implementation** | 실제 `generates` 코드를 가진 SDD 단위 (= 기존 SPEC) | 있음 | `parent:` 로 소속 roadmap (선택) | 실제 코딩 단위 |
+
+- roadmap SPEC `type: roadmap`, `status` 에 `done` 사용 가능 (마일스톤 전부 완료 시).
+- 첫 roadmap 예: `LEFT-BRAIN-COMPLETION-001` (왼쪽 뇌 = 분석·답변 절반 완성, 자식 = ANSWER-FIDELITY-001 / MARKET-VIEW-SYNTHESIS-001 / NEWS-SOURCE-001 / INFRA-US-MACRO-SNAPSHOT-001).
+- 애자일 규칙: **"이 디테일이 현재 마일스톤을 전진시키나? 아니면 백로그."** roadmap의 *범위 밖* 절이 이 판단의 기준.
+
 ### 파일명: `<PREFIX>-<NNN>-<slug>.md`
 - PREFIX = 특별 분류 또는 파이프라인 관련 키워드
   - 예: `BRIEFING`, `PRINCIPLE`, `MACRO`, `TECH`
@@ -239,8 +251,9 @@ mcp-servers/<id>/
 ---
 spec_id: BRIEFING-ON-DEMAND-001
 title: 온디맨드 브리핑
-type: feature            # feature | refactor | infra | protocol
-status: draft            # draft | approved | implementing | implemented | verified
+type: feature            # feature | refactor | infra | protocol | roadmap
+status: draft            # draft | approved | implementing | implemented | verified | done
+level: implementation    # implementation(기본) | roadmap (위 § SPEC 2-tier 참조)
 generates:               # ★ 이 SPEC이 만들 파일들 (validate.py가 검증)
   - core/briefing/render.py
   - server/api/briefings_on_demand.py
