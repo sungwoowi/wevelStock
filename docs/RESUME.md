@@ -9,20 +9,22 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **본질 전환 + 왼쪽 뇌 거버넌스 착수 ✅ (2026-06-06)**. 사용자 본질 점검("실전 도움 단계 미달")으로 북극성 재확인 = **매일 도는 책임지는 페이퍼 트레이딩 데스크**(주도주·순환매·타이밍·비중·채점). 시스템을 **왼쪽 뇌(수집→분석→답변 ~65%)/오른쪽 뇌(비중→가상매매→채점→복리 0%)**로 나누고 **왼쪽 뇌 먼저 완성** 결정. 산출 3덩이: ① **SPEC 2-tier 거버넌스**(roadmap=점검용/implementation=코딩용 + 마스터 `PROJECT-NORTH-STAR-001` + `LEFT-BRAIN-COMPLETION-001`) ② **단계 지도 drift 감시**(`scripts/project_status.py` 진행도 자동 파생 + resume/wrap-up 통합) ③ **`ANSWER-FIDELITY-001`(LB-MS1) 답변 누수 봉합** F1(raw/코드라벨/잘림 echo)+F2(근거축 가변)+F3(비교 양종목) 전부 **라이브 검증·verified**. **회귀 868 passed.** 직전 = buy_score A축 연간 EPS(2026-06-04, 837 passed).
+**현재 위치**: **LB-MS2 시장관 종합 완료 ✅ (2026-06-06)**. `MARKET-VIEW-SYNTHESIS-001` **verified** — 섹터 RS·regime·매크로를 결정론 종합 → **순환매 방향(결정론 다일 후보 ⨯ Gemini 크로스체크) + 진입 자세 1줄**을 모든 답변 머리에 prepend, market_state_analyzer가 [7] 블록으로 해석. **라이브 검증**(실 KIS 데이터 + 실 Gemini flash-lite agree). 회귀 **901 passed**, LEFT-BRAIN **2/4(50%)**. 직전 동일자 = SPEC 2-tier 거버넌스 + 답변 누수 봉합(LB-MS1).
 
-**본 세션 산출** (buy_score A축 = 연간 EPS):
-- `connectors/yfinance/client.py` — `fetch_annual`(income_stmt/financials "Diluted EPS" 4년) + `fetch_full` 결합
-- `collectors/fundamentals.py` — `Fundamentals.annual_eps/annual_labels` + DB `quarterly_data` JSON round-trip(스키마 변경 0)
-- `collectors/buy_score_inputs.py` — `compute_annual_eps_yoy` 순수(≥3년) + A축 배선(중립 탈피) + 3년 시계열 md 노출
-- `config/score_inputs.yaml` — `buyscore.a_annual_eps_yoy` breakpoints / persona·manifest·SPEC A축 "공백 중립"→실측 갱신
-- 테스트 +8(순수 7 + A축 라이브 1 + DB round-trip). 829→837 passed. 코드 1커밋 `b84af9e` + push
+**본 세션 산출** (MARKET-VIEW-SYNTHESIS-001, M1/M2/M3):
+- `collectors/market_view.py` 신규 — MarketView/Rotation + synthesize(결정론) + entry_posture + build_rotation_stage1(다일 RS, ticker 매칭) + cross_check_rotation_via_llm(검증 전용=환각차단) + build_market_view(DB-first) + render/one_liner + ETF ticker→섹터명 라벨
+- `collectors/sector_rs.py` — sector_rs_snapshot persist/load/load_prev(다일 윈도우) / `core/db/schema.sql` v10 2테이블 / `config/market_view.yaml` 신규(임계+cross_check provider=gemini+sector_labels)
+- `core/intent/formatter.py`(1줄 prepend) + `core/inference/run_analyst.py`(_maybe_build_market_view_md hook sync+stream) + `core/knowledge/compose.py`([3b] 블록) + `agents/analysts/market_state_analyzer/{manifest,persona}`(reads_market_view + 해석 규칙)
+- `tests/test_market_view.py` 신규 33 + `tests/test_project_status.py` stale 정정 + `scripts/_market_view_probe.py` 라이브 프로브. 901 passed
 
-**이번 세션에 굳힌 판단 (2026-06-06)**:
-- **시스템 = 왼쪽 뇌/오른쪽 뇌**: 왼쪽(수집→분석→답변, ~65%)은 부품 있으나 종합 판단 미상승+답변 누수, 오른쪽(비중→가상매매→채점→복리, 0%) 미착수. **왼쪽 먼저 완성** 후 오른쪽. "실전 도움" 선 = 채점 루프(책임) + 푸시 + 숙의형 협업.
-- **SPEC 2-tier 거버넌스**: roadmap(level=roadmap, 큰 방향·마일스톤·코드 X, children) ↔ implementation(generates 코드, parent). 혼자 PM의 "디테일 늪 길잃음" 방지. 애자일 규칙 = "이 디테일이 현재 마일스톤 전진시키나? 아니면 백로그"(roadmap 범위밖이 기준).
-- **단계 지도는 SPEC status에서 파생**: `project_status.py`가 roadmap 트리 읽어 진행도/ACTIVE/drift 자동. 손으로 % 적지 말고 **SPEC status 정확히 유지 = 진행도 갱신**. resume/wrap-up이 세션마다 호출(훅 아님=판단은 LLM, 게이트 아님=지도만).
-- **답변 누수 = formatter 영역 (echo·축 과적합)**: 약한 모델(flash-lite)이 긴 analyst-only 입력을 압축 않고 echo → scrub *이전* raw에 탐지+재시도. 근거축은 질의 유형별 가변+빈 축 생략. 비교는 classifier secondary_ticker로 양종목 prefetch.
+**이번 세션에 굳힌 판단 (2026-06-06 시장관 종합)**:
+- **시장관 종합 = 결정론 함수 + 기존 분석가 해석** (신규 분석가 X): synthesize_market_view가 sector_rs+regime+macro 종합 → market_state_analyzer가 read·해석. 5점수 패턴(결정론 수치→LLM 해석) 동일, 역할 중복 회피.
+- **순환매 = 결정론 다일 후보 ⨯ LLM 검증** (둘 다의 실패 회피): 결정론 단독=하루치 오해 / LLM 단독=환각 → **다일 윈도우 후보 + LLM은 생성 X 검증만**(결정론 후보가 앵커). agree/disagree 신뢰도 ±·노출. WAVE-ALPHA anchor 캐싱 mirror라 답변 시점 비용 0.
+- **Anthropic 미결제 = Gemini 고정**: 실 LLM 호출은 `provider="gemini"` 명시 + Gemini tier 모델. claude-* default 금지([[project-anthropic-unbilled-gemini-only]]).
+- **섹터 라벨 = ticker 매칭**: SectorRS.sector는 ETF 브랜드명("TIGER 200 금융")이라 답변엔 ticker→친화명("금융"). 순환매 prev/today 매칭도 ticker(정체성)로 — 라벨·매칭 일관.
+
+**직전 세션 판단 (2026-06-06 거버넌스/답변누수)**:
+- **시스템 = 왼쪽 뇌/오른쪽 뇌**: 왼쪽(수집→분석→답변) 먼저 완성 후 오른쪽(비중→채점→복리). **SPEC 2-tier 거버넌스**(roadmap 점검 ↔ implementation 코딩) + **단계 지도는 SPEC status 파생**(`project_status.py`, 손으로 % 금지). 답변 누수 = formatter echo·축 과적합 봉합(F1/F2/F3).
 
 **직전 세션 판단 (2026-06-04 buy_score A축)**:
 - **A점수 = 최근 연간 EPS YoY breakpoint 매핑 + 3년 raw 노출**: O'Neil 가속·일관성은 brittle 공식 대신 LLM이 원시 시계열로 판단(advisory). universe 누적은 dev 자기치유 X(cron 서버 의존). 입력 배관 6.5→6.5/7축=한계효용, 본질로 전환.
@@ -97,22 +99,22 @@
 
 ## 🎯 다음에 할 일 (Top 3) — 왼쪽 뇌 완성(LEFT-BRAIN-COMPLETION-001 roadmap)
 
-우선순위 순. **LB-MS1(답변 누수) 완료 ✅.** 왼쪽 뇌 = 분석·답변 절반의 신뢰성 종결이 현 거버넌스 단계. `uv run python scripts/project_status.py`로 단계 지도 확인.
+우선순위 순. **LB-MS1(답변 누수)·LB-MS2(시장관 종합) 완료 ✅.** 왼쪽 뇌 2/4(50%). `uv run python scripts/project_status.py`로 단계 지도 확인.
 
-### 1. LB-MS2 시장관 종합 (`MARKET-VIEW-SYNTHESIS-001` SPEC 작성)
-- **왜**: 왼쪽 뇌 채점표상 순환매(~40%)·시장 타이밍(~50%)이 *종합 판단*으로 안 올라옴. 섹터 RS·regime·매크로를 **상시 시장관 한 줄**(순환매 방향 + "지금 들어갈 때냐")로 종합하는 종합자가 비어 있음
-- **범위**: `LEFT-BRAIN-COMPLETION-001`의 자식 implementation SPEC 작성 → 구현. 입력 `INFRA-US-MACRO-SNAPSHOT-001`(미장 매크로) 흡수
-- **예상 산출**: MARKET-VIEW-SYNTHESIS-001 SPEC frozen → 시장관 종합 라이브
+### 1. sector_rs_snapshot 일일 적재 cron 배선 (LB-MS2 마감)
+- **왜**: 순환매가 매일 누적·활성화되려면 장후 sector_rs 일자 스냅샷 적재가 필요. 현재 build_market_view 첫 호출 시 자가적재만 → prev(다일) 부재 시 rotation=none. 일일 적재 cron 없으면 순환매 절반이 안 돈다 (LB-MS2 운영 ramp). dev cron 미작동 이슈와 함께
+- **범위**: `collectors/market_macro.py::refresh_market_macro_all` 옆에 `build_market_view("KOSPI")` 적재 추가 + 서버 스케줄러 등록. ≥2일 누적 후 순환매 라이브 확인
+- **예상 산출**: 매일 장후 sector_rs+market_view 자동 적재 → 순환매 다일 누적 활성
 
 ### 2. LB-MS3 뉴스부 = NEWS-SOURCE-001 SPEC 착수 (가장 무거움)
-- **왜**: 6/5형 "버블 붕괴냐 조정이냐" 내러티브의 핵심 입력 + buy_score N 마지막 축(0시드). LB-MS2 시장관에 먹일 재료. 멀티세션 SPEC 프로젝트
+- **왜**: 6/5형 "버블 붕괴냐 조정이냐" 내러티브의 핵심 입력 + buy_score N 마지막 축(0시드). **LB-MS2 시장관에 먹일 재료**. 멀티세션 SPEC 프로젝트
 - **범위**: `/spec-interview` — Perplexity MCP + 유튜브 요약 + 시간축 라벨 + 학습부 DB + UX/UI([[project_news_source_decision]]). news_curator SLOT S2 해소
 - **예상 산출**: NEWS-SOURCE-001 SPEC frozen → buy_score 7축 전부 실측
 
-### 3. k_below / MA-ride magnitude 다일 튜닝 (함정 주의 — 후순위)
-- **왜**: mechanism·persona 라이브, magnitude(k_below/deadband 1.0/1.0)만 보수적 기본. **전제 = universe 다일 누적인데 dev cron 미작동 → 단일일만**. "시급해 보이는 함정"(roadmap 범위밖 명시), 누적 선행 필수
-- **범위**: 매일 장후 수동 refresh로 ≥2~3일 누적 후 `scripts/screening_distribution.py --k-below <v>` 스윕 → `config/screening.yaml`
-- **예상 산출**: 다일 분포 기반 k_below/deadband 확정
+### 3. INFRA-US-MACRO-SNAPSHOT-001 (미장 매크로) — MARKET-VIEW SLOT 흡수
+- **왜**: entry_posture에 **미장 야간**(SPX·NDX·VIX·DXY·US10Y) 축 가산 + one_liner "미장 risk_on/off" 토큰. MARKET-VIEW-SYNTHESIS-001이 위치만 확보(`us-macro-hook` SLOT)해 둠. LEFT-BRAIN 자식
+- **범위**: `/spec-interview` — yfinance/FRED 미장 매크로 collector + market_view entry_posture 흡수
+- **예상 산출**: INFRA-US-MACRO-SNAPSHOT-001 → 진입 자세가 미장까지 반영
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
