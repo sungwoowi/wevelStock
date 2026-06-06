@@ -67,6 +67,7 @@ async def _run_once(query: str) -> list[str]:
     fmt = await format_answer(
         user_input=query, analyst_outputs=analyst_outputs,
         strategist_outputs=strategist_outputs, provider=PROVIDER, discovery=discovery,
+        route=cls.agent_route, scenario_id=cls.scenario_id, ticker=cls.ticker,
     )
     if _is_transient(fmt.upstream_error):
         transient = True

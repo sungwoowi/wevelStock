@@ -56,6 +56,40 @@ labels:
     natural: "과열 구간 (가속도가 1차 발산을 크게 초과)"
     short: "과열 구간"
 
+  # S-Score / buy_score 분류 라벨 (ANSWER-FIDELITY-001 — #4 비교 누출 보강)
+  "leader":
+    natural: "주도주"
+    short: "주도주"
+  "laggard":
+    natural: "소외주"
+    short: "소외주"
+  "buy_candidate":
+    natural: "매수 후보"
+    short: "매수 후보"
+  "CAN SLIM":
+    natural: "성장주 7대 기준"
+    short: "성장주 기준"
+  "supply_chain":
+    natural: "수급망 일치도"
+    short: "수급망 일치도"
+  "alignment":
+    natural: "정배열 위계"
+    short: "정배열"
+
+  # regime 분류 라벨 (market_state_analyzer / buy_score M 축)
+  "strong_bull":
+    natural: "강한 상승 국면"
+    short: "강세장"
+  "moderate_bull":
+    natural: "완만한 상승 국면"
+    short: "완만한 상승장"
+  "sideways":
+    natural: "횡보 국면"
+    short: "횡보장"
+  "bear":
+    natural: "약세 국면"
+    short: "약세장"
+
   # verdict / regime
   "verdict":
     natural: "판단"

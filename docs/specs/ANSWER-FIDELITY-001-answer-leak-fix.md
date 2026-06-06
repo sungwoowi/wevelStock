@@ -3,7 +3,7 @@ spec_id: ANSWER-FIDELITY-001
 title: 답변 누수 봉합 — analyst-only 경로 raw/코드라벨/잘림 차단 + 근거축 가변 + 비교 양종목
 team: shared
 type: feature
-status: draft
+status: implementing
 level: implementation
 parent: LEFT-BRAIN-COMPLETION-001       # LB-MS1
 generates:
@@ -83,6 +83,13 @@ production-chat 가이드 품질 검증(`docs/guide_quality_review_2026-06-04.md
 - 라이브 스모크(`scripts/_guide_probe.py`) 재실행: #4 비교 · #8 환율 · #5 시장 → 코드라벨 0 · 공백 3줄 0 · 비교 양종목 등장
 - 회귀: `TESTING=1 pytest tests/intent -q` (PRODUCTION-UX-001 골든 무파손) + 전체 suite
 - `validate.py` 0 errors
+
+## 구현 진행 (2026-06-06)
+
+- **F1 ✅ 완료·라이브 검증** — anti-echo system 규칙 + scrub *이전* raw 에 echo 탐지(`_looks_like_echo`) + 1회 강제 재시도 + 최후 `_strip_echo` 결정론 정리. scrub 사전 확장(`leader`/`buy_candidate`/`moderate_bull`/`supply_chain`/`alignment`/`CAN SLIM` 등). 라이브 #4 비교 = raw 헤더·코드라벨·잘림 **0**.
+- **F2 ✅ 완료·라이브 검증** — `config/evidence_axes.yaml` + `select_evidence_axes()` + 축-가변 `_formatter_system()` + 빈 축 생략 규칙. 라이브 #8 환율=`[거시 지표]` 단일, #5 시장=`시장 국면/시장 폭/거시 지표`. "정보 부족" 빈 줄 **0**.
+- **F3 ⏳ 미착수** — 비교 질의 양종목 prefetch. classifier 가 종목 1개만 반환(현 `IntentClassification.ticker` 단수)하는 구조라 **분류기 dual-ticker 확장 + 라우터 양종목 prefetch** 필요(golden 분류 테스트 영향). F1 으로 raw 누수는 막혔고 답변이 두 종목을 언급은 하나, 깊은 비교는 한쪽 지표만 — 다음 sub-step.
+- 테스트 `tests/intent/test_answer_fidelity.py` 15 신규, 전체 862 passed.
 
 ## 범위 밖 (의도적)
 

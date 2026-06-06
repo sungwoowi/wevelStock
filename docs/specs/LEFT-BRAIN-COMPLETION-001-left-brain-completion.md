@@ -60,7 +60,7 @@ depends_on:
 
 | 자식 SPEC | level | status | 비고 |
 |---|---|---|---|
-| `ANSWER-FIDELITY-001` | implementation | draft | LB-MS1. 작성 완료 (#2 raw누수+#3 근거축가변+비교양종목). 구현 대기 |
+| `ANSWER-FIDELITY-001` | implementation | implementing | LB-MS1. **F1 raw누수+F2 근거축가변 ✅ 라이브 검증** / F3 비교 양종목 ⏳(classifier dual-ticker) |
 | `MARKET-VIEW-SYNTHESIS-001` | implementation | (미작성) | LB-MS2. LB-MS1 후 |
 | `INFRA-US-MACRO-SNAPSHOT-001` | implementation | 백로그 | LB-MS2 입력 (③에 흡수) |
 | `NEWS-SOURCE-001` | implementation | 백로그 (방향성 합의됨) | LB-MS3. `/spec-interview` 필요 |

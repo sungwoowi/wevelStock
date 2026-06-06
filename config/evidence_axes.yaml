@@ -1,0 +1,30 @@
+# ANSWER-FIDELITY-001 (LB-MS1) — 질의 유형별 근거축 사전 (F2).
+#
+# formatter 가 고정 3요소(수급/차트/실적) 대신 질의 유형에 맞는 근거 축을 동적 선택.
+# 환율 질의에 "[실적] 정보 부족" 같은 무의미한 축이 강제 부착되던 과적합(#3) 해소.
+# watchdog hot reload 대상 — 하드코딩 금지.
+#
+# 선택 규칙 (formatter.select_evidence_axes):
+#   1. ticker 지정(종목 질의)   → default (수급/차트/실적)
+#   2. ticker None + market_scenarios → market_macro
+#   3. 그 외                      → default
+# 빈 축(raw 에 근거 없음)은 formatter 가 "정보 부족"으로 채우지 않고 **생략**한다.
+#
+# NOTE: 30 시나리오 전체 정밀 매핑은 ANSWER-FIDELITY-001 § INTERVIEW-SLOT(evidence-axes-taxonomy)
+#       에서 확장. 본 v1 은 종목/시장·거시 2 갈래 + 빈 축 생략이 핵심.
+
+# 종목 질의 기본 (track_a / track_b / both / 종목 지정 analyst_direct)
+default:
+  - 수급
+  - 차트
+  - 실적
+
+# 시장·거시 질의 (ticker 없음 + 시장 국면/환율/금리 류) — scenario 3 등
+market_macro:
+  - 시장 국면
+  - 시장 폭
+  - 거시 지표
+
+# ticker 없이 시장·거시 축을 쓸 scenario_id 목록
+market_scenarios:
+  - 3

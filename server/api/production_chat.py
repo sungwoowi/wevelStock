@@ -165,6 +165,9 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
                     strategist_outputs=strategist_outputs,
                     provider=payload.provider,
                     discovery=_is_discovery(classification),
+                    route=classification.agent_route,
+                    scenario_id=classification.scenario_id,
+                    ticker=classification.ticker,
                 )
             formatted = FormattedAnswer(
                 text=fmt.text,
@@ -301,6 +304,9 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
                             strategist_outputs=list(strategist_buffer.values()),
                             provider=payload.provider,
                             discovery=_is_discovery(classification),
+                            route=classification.agent_route,
+                            scenario_id=classification.scenario_id,
+                            ticker=classification.ticker,
                         )
                     fmt_event = {
                         "type": "formatted",

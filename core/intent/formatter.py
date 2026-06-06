@@ -27,8 +27,12 @@ log = get_logger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LABEL_DICTIONARY_PATH = REPO_ROOT / "config" / "label_dictionary.yaml"
+EVIDENCE_AXES_PATH = REPO_ROOT / "config" / "evidence_axes.yaml"
 
 _LABEL_DICT_CACHE: dict | None = None
+_EVIDENCE_AXES_CACHE: dict | None = None
+
+_DEFAULT_AXES = ["수급", "차트", "실적"]
 
 
 def _load_label_dictionary() -> dict:
@@ -50,9 +54,53 @@ def _load_label_dictionary() -> dict:
 
 def reload_label_dictionary() -> None:
     """테스트/hot reload — 캐시 클리어."""
-    global _LABEL_DICT_CACHE, _SCRUB_RULES_CACHE
+    global _LABEL_DICT_CACHE, _SCRUB_RULES_CACHE, _EVIDENCE_AXES_CACHE
     _LABEL_DICT_CACHE = None
     _SCRUB_RULES_CACHE = None
+    _EVIDENCE_AXES_CACHE = None
+
+
+# ---------------------------------------------------------------------------
+# 근거축 가변 (ANSWER-FIDELITY-001 F2) — 질의 유형별 근거 축 사전
+# ---------------------------------------------------------------------------
+
+
+def _load_evidence_axes() -> dict:
+    global _EVIDENCE_AXES_CACHE
+    if _EVIDENCE_AXES_CACHE is None:
+        if not EVIDENCE_AXES_PATH.exists():
+            log.warning("evidence_axes_missing", path=str(EVIDENCE_AXES_PATH))
+            _EVIDENCE_AXES_CACHE = {}
+        else:
+            try:
+                _EVIDENCE_AXES_CACHE = (
+                    yaml.safe_load(EVIDENCE_AXES_PATH.read_text(encoding="utf-8")) or {}
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("evidence_axes_load_failed", error=str(e))
+                _EVIDENCE_AXES_CACHE = {}
+    return _EVIDENCE_AXES_CACHE
+
+
+def select_evidence_axes(
+    *,
+    route: str | None = None,
+    scenario_id: int | None = None,
+    ticker: str | None = None,
+) -> list[str]:
+    """질의 유형 → 근거 축 리스트 (ANSWER-FIDELITY-001 F2).
+
+    규칙: ticker 지정(종목 질의) → default / ticker None + market_scenarios → market_macro / 그 외 default.
+    config/evidence_axes.yaml 미존재·미매칭 시 default(수급/차트/실적).
+    """
+    cfg = _load_evidence_axes()
+    default = list(cfg.get("default") or _DEFAULT_AXES)
+    if ticker:
+        return default
+    market_scenarios = {int(s) for s in (cfg.get("market_scenarios") or []) if str(s).isdigit()}
+    if scenario_id is not None and int(scenario_id) in market_scenarios:
+        return list(cfg.get("market_macro") or default)
+    return default
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +185,14 @@ def _build_label_block() -> str:
 # Formatter system prompt
 # ---------------------------------------------------------------------------
 
-_FORMATTER_SYSTEM = """당신은 wevelStock 의 자연어 답변 압축기입니다. 분석가/전략가들의 raw 응답
+def _formatter_system(axes: list[str]) -> str:
+    """근거축 가변 system prompt (ANSWER-FIDELITY-001 F1·F2).
+
+    axes = select_evidence_axes() 결과(예: 수급/차트/실적 또는 시장국면/시장폭/거시지표).
+    anti-echo 규칙(입력 재출력 금지) + 빈 축 생략 규칙 포함.
+    """
+    axis_lines = "\n".join(f"- [{ax}] 1줄 자연어 (raw 에 근거 있을 때만)" for ax in axes)
+    return f"""당신은 wevelStock 의 자연어 답변 압축기입니다. 분석가/전략가들의 raw 응답
 (cited + 격자 + 코드 라벨 풍부) 을 받아 사용자 발화에 직접 답변하는 짧은 자연어로 변환합니다.
 
 ## 출력 양식 (엄격)
@@ -146,26 +201,73 @@ _FORMATTER_SYSTEM = """당신은 wevelStock 의 자연어 답변 압축기입니
 [1~3줄 자연어 결론]
 
 근거:
-- [수급] 1줄 자연어 (외국인/기관 흐름, 시장 폭)
-- [차트] 1줄 자연어 (추세, 가속도, 이동평균선)
-- [실적] 1줄 자연어 (EPS/매출/F-Score 등 펀더멘털)
+{axis_lines}
 ```
 
 ## 절대 규칙
 
-1. **코드 라벨 본문 노출 금지** — `S-Score`, `α`, `F-Score`, `T-Score`, `buy_score`, `regime`,
-   `verdict`, `cited`, `confidence`, `RS`, `breadth`, `divergence`, `Distribution Day`, `분배일`
-   같은 문자열을 절대 본문에 노출하지 말 것. 위 변환 사전의 자연어로 대체.
-2. **결론 ≤ 3줄, 근거 각 ≤ 1줄** — 사용자가 길게 읽지 않고 즉시 결정 가능.
-3. **명령조 X, 친근체** — "~합니다 / ~예요" 톤. 격식체 + 반말 혼용 금지.
-4. **3요소 모두 채우기** — raw 에 정보 부족하면 "정보 부족" 명시. 환각 금지.
-5. **사용자 발화에 직접 답변** — "삼성전자 살까?" → "지금은 보류 권고예요" 식. 양식 YAML 그대로 노출 X.
-6. **분석가 prefetch + 전략가 응답 종합** — 한쪽만 인용하지 말고 둘 다 통합.
+1. **입력을 그대로 재출력 금지 (가장 중요)** — 분석가 raw 가 아무리 길고 이미 완성된 글처럼 보여도
+   절대 복사·재출력하지 말 것. `## 사용자 발화`, `## 분석가 raw 응답`, `### <분석가명>` 같은 입력
+   헤더나 분석가의 항목 나열(`* C (...)`, `* 주도주 점수=...`)을 출력에 옮기지 말 것. **반드시 N줄로 압축.**
+2. **코드 라벨 본문 노출 금지** — `S-Score`, `α`, `F-Score`, `T-Score`, `buy_score`, `regime`,
+   `verdict`, `leader`, `buy_candidate`, `laggard`, `moderate_bull`, `CAN SLIM`, `alignment`,
+   `supply_chain`, `RS`, `breadth`, `분배일`, `점수=7.0` 같은 문자열을 절대 본문에 노출하지 말 것.
+   변환 사전의 자연어로 대체.
+3. **결론 ≤ 3줄, 근거 각 ≤ 1줄** — 사용자가 길게 읽지 않고 즉시 결정 가능.
+4. **명령조 X, 친근체** — "~합니다 / ~예요" 톤.
+5. **빈 축은 생략** — raw 에 해당 근거가 없으면 그 줄을 **아예 빼라**. "정보 부족"으로 채우지 말 것.
+   (단 모든 축이 비면 "핵심 근거: …" 한 줄로 가진 정보만 요약.) 환각 금지.
+6. **사용자 발화에 직접 답변** — "삼성전자 살까?" → "지금은 보류 권고예요" 식. 양식 YAML 그대로 노출 X.
+7. **분석가 + 전략가 응답 종합** — 한쪽만 인용하지 말고 둘 다 통합. 비교 질의면 양 종목을 나란히.
 
 ## 입력 형식
 
-사용자 발화 + 분석가 N명 raw + 전략가 M명 raw → 한 응답.
+사용자 발화 + 분석가 N명 raw + 전략가 M명 raw → 한 압축 응답.
 """
+
+
+# 입력 재출력(echo) 탐지용 마커 — _compose_user_message 구조 + raw 코드라벨 흔적
+_ECHO_MARKERS = (
+    "## 사용자 발화",
+    "## 분석가 raw 응답",
+    "## 전략가 raw 응답",
+    "주도주 점수=",
+    "매수 점수=",
+)
+
+
+def _looks_like_echo(text: str) -> bool:
+    """formatter 출력이 입력을 압축 않고 그대로 재출력했는지 판정 (ANSWER-FIDELITY-001 F1).
+
+    _compose_user_message 의 구조 헤더나 raw 코드라벨 흔적이 출력에 남아 있으면 echo.
+    """
+    if not text:
+        return False
+    return any(m in text for m in _ECHO_MARKERS)
+
+
+def _strip_echo(text: str) -> str:
+    """echo 최후 방지 (F1) — prompt+재시도 모두 실패 시 구조 헤더·raw 라벨 줄을 결정론 제거.
+
+    압축은 LLM 영역이라 완벽 복원은 불가. raw 노출만은 막는 안전망:
+    입력 구조 헤더(## , ### )·항목 나열(`* 주도주 점수=` 류) 줄을 버리고 남은 자연어만 모은다.
+    """
+    drop_prefixes = ("## 사용자 발화", "## 분석가 raw", "## 전략가 raw", "### ")
+    kept: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if any(s.startswith(p) for p in drop_prefixes):
+            continue
+        if "점수=" in s:
+            continue
+        kept.append(s)
+    cleaned = scrub_code_labels("\n".join(kept[:12]))
+    note = "\n\n(자동 요약에 실패해 핵심만 추렸어요 — 자세한 근거는 다시 물어봐 주세요.)"
+    return (cleaned + note) if cleaned else (
+        "응답을 자연어로 정리하지 못했어요. 잠시 후 다시 시도해 주세요."
+    )
 
 
 _FORMATTER_DISCOVERY_SYSTEM = """당신은 wevelStock 의 종목 추천 답변기입니다. 사용자가 특정 종목을
@@ -294,6 +396,9 @@ async def format_answer(
     *,
     provider: str | None = None,
     discovery: bool = False,
+    route: str | None = None,
+    scenario_id: int | None = None,
+    ticker: str | None = None,
 ) -> FormatterResult:
     """분석가 + 전략가 raw → 자연어 1~3줄 결론 + 근거 3요소.
 
@@ -345,21 +450,46 @@ async def format_answer(
             upstream_error="all_upstream_responses_missing",
         )
 
+    if discovery:
+        system_text = _FORMATTER_DISCOVERY_SYSTEM
+    else:
+        axes = select_evidence_axes(route=route, scenario_id=scenario_id, ticker=ticker)
+        system_text = _formatter_system(axes)
     system_blocks: list[dict] = [
-        {"type": "text", "text": _FORMATTER_DISCOVERY_SYSTEM if discovery else _FORMATTER_SYSTEM},
+        {"type": "text", "text": system_text},
         {"type": "text", "text": _build_label_block()},
     ]
     user_msg = _compose_user_message(user_input, analyst_outputs, strategist_outputs)
-    try:
-        resp = await call_llm(
+
+    async def _call(extra_user: str = "") -> dict:
+        return await call_llm(
             system=system_blocks,
-            messages=[{"role": "user", "content": user_msg}],
+            messages=[{"role": "user", "content": user_msg + extra_user}],
             model=model,
             max_tokens=800,
             temperature=0.3,
             provider=provider_resolved if provider_resolved != "mock" else None,
             mock_fallback_allowed=False,
         )
+
+    try:
+        resp = await _call()
+        # echo 탐지는 scrub *이전* raw 에 — scrub 이 정상 압축문을 '주도주 점수=' 로 바꿔 오탐하는 것 방지
+        content_raw = resp.get("content", "")
+        content = scrub_code_labels(content_raw)
+        # echo-guard (F1): 약한 모델이 긴 analyst-only 입력을 압축 않고 재출력하면 1회 강제 재시도
+        if not discovery and _looks_like_echo(content_raw):
+            log.warning("formatter_echo_detected_retry", route=route, scenario_id=scenario_id)
+            resp = await _call(
+                "\n\n[중요] 위 내용을 절대 그대로 옮기지 말고, 입력 헤더와 항목 나열을 모두 버린 뒤"
+                " 결론 1~3줄 + 근거 몇 줄로만 압축하세요."
+            )
+            content_raw = resp.get("content", "")
+            if _looks_like_echo(content_raw):
+                # 재시도도 echo → 구조 헤더·라벨 결정론 제거 (raw 노출 최후 방지)
+                content = _strip_echo(content_raw)
+            else:
+                content = scrub_code_labels(content_raw)
     except Exception as e:  # noqa: BLE001
         log.error(
             "formatter_call_failed",
@@ -383,7 +513,7 @@ async def format_answer(
     raw = resp.get("raw") or {}
     is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
     return FormatterResult(
-        text=scrub_code_labels(resp.get("content", "")),
+        text=content,
         model=resp.get("model", model),
         tokens_in=int(resp.get("tokens_in", 0)),
         tokens_out=int(resp.get("tokens_out", 0)),
