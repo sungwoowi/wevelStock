@@ -90,6 +90,9 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 - 단순 파일 read 에 Explore/Task 서브에이전트 쓰지 말 것 — Read 직접 호출.
 - LLM 파이프라인 검증 시 캐시된 응답을 보려면 `/resend`, 새 호출이 필요하면 `/run?force=true`. 혼동 금지.
 - 사용자가 작업 중간에 개념적 질문을 던지면 **곧장 구현 계속하지 말고 의도 먼저 확인**.
+- **Bash 명령에 `cd <레포> && ...` 프리픽스 금지** (서브에이전트 포함). 작업 디렉터리는 호출 간 유지되고 시작점이 레포 루트라 cd 불필요. compound `cd && x` 는 권한 매칭을 깨서(문자열이 `cd` 로 시작 → `Bash(uv *)` 등 allowlist 미스) **불필요한 권한 프롬프트**를 유발한다. 그냥 bare 명령(`uv run ...`, `git ...`)을 직접 실행.
+  - 다른 디렉터리가 필요하면: ① **경로 인자·도구 플래그 우선** (`git -C <dir>`, `pytest <경로>`, `ls "<절대경로>"`) ② 정 필요하면 **독립 `cd <abs>` 를 별도 호출**로 (cd 자동 허용 + cwd 유지). compound 로 묶지 말 것.
+  - 환경변수 프리픽스는 allowlist 에 맞는 형태로 (`TESTING=1 uv ...`, `PYTHONIOENCODING=utf-8 uv ...`, 둘 다면 `TESTING=1 PYTHONIOENCODING=utf-8 uv ...`).
 
 ## 런타임 아키텍처 핵심
 - **단일 Python 프로세스** = FastAPI + APScheduler + asyncio 병렬 파이프라인 실행
