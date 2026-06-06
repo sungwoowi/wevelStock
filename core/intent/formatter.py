@@ -298,6 +298,21 @@ _FORMATTER_DISCOVERY_SYSTEM = """당신은 wevelStock 의 종목 추천 답변�
 """
 
 
+def _market_view_prefix() -> str:
+    """MARKET-VIEW-SYNTHESIS-001 (M2) — 모든 답변 머리에 시장관 1줄 prepend.
+
+    결정론 DB 캐시 read only (답변 시점 LLM 0). 스냅샷 부재·실패 시 빈 문자열(답변 막지 않음).
+    config/market_view.yaml::prepend.enabled 토글.
+    """
+    try:
+        from collectors.market_view import get_cached_one_liner
+
+        one = get_cached_one_liner()
+        return f"📊 {one}\n\n" if one else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 @dataclass
 class FormatterResult:
     text: str
@@ -512,6 +527,8 @@ async def format_answer(
     latency_ms = int((time.monotonic() - started) * 1000)
     raw = resp.get("raw") or {}
     is_mock = "-mock" in str(resp.get("model", "")) or bool(raw.get("mock"))
+    # MARKET-VIEW-SYNTHESIS-001 (M2) — 시장관 1줄 상존 (scrub 이후 = 이미 자연어라 영향 X)
+    content = _market_view_prefix() + content
     return FormatterResult(
         text=content,
         model=resp.get("model", model),

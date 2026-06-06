@@ -1,0 +1,47 @@
+# MARKET-VIEW-SYNTHESIS-001 — 시장관 종합 설정 (하드코딩 금지, watchdog hot reload)
+#
+# synthesize_market_view 결정론 임계 + 순환매 다일 윈도우 + entry_posture 매트릭스 + prepend 토글.
+# 임계 다일 캘리브레이션은 SLOT (universe 누적 후 튜닝). 보수적 기본만 둔다.
+
+rotation:
+  window_days: 5          # rs_change N일 윈도우 (1일 아님 — single-day 오해 방지, [[feedback_backtest_essence]])
+  leading_top_n: 3        # leading/fading 섹터 노출 수
+  in_threshold: 0.5       # rs_score N일 상승 ≥ 이만큼 = 자금 유입(to) 후보
+  out_threshold: 0.5      # rs_score N일 하락 ≥ 이만큼 = 자금 유출(from) 후보
+  strong_change: 1.5      # 최대 변화폭 ≥ 이만큼 = strength "strong" (미만 = "mild")
+
+entry_posture:
+  kill_switch_dd: 4       # 25일 분산일 ≥ 이만큼 = defensive 강제 (market_state_analyzer kill switch 정합)
+  ceiling_dd: 5           # 분산일 ≥ 이만큼 = aggressive 차단
+  breadth_strong: 0.55    # 상승종목 비율 ≥ 이만큼 = aggressive 조건
+
+# 크로스체크(M2) LLM 모델 — 결정론 후보 검증용 (FAST tier).
+# Gemini 고정 (Anthropic 미결제 — provider 명시로 Anthropic 폴백 차단). 값싼 yes/no 검증이라 flash-lite.
+cross_check:
+  enabled: true
+  provider: "gemini"
+  model: "gemini-2.5-flash-lite"
+  ttl_days: 1             # 일 1회 캐싱 (시장관은 매일 갱신)
+
+prepend:
+  enabled: true           # formatter 가 모든 production-chat 답변 머리에 시장관 1줄 prepend
+
+# 섹터 ETF ticker → 사용자 친화 섹터명 (one_liner·[7] 블록 표기용).
+# SectorRS.sector 는 ETF 브랜드명("TIGER 200 금융")이라 답변엔 순수 섹터명("금융")이 자연스럽다.
+# ticker 키 = 이름 인코딩 무관·안정. 미매칭 ticker 는 ETF 원명 fallback.
+sector_labels:
+  "091160": "반도체"
+  "396500": "AI반도체장비"
+  "394670": "AI반도체"
+  "487240": "AI전력"
+  "472170": "원자력"
+  "091180": "자동차"
+  "139260": "금융"
+  "139270": "건설"
+  "0080G0": "방산"
+  "463250": "방산우주"
+  "466920": "조선"
+  "396510": "로봇"
+  "305720": "2차전지"
+  "244580": "바이오"
+  "228790": "화장품"

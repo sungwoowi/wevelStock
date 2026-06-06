@@ -25,9 +25,31 @@ def test_master_roadmap_is_root_and_nests_left_brain():
 
 
 def test_active_lists_only_governed_implementing():
+    # 거버넌스 불변식을 *실 SPEC 데이터* 기준으로 검증 (특정 SPEC 의 transient status 하드코딩 금지 —
+    # 그 SPEC 이 verified 로 넘어가면 깨지는 stale 테스트가 됨. 2026-06-06 stale 발견 후 구조화).
+    from scripts.project_status import _INPROGRESS, _load_specs
+
     rpt = build_status_report()
     active_block = rpt.split("현재 ACTIVE 작업")[1].split("roadmap 미연결")[0]
-    # ANSWER-FIDELITY-001 은 roadmap 자식 + implementing → ACTIVE
-    assert "ANSWER-FIDELITY-001" in active_block
-    # legacy stale-implementing(미연결)은 ACTIVE 에서 제외
-    assert "BRIEFING-ON-DEMAND-001" not in active_block
+    listed = {
+        ln.replace("🔨", "").strip()
+        for ln in active_block.splitlines()
+        if "🔨" in ln
+    }
+
+    specs = _load_specs()
+    roadmap_children: set[str] = set()
+    for p in specs.values():
+        if p.meta.level == "roadmap":
+            roadmap_children.update(p.meta.children)
+
+    expected = {
+        sid for sid, p in specs.items()
+        if p.meta.level == "implementation"
+        and p.meta.status in _INPROGRESS
+        and (sid in roadmap_children or bool(p.meta.parent))
+    }
+    # ACTIVE = roadmap 연결 + implementing 인 implementation 만 (legacy stale-implementing 제외)
+    assert listed == expected
+    # 핵심 불변식: legacy stale-implementing(미연결)은 어떤 경우에도 ACTIVE 아님
+    assert "BRIEFING-ON-DEMAND-001" not in listed

@@ -179,6 +179,7 @@ async def build_pipeline_prompt(
     rag_dept: str | None = None,
     canon_categories: list[str] | None = None,
     market_snapshot_md: str | None = None,
+    market_view_md: str | None = None,
     chart_data_md: str | None = None,
     alpha_3tf_md: str | None = None,
     fundamental_data_md: str | None = None,
@@ -250,6 +251,14 @@ async def build_pipeline_prompt(
         blocks.append({
             "type": "text",
             "text": f"## Market Snapshot (current)\n{market_snapshot_md}",
+        })
+
+    # [3b] 시장관 종합 (not cached — 일 1회 갱신, MARKET-VIEW-SYNTHESIS-001, market_state_analyzer 한정)
+    if market_view_md:
+        blocks.append({
+            "type": "text",
+            "text": market_view_md if market_view_md.lstrip().startswith("##")
+                else f"## 시장관 종합\n{market_view_md}",
         })
 
     # [4] Chart data (not cached — 60s 갱신, INFRA-CHART-DATA-001)

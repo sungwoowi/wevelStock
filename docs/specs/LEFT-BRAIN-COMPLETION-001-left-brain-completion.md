@@ -40,8 +40,8 @@ depends_on:
 |---|---|---|
 | 주도주 (Track A·발굴·MA-ride) | ~80% | magnitude 미튜닝 (범위 밖) |
 | 파동·추세추종 (WAVE-ALPHA) | ~85% | LLM anchor Stage2 파싱 (폴백 동작 중) |
-| **순환매** (섹터 RS) | ~40% | 재료는 있으나 **"돈이 A→B 섹터로 돈다" 종합 판단 부재** |
-| **시장 타이밍** (6/5 버블 예시) | ~50% | regime 라벨뿐, **상시 시장관 미종합 + 뉴스부 0 + 미장 매크로 없음** |
+| **순환매** (섹터 RS) | ~70% | LB-MS2 완료 — "돈이 A→B 섹터로 돈다" 결정론⨯Gemini 종합 라이브. 잔여=일일 cron 다일 누적 |
+| **시장 타이밍** (6/5 버블 예시) | ~70% | LB-MS2 완료 — 상시 시장관 1줄(regime+진입자세) 종합·prepend 라이브. 잔여=뉴스부(LB-MS3)·미장 매크로 |
 | **답변 전달** (formatter) | ~95% | LB-MS1 완료 (raw누수·축과적합·비교 봉합). 잔여=세부 톤 |
 
 **한 줄 진단**: 부품은 대부분 있으나 (1) 순환매·시장타이밍이 *종합 판단*으로 안 올라왔고, (2) 만든 판단조차 *답변층에서 샌다*. 왼쪽 뇌 완성 = 이 둘을 닫는 것.
@@ -51,7 +51,7 @@ depends_on:
 | # | 마일스톤 | 자식 SPEC | 우선순위 | 완료 신호 |
 |---|---|---|---|---|
 | ~~**LB-MS1**~~ ✅ | 답변 누수 봉합 — formatter 가 분석가 판단을 raw 노출·잘림·코드라벨 없이 전달 | `ANSWER-FIDELITY-001` (verified) | **완료 (2026-06-06)** | ✅ 라이브: 코드라벨 0 · 잘림 0 · 비교 양종목 0→2 |
-| **LB-MS2** | 시장관 종합 — 섹터 RS·regime·매크로를 *상시 시장관 한 줄* 로 종합 (순환매 + "지금 들어갈 때냐") | `MARKET-VIEW-SYNTHESIS-001` (+ `INFRA-US-MACRO-SNAPSHOT-001` 입력) | 중요⊗비시급 (계획) | 묻기 전에도 "현재 regime + 주도 섹터 + 순환 방향 + 진입 자세" 1 줄 상존 |
+| ~~**LB-MS2**~~ ✅ | 시장관 종합 — 섹터 RS·regime·매크로를 *상시 시장관 한 줄* 로 종합 (순환매 + "지금 들어갈 때냐") | `MARKET-VIEW-SYNTHESIS-001` (verified) | **완료 (2026-06-06)** | ✅ 라이브: 답변 머리 1줄 상존(regime·주도섹터·순환·진입) + 순환매 결정론⨯Gemini 크로스체크 agree |
 | **LB-MS3** | 뉴스부 — 장기/단기 이슈 수집·해석을 시장관과 buy_score N 축에 공급 | `NEWS-SOURCE-001` | 중요⊗비시급 (가장 무거움, 마지막) | 6/5 형 "버블 붕괴냐 조정이냐" 내러티브를 LB-MS2 시장관이 인용 · buy_score N 축 7/7 라이브 |
 
 > LB-MS1 → LB-MS2 → LB-MS3 순. LB-MS2 는 뉴스(LB-MS3) 없이도 *지금 있는 재료*(섹터 RS·regime·매크로)로 먼저 골격을 세우고, 뉴스는 나중에 이 종합자에 먹인다.
@@ -61,7 +61,7 @@ depends_on:
 | 자식 SPEC | level | status | 비고 |
 |---|---|---|---|
 | `ANSWER-FIDELITY-001` | implementation | verified | LB-MS1 **완료** — F1 raw누수+F2 근거축가변+F3 비교 양종목 전부 라이브 검증 (868 passed) |
-| `MARKET-VIEW-SYNTHESIS-001` | implementation | (미작성) | LB-MS2. LB-MS1 후 |
+| `MARKET-VIEW-SYNTHESIS-001` | implementation | verified | LB-MS2 **완료** (2026-06-06) — 결정론 종합 + market_state_analyzer 해석 + formatter 1줄 prepend. 순환매=결정론 다일 후보 ⨯ Gemini 크로스체크. M1/M2/M3 + 33테스트 + **라이브 검증**(실 데이터·실 Gemini agree). 잔여 SLOT=일일 cron·미장매크로·전략가 publish |
 | `INFRA-US-MACRO-SNAPSHOT-001` | implementation | 백로그 | LB-MS2 입력 (③에 흡수) |
 | `NEWS-SOURCE-001` | implementation | 백로그 (방향성 합의됨) | LB-MS3. `/spec-interview` 필요 |
 

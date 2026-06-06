@@ -93,6 +93,7 @@ class AnalystSpec:
     reads_flow_inputs: bool = False  # INFRA-SCORE-INPUTS-001 F-Score — flow_analyzer 만 True
     reads_screening: bool = False  # INFRA-SCORE-INPUTS-001 v2 S-Score — stock_picker 만 True
     reads_buyscore: bool = False  # INFRA-SCORE-INPUTS-001 v3 buy_score — stock_picker 만 True
+    reads_market_view: bool = False  # MARKET-VIEW-SYNTHESIS-001 시장관 종합 — market_state_analyzer 만 True
 
 
 @dataclass
@@ -137,6 +138,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         reads_flow_inputs=bool(raw.get("reads_flow_inputs", False)),
         reads_screening=bool(raw.get("reads_screening", False)),
         reads_buyscore=bool(raw.get("reads_buyscore", False)),
+        reads_market_view=bool(raw.get("reads_market_view", False)),
     )
 
 
@@ -752,6 +754,33 @@ async def _maybe_build_buy_score_inputs_md(
     }
 
 
+async def _maybe_build_market_view_md(
+    spec: AnalystSpec,
+) -> tuple[str | None, dict[str, Any]]:
+    """MARKET-VIEW-SYNTHESIS-001 — reads_market_view 충족 시 시장관 종합 [7] md.
+
+    market_state_analyzer 만 활성. ticker 무관(시장 레벨). build_market_view 는 DB-first 라
+    오늘 스냅샷 있으면 즉시(LLM 0), 없으면 1회 계산(rotation 크로스체크는 일1회 캐싱).
+    """
+    base_meta: dict[str, Any] = {"market_view_failures": []}
+    if not spec.reads_market_view:
+        return None, base_meta
+    try:
+        from collectors.market_view import (
+            build_market_view,
+            market_view_metadata,
+            render_market_view_md,
+        )
+
+        view = await build_market_view("KOSPI")
+    except Exception as e:  # noqa: BLE001
+        log.warning("market_view_inject_failed", error=str(e))
+        base_meta["market_view_failures"] = [f"build_market_view:{type(e).__name__}"]
+        return None, base_meta
+
+    return render_market_view_md(view), market_view_metadata(view)
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -808,6 +837,7 @@ async def run_analyst(
     buy_score_inputs_md, buyscore_meta = await _maybe_build_buy_score_inputs_md(
         spec, target_ticker, snapshot
     )
+    market_view_md, market_view_meta = await _maybe_build_market_view_md(spec)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -819,6 +849,7 @@ async def run_analyst(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        market_view_md=market_view_md,
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
@@ -892,6 +923,7 @@ async def run_analyst(
         **flow_inputs_meta,
         **screening_meta,
         **buyscore_meta,
+        **market_view_meta,
     }
 
     log.info(
@@ -959,6 +991,7 @@ async def run_analyst_stream(
     buy_score_inputs_md, buyscore_meta = await _maybe_build_buy_score_inputs_md(
         spec, target_ticker, snapshot
     )
+    market_view_md, market_view_meta = await _maybe_build_market_view_md(spec)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -970,6 +1003,7 @@ async def run_analyst_stream(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        market_view_md=market_view_md,
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
@@ -1067,6 +1101,7 @@ async def run_analyst_stream(
         **flow_inputs_meta,
         **screening_meta,
         **buyscore_meta,
+        **market_view_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 

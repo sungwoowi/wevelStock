@@ -22,6 +22,7 @@ import pandas as pd
 
 from collectors.charts import load_ohlcv_from_db
 from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
+from core.db import get_db
 from core.logging import get_logger
 
 log = get_logger(__name__)
@@ -112,3 +113,78 @@ async def compute_sector_rs(
 
     results.sort(key=lambda r: r.rs_score, reverse=True)
     return results
+
+
+# ---------------------------------------------------------------------------
+# DB layer — sector_rs_snapshot (MARKET-VIEW-SYNTHESIS-001)
+# ---------------------------------------------------------------------------
+# 순환매(어제 대비 RS 이동) 판단을 위한 일자 스냅샷 누적. compute_sector_rs 는
+# lazy compute(저장 X) 였으나, rotation 의 본질=*이동* 이라 다일 시계열이 선행이어야 한다.
+
+
+def persist_sector_rs(date_str: str, market: str, rows: list[SectorRS]) -> None:
+    """sector_rs_snapshot ON CONFLICT REPLACE 멱등 upsert (장후 1회 적재)."""
+    if not rows:
+        return
+    db = get_db()
+    with db.connect() as conn:
+        conn.executemany(
+            "INSERT INTO sector_rs_snapshot "
+            "(date, market, sector, etf_ticker, rs_score, return_60d, kospi_return_60d, rs_ratio) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(date, market, sector) DO UPDATE SET "
+            " etf_ticker=excluded.etf_ticker, rs_score=excluded.rs_score, "
+            " return_60d=excluded.return_60d, kospi_return_60d=excluded.kospi_return_60d, "
+            " rs_ratio=excluded.rs_ratio",
+            [
+                (date_str, market, r.sector, r.etf_ticker, r.rs_score,
+                 r.return_60d, r.kospi_return_60d, r.rs_ratio)
+                for r in rows
+            ],
+        )
+
+
+def _row_to_sector_rs(row: Any) -> SectorRS:
+    return SectorRS(
+        sector=row["sector"],
+        etf_ticker=row["etf_ticker"],
+        rs_score=float(row["rs_score"]),
+        return_60d=float(row["return_60d"]) if row["return_60d"] is not None else 0.0,
+        kospi_return_60d=float(row["kospi_return_60d"]) if row["kospi_return_60d"] is not None else 0.0,
+        rs_ratio=float(row["rs_ratio"]) if row["rs_ratio"] is not None else 0.0,
+    )
+
+
+def load_sector_rs_snapshot(date_str: str, market: str) -> list[SectorRS]:
+    """특정 일자 sector_rs_snapshot read. 없으면 빈 list. rs_score 내림차순."""
+    db = get_db()
+    rows = db.fetch_all(
+        "SELECT * FROM sector_rs_snapshot WHERE date = ? AND market = ? "
+        "ORDER BY rs_score DESC",
+        (date_str, market),
+    )
+    return [_row_to_sector_rs(r) for r in rows]
+
+
+def load_prev_sector_rs(
+    date_str: str, market: str, *, window_days: int
+) -> tuple[str, list[SectorRS]] | None:
+    """순환매 비교 기준 = `date_str` 보다 최소 window_days 이전의 *가장 최근* 스냅샷.
+
+    정확히 window_days 전 거래일 데이터가 없을 수 있으므로(휴장 등) 그 이전 중
+    가장 가까운 날짜를 채택한다. 누적이 부족하면 None (첫날 graceful).
+
+    Returns:
+        (snapshot_date, rows) 또는 None.
+    """
+    db = get_db()
+    cutoff_row = db.fetch_one(
+        "SELECT DISTINCT date FROM sector_rs_snapshot "
+        "WHERE market = ? AND date <= date(?, ?) "
+        "ORDER BY date DESC LIMIT 1",
+        (market, date_str, f"-{int(window_days)} days"),
+    )
+    if cutoff_row is None:
+        return None
+    prev_date = cutoff_row["date"]
+    return prev_date, load_sector_rs_snapshot(prev_date, market)

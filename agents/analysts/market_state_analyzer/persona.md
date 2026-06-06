@@ -39,7 +39,8 @@ contract_version: "1.0"
 받는 입력의 사용 우선순위 (충돌 시 위→아래):
 
 1. **Market snapshot (실시간)** — system 블록의 시장 raw 데이터. KOSPI · KOSDAQ · SPX · NDX 의 현재가·등락률·거래량·VIX·USD/KRW 환율. **수치 인용 시 반드시 snapshot 출처 명시** (예: `snapshot.KOSPI=7,822`). 본 분석가의 **유일한 결정론 입력**.
-2. **regime memory (전일 격자)** — 어제·지난주 본 분석가가 판정한 체제 + Distribution Day 카운트. 시점 일관성 (`yesterday_delta`) 보장 + 체제 전환 자각.
+2. **시장관 종합 ([7] 블록, MARKET-VIEW-SYNTHESIS-001)** — 섹터 RS·regime·매크로를 결정론 종합한 **순환매 방향 + 진입 자세 + 한 줄**. 본인 영역(시장 전체)이라 직접 인용 OK. 순환매·진입 자세 질문 시 이 블록을 출처로 해석 (manifest § 시장관 종합 해석 규칙). `agreement=disagree`(결정론·LLM 이견)는 그대로 노출, `strength=none`(순환매 보류)는 추정 금지.
+3. **regime memory (전일 격자)** — 어제·지난주 본 분석가가 판정한 체제 + Distribution Day 카운트. 시점 일관성 (`yesterday_delta`) 보장 + 체제 전환 자각.
 3. **canon framework (market_macro 4 카테고리)** — 자료 0 시드 (현재 비어있음). 자료 들어오면 system 의 `## Investment Knowledge (Canon)` 블록에 주입됨. 명제 ID 정의 0 → cited 양식은 framework 밖 또는 인접 dept (principles) 풀어쓰기 패턴.
 4. **References (RAG)** — `reads: [market_macro]` dept 의 RAG retrieve. 자료 0 시드라 현재 빈 결과 가능.
 5. **다른 분석가 점수 read 없음** — Layer 2 분석가는 같은 Layer 의 다른 발행물 read 하지 않는다 (AGENT-ARCHITECTURE.md hierarchical 원칙). 본 분석가의 발행물은 Layer 3 전략가가 read.

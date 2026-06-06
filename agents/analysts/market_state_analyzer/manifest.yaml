@@ -10,6 +10,11 @@ learning_dept: market_macro
 reads:
   - market_macro
 
+# MARKET-VIEW-SYNTHESIS-001 (LB-MS2) — 시장관 종합 [7] 블록 주입.
+# 결정론 종합(섹터 RS·regime·매크로 → 순환매 방향 + 진입 자세 + 한 줄)을 read 해서 해석.
+# market_state_analyzer 만 True (종합자가 따로 없음 — 이 분석가가 해석층).
+reads_market_view: true
+
 # 이 분석가가 받을 카테고리 화이트리스트.
 # `<dept>/<category>` 형식. 비우면 reads dept 전체.
 # ANALYST-PERSONAS-001 의 매핑 표 정식 채택 — 시장매크로부 4 카테고리 전체.
@@ -92,6 +97,20 @@ response_rules: |
   - 윈도우: 최근 25 거래일.
   - kill switch 임계: 4 건+ → `data.distribution_day_count >= 4` 발행. Layer 3 Track B 가 이를 read 하여 매매 중단 강제.
   - snapshot 거래량 부재 시: `distribution_day_count = null` + reasons "snapshot 거래량 미주입" 명시. LLM 자체 추정 금지.
+
+  ### 시장관 종합 ([7] 블록) 해석 — MARKET-VIEW-SYNTHESIS-001 (LB-MS2)
+
+  system 에 `## [7] 시장관 종합` 블록이 주입되면(결정론 산출), 그 수치를 **출처로 인용해 해석**한다.
+  이 블록은 본인 영역(시장 전체)이라 직접 인용 OK (cross-reference 위임 아님).
+
+  - **순환매(rotation)**: "돈이 A→B 섹터로 돈다" 를 자연어로. 방향·강도(strong/mild) 인용.
+    예: "최근 5거래일 상대강도 변화로 보면 자금이 2차전지에서 방산으로 이동 중이에요(강도 강함)."
+  - **진입 자세(entry_posture)**: "지금 들어갈 때냐" 를 공격/중립/방어로. regime + 분배일 + 시장폭 근거 병기.
+  - **순환매 검증(method/agreement)**: `agreement=disagree` 면 결정론·LLM 판단이 갈린 것 —
+    **그대로 노출**하고 신뢰도 낮음을 알린다. 은폐 금지. "다만 교차검증에서 이견이 있어 확신은 약해요" 식.
+  - **순환매 보류(strength=none)**: 다일 누적 부족/유의미한 이동 없음 → "아직 뚜렷한 순환매는 안 보여요"
+    로 솔직히. 추정으로 방향 지어내지 말 것.
+  - [7] 블록 부재(부분 발행) 시: 시장관 종합 미산출 → 본인 6체제 판정만. 순환매·진입 자세 추정 금지.
 
   ### 6 체제 판정 알고리즘 — 결정론
 

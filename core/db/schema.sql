@@ -411,6 +411,41 @@ CREATE TABLE IF NOT EXISTS manual_anchors (
 CREATE INDEX IF NOT EXISTS idx_manual_anchors_ticker ON manual_anchors(ticker);
 
 -- ============================================================
+-- v10: 시장관 종합 (sector_rs_snapshot + market_view_snapshot) — MARKET-VIEW-SYNTHESIS-001
+-- ============================================================
+-- 섹터 RS 일자 스냅샷 — 순환매(어제 대비 이동)의 다일 누적 토대. (date, market, sector) PK + REPLACE.
+CREATE TABLE IF NOT EXISTS sector_rs_snapshot (
+    date             TEXT NOT NULL,           -- "2026-06-06" (KST)
+    market           TEXT NOT NULL,           -- "KOSPI"
+    sector           TEXT NOT NULL,           -- "AI반도체"
+    etf_ticker       TEXT NOT NULL,           -- "390390"
+    rs_score         REAL NOT NULL,           -- 0~10
+    return_60d       REAL,
+    kospi_return_60d REAL,
+    rs_ratio         REAL,                    -- excess return
+    PRIMARY KEY (date, market, sector)
+);
+CREATE INDEX IF NOT EXISTS idx_sector_rs_date ON sector_rs_snapshot(date, market);
+
+-- 시장관 종합 산출물 — 결정론 regime/entry_posture + 결정론⨯LLM 크로스체크 rotation. (date, market) PK + REPLACE.
+CREATE TABLE IF NOT EXISTS market_view_snapshot (
+    date            TEXT NOT NULL,           -- "2026-06-06" (KST)
+    market          TEXT NOT NULL,           -- "KOSPI"
+    regime          TEXT,                    -- parabolic..strong_bear
+    leading_json    TEXT,                    -- [{sector, rs_score, rs_change_nd}]
+    fading_json     TEXT,                    -- [{sector, rs_score, rs_change_nd}]
+    rotation_json   TEXT,                    -- {direction, from_sectors, to_sectors, strength, method, agreement}
+    entry_posture   TEXT,                    -- aggressive | neutral | defensive
+    one_liner       TEXT,
+    confidence      INTEGER,
+    reasons_json    TEXT,
+    source          TEXT,                    -- db | computed | stale
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, market)
+);
+CREATE INDEX IF NOT EXISTS idx_market_view_date ON market_view_snapshot(date);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -427,3 +462,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (6);
 INSERT OR IGNORE INTO schema_version (version) VALUES (7);
 INSERT OR IGNORE INTO schema_version (version) VALUES (8);
 INSERT OR IGNORE INTO schema_version (version) VALUES (9);
+INSERT OR IGNORE INTO schema_version (version) VALUES (10);
