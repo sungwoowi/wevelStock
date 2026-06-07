@@ -9,21 +9,25 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **LB-MS3 NEWS-SOURCE-001 SPEC 작성 ✅ (2026-06-07)**. 왼쪽 뇌의 9번째이자 마지막 0시드 지식부 = 뉴스부. `/spec-interview`로 SPEC frozen(draft). 코드 변경 0(SPEC 세션). LEFT-BRAIN **2/4(50%)** 유지(NEWS-SOURCE-001 draft 등재, 미작성 1=INFRA-US-MACRO만 남음). 직전 = LB-MS2 운영 ramp 마감(일일 적재 cron, 904 passed).
+**현재 위치**: **LB-MS3 NEWS-SOURCE-001 MS-A(데이터 백본) 구현 ✅ (2026-06-07)**. SPEC 4 마일스톤(A 데이터 백본 / B 분류·digest / C 소비 배선 / D 라이브) 중 **MS-A 완료**. 뉴스 어댑터(RSS 흡수) + DB 2테이블 영속 + config + 13 테스트. 분류·집계·소비 배선은 MS-B~D. SPEC status draft→**implementing**. LEFT-BRAIN **2/4(50%)** + 진행중 1(NEWS-SOURCE-001). **917 passed**.
 
-**본 세션 산출** (LB-MS3 SPEC):
-- `docs/specs/NEWS-SOURCE-001-news-source.md` 신규 (draft) — frontmatter(generates 6·modifies 9·depends_on 5·contracts 2) + 7 핵심 결단 + INTERVIEW-SLOT 6 + 5라운드 요약. parent=LEFT-BRAIN-COMPLETION-001.
-- `.claude/commands/wrap-up.md` — **push 기본 동작화**(Step 6 C 추가). 사용자 상시 선호: wrap-up이 커밋·푸시까지 한 번에. force 금지·실패 시 중단.
-- 검증: project_status.py(`□ NEWS-SOURCE-001 [draft]` 등재) + validate.py 0 errors.
+**본 세션 산출** (LB-MS3 MS-A):
+- `collectors/news_rss.py` — `NewsItem` 라벨 9필드 확장(전부 Optional). `to_dict()`(4키, 브리핑 하위호환) + `to_record()`/`from_record()` 신규. `fetch_news_items()` 추출 → `fetch_news()`는 dict 래퍼(동작 불변).
+- `collectors/news_source.py` 신규 — `NewsSource` Protocol + `RssNewsSource`/`ManualNewsSource`/`PerplexityNewsSource`(stub) + `collect_from_sources`(dedup·graceful) + DB 헬퍼(upsert/get) + config 로더.
+- `core/db/schema.sql` v11 — `news_source_items`(url 멱등) + `news_digest_snapshot`(scope|date 멱등) 2테이블. `config/news_source.yaml` 신규(카테고리6·시간축3·소스토글).
+- `tests/test_news_source.py` 신규 13 + SPEC status implementing. 검증: 917 passed / validate 0 errors / project_status `🔨 implementing` ACTIVE.
 
-**이번 세션에 굳힌 판단 (2026-06-07 NEWS-SOURCE-001 SPEC)**:
-- **뉴스 정밀 점수화는 정직하지 않다 → 거친 tilt + 내러티브**(M4): 상황의존·퀄리티편차·비선형상호작용·희소충격이라 단일 0~10 점수로 못 누름. 개별 뉴스 *판단*=LLM, *집계*만 결정론(카운트·5단 톤 tilt). buy_score N은 advisory tilt+raw 텍스트, [[feedback_score_collapse_advisory]] 일관.
-- **기존 브리핑 RSS는 중복 아니라 흡수 대상**(M1): 텔레그램 "시나리오+뉴스"=`market_briefing_pre` 일회성 RSS. `fetch_news`/`NewsItem`을 `RssNewsSource` 어댑터로 *승격*(영속·분류·다중소비자). 브리핑 동작 불변.
-- **종목 뉴스→buy_score N / 시장 뉴스→market_view 분리**(M7): buy_score N=CAN SLIM "New"(신고가+신제품/뉴스). `buy_score_inputs.py:221`이 직접 `SLOT: NEWS-SOURCE-001` 표시. `build_news_digest(date[, ticker])` 단일 소스(M5)가 scope로 분기.
+**이번 세션에 굳힌 판단 (2026-06-07 NEWS-SOURCE-001 MS-A)**:
+- **신규 테이블명 = `news_source_items`(NOT `news_items`)**: SPEC 계약은 `news_items`로 명시했으나 **레거시 브리핑 테이블(run_id PK, `persist.py:149` INSERT)과 충돌** → 개명(collector 모듈명 일치). **SPEC 계약 노트 정정 필요**(MS-B 시작 시).
+- **어댑터 흡수 = 동작 불변 보존**(M1 구현): `fetch_news_items()`(NewsItem) 추출 + `fetch_news()`(dict)는 래퍼 유지. `RssNewsSource`가 전자 래핑. 브리핑 collect_news는 dict 그대로 → 회귀 0.
+- **멀티세션 본체는 마일스톤 분할 + 각 끝 확인**([[feedback_small_milestones]]): MS-A는 LLM·소비자 없는 데이터층만 = 회귀 안전 단위. MS-B(LLM 분류)·MS-C(소비)·MS-D(라이브) 순차.
+
+**직전 세션 판단 (2026-06-07 NEWS-SOURCE-001 SPEC)**:
+- **뉴스 정밀 점수화는 정직하지 않다 → 거친 tilt + 내러티브**(M4): 상황의존·비선형·희소충격이라 단일 0~10 못 누름. 개별 뉴스 *판단*=LLM, *집계*만 결정론. buy_score N은 advisory tilt+raw, [[feedback_score_collapse_advisory]] 일관.
+- **기존 브리핑 RSS는 흡수 대상**(M1) + **종목 뉴스→buy_score N / 시장 뉴스→market_view 분리**(M7): `build_news_digest(date[, ticker])` 단일 소스(M5)가 scope 분기. buy_score N=CAN SLIM "New"(신고가+촉매).
 
 **직전 세션 판단 (2026-06-07 일일 적재 cron)**:
-- **순환매 활성화 = 일일 적재 누적이 전제**: rotation은 본질이 *이동*이라 다일 윈도우(prev) 필요. cron 부재 시 `"—"`가 정상(버그 아님). 적재 위치는 macro refresh **뒤**. 별 job보다 기존 18:05 cron 합류가 응집·순차안전.
-- **dev cron 미작동이 진짜 ramp 차단점**: dev 머신 서버 미상주 시 18:05 미발동 → sector_rs/chart/fundamentals/뉴스 적재 전부 영향. 다일 누적의 실 전제 = 서버 상주(또는 수동 트리거).
+- **순환매 활성화 = 일일 적재 누적이 전제**: rotation은 *이동*이라 다일 윈도우 필요. **dev cron 미작동이 진짜 ramp 차단점**(서버 미상주 시 18:05 미발동 → sector_rs/chart/fundamentals/뉴스 적재 전부 영향).
 
 **직전 세션 판단 (2026-06-06 시장관 종합)**:
 - **시장관 종합 = 결정론 함수 + 기존 분석가 해석** (신규 분석가 X): synthesize_market_view가 sector_rs+regime+macro 종합 → market_state_analyzer가 read·해석. 5점수 패턴(결정론 수치→LLM 해석) 동일, 역할 중복 회피.
@@ -73,53 +77,33 @@
 - **KIS 순매수 거래대금(`*_ntby_tr_pbmn`)은 이미 백만원 — ÷1e6 금지**. 레퍼런스 = `market_investor_total`. 새 KIS 금액 필드 기준.
 - **Gemini-2.5 결정론 JSON 호출 = `thinking_budget=0` 필수** ([[feedback_gemini_thinking_budget_json]]): thinking 토큰이 max_output_tokens 잠식 → JSON 잘림.
 
-**WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
-
-**WAVE-ALPHA 14.2 산출물** (commit `7c60944`):
-- **`collectors/anchors.py` 신규** (~600 LOC) = extract_swing_candidates (Stage 1 결정론 rolling local extrema + min_gap 필터) + select_anchors_via_llm (Stage 2 Haiku 4.5 직관 + JSON 유효성 검증) + 3 단 캐싱 (llm_call_cache type='anchor_selection', TTL 30 일, cache_key "ticker|tf|cutoff") + load_manual_anchors (manual_anchors DB SELECT 우선) + E6 fallback (Stage 2 실패 시 결정론 candidate 마지막 3 개, source='deterministic_fallback') + compute_alpha_3tf 진입점 (3 timeframe 풀세트, cutoff_date 백테스팅 친화 canon WX1) + render_alpha_3tf_md ([5] α 3 timeframe 블록) + alpha_3tf_metadata helper
-- **`core/knowledge/compose.py`** = build_pipeline_prompt 에 alpha_3tf_md 파라미터 신규 ([5] α block, [4] chart 와 [6] fundamental 사이)
-- **`core/inference/run_analyst.py`** = _maybe_build_alpha_3tf_md helper (cycle 13 _snapshot_extend_metadata 패턴 mirror) + run_analyst / run_analyst_stream 양쪽 hook + alpha_meta 4 키 노출
-
-**WAVE-ALPHA 14.3 산출물** (commit `e2ee94b`):
-- **persona.md v4 → v5** = § Identity v5 헤더 + 권위 한정 4 종 확장 / § Inputs α 3tf 자동 주입 / § Reasoning Doctrine α 시간 정규화 정식 전면 재작성 (k₁/k₂/α + WA·WF·WL·WE cited + THRESHOLDS/TIMEFRAME_LIMITS + 5단계 label + WF4 외삽 + WE1~WE7) / **§ verdict 매트릭스 신설** (canon WL2, long/swing/중립 11 row + 보수 우선) / **§ holding_period 매핑 신설** (canon WL3, monthly→장기 / weekly→중기 / daily→단기, multi 시 긴 timeframe 우선) / **§ 환각 가드 1중→3중** (가드 1 자료 0 시드 잔여 4 카테고리 / 가드 2 chart_data_md [4] 출처 / **가드 3 anchor 출처 강제 신설** — source ∈ {manual, llm_stage2, deterministic_fallback, unavailable}) + § v5 정정 트레이스
-- **manifest.yaml v5** = response_rules WAVE-ALPHA 본문 (한국어 친화 timeframe 명시 + cited fractal_wave 21 명제 ID + 시간 정규화 공식 + verdict 매트릭스 + holding_period 매핑 + 환각 가드 3 + Track A read 정합 확장)
-- **anchors.py deterministic_fallback 가드** = `min_gap_days // 2` 이상 trailing candidate 만 채택, `usable < 3` 시 unavailable (smoke 발견 본질 정정)
-- **core/db/connection.py** = _ensure_schema 가 _apply_migrations 자동 호출 (v8 llm_call_cache.type ALTER 멱등 — 기존 dev DB 호환). 14.1 빠뜨린 본질 보강
-- **테스트 신규 ~74** = test_alpha.py 31 (시간 정규화 시나리오 + interpret_alpha 5 단계 timeframe 차등 + WE2/WE3 + WF4 외삽 + TIMEFRAME_LIMITS) + test_anchors.py 38 (extract_swing 결정론 + select_anchors mock + 캐싱 4 + manual override + compute_alpha_3tf + render/metadata) + test_data_analysts_v2.py +5 (v5 정합)
-- **smoke 005930 실증** = α 풀세트 산출 (daily weak 0.44 / **weekly sweet 1.31 ⭐** / monthly overheated 3.86, source=deterministic_fallback). LLM Stage 2 (Gemini) JSON 파싱 결함 → 모두 fallback, SLOT S6 후속 보강 영역. 본 cycle 본질 (가드 강화된 fallback 정합) 검증.
-
-**WAVE-ALPHA SPEC 5 라운드 결단 14 건 (영구 권위, cycle 14 SPEC, 14.1+14.2+14.3 모두 1:1 실행 완료)**:
-- **R1 본질 5**: anchor 정의 = 1차 발산 시작 / 정점 / 되돌림 저점 = 2차 발산 시작 (사용자 **고유 파동분석 영역**, 박종훈 X) / 3 timeframe (daily/weekly/monthly) 동시 산출 / anchor 산출 = **2-Stage 하이브리드** (결정론 candidate + LLM Haiku 4.5 직관 + 3 단 캐싱 + manual override) ✅ / **백테스팅 본질** = alpha() cutoff_date 친화 설계 ✅ / 출력 = Layer 2 발행 + webapp 자연어 가이드 부록
-- **R2 공식 4**: 시간 정규화 `α = (ln(current/C)/days(C→current)) / (ln(B/A)/days(A→B))` ✅ / 5 단계 label + timeframe 차등 임계 ✅ / 외삽 메타 2 (progress_to_b + duration_ratio) ✅ / 엣지 케이스 7 (E1~E7) + TIMEFRAME_LIMITS ✅
-- **R3 canon 2**: 명제 ID = **WA/WF/WL/WE** ✅ / canon 분리 (본 SPEC = 21 명제 ✅, 풀세트 = SLOT S4 후속)
-- **R4 persona 3**: verdict 매트릭스 ✅ / holding_period 매핑 ✅ / 환각 가드 3 중 ✅
-- **R5 테스트/SLOT/구현 3**: 테스트 ~75 신규 ✅ (정량 UT 69 + 통합 5) / SLOT 6 (S1~S6 후속 SPEC) / 구현 sub-cycle 분할 14.1/14.2/14.3 ✅
+**WAVE-ALPHA (cycle 14, commit `7c60944`/`e2ee94b`)** — 풀세트 활성(상세는 c_worked 2026-05-22/23 + git): `collectors/anchors.py`(2-Stage 하이브리드 anchor + 3tf α + 캐싱) + stock_analyst persona/manifest v5(verdict 매트릭스·holding_period·환각 가드 3중) + canon fractal_wave 21 명제(WA/WF/WL/WE). smoke 005930 = weekly sweet 1.31. LLM Stage 2 JSON 결함 → deterministic_fallback(SLOT S6).
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / N 뉴스부=NEWS-SOURCE-001 SPEC 게이트)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / gemini transient 503 root cause (retry/sequential, 별 영역) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. **잔여 = dev cron 미작동 근본 해소**(서버 미상주 시 18:05 전체 적재 미발동, Top 3 #3) + 순환매 ≥2 평일 라이브 누적 관찰).
 
-**마지막 작업일**: 2026-06-07 (NEWS-SOURCE-001 SPEC 작성 — LB-MS3 + wrap-up push 기본화)
-**마지막 세션 로그**: [2026-06-07_news-source-spec-2.md](c_worked/2026-06-07_news-source-spec-2.md). 직전 = [2026-06-07_sector-rs-daily-cron.md](c_worked/2026-06-07_sector-rs-daily-cron.md).
-**산출**: `docs/specs/NEWS-SOURCE-001-news-source.md` 신규(draft, 7 결단 + SLOT 6) + `.claude/commands/wrap-up.md` push 기본화. project_status `□ NEWS-SOURCE-001 [draft]` 등재 + validate 0 errors. 코드 변경 0(SPEC 세션).
-**Git**: wrap-up docs+SPEC 1커밋 → main 직접 + push.
+**마지막 작업일**: 2026-06-07 (NEWS-SOURCE-001 MS-A 데이터 백본 구현 — LB-MS3)
+**마지막 세션 로그**: [2026-06-07_news-source-ms-a-data-backbone-3.md](c_worked/2026-06-07_news-source-ms-a-data-backbone-3.md). 직전 = [2026-06-07_news-source-spec-2.md](c_worked/2026-06-07_news-source-spec-2.md).
+**산출**: `collectors/news_source.py` 신규(어댑터 3종+DB) + `news_rss.py` NewsItem 라벨 확장 + schema v11 2테이블(`news_source_items`/`news_digest_snapshot`) + `config/news_source.yaml` + 13 테스트. 917 passed / validate 0 errors / SPEC implementing.
+**Git**: feat 코드 + docs wrap-up → main 직접 + push.
 
 ---
 
 ## 🎯 다음에 할 일 (Top 3) — 왼쪽 뇌 완성(LEFT-BRAIN-COMPLETION-001 roadmap)
 
-우선순위 순. **LB-MS1(답변 누수)·LB-MS2(시장관 종합+일일 적재 cron) 완료 ✅. LB-MS3 NEWS-SOURCE-001 SPEC frozen(draft) ✅.** 왼쪽 뇌 2/4(50%). `uv run python scripts/project_status.py`로 단계 지도 확인.
+우선순위 순. **LB-MS1·LB-MS2 완료 ✅. LB-MS3 NEWS-SOURCE-001 SPEC frozen + MS-A(데이터 백본) 구현 ✅ → implementing.** 왼쪽 뇌 2/4(50%) + 진행중 1. `uv run python scripts/project_status.py`로 단계 지도 확인.
 
-### 1. LB-MS3 NEWS-SOURCE-001 **구현** 착수 (SPEC frozen, 멀티세션 본체)
-- **왜**: SPEC(`docs/specs/NEWS-SOURCE-001-news-source.md`) 작성 완료(draft). 이제 코드 구현 = 왼쪽 뇌 9번째 0시드 지식부를 채우는 본체. market_view 내러티브 + buy_score N 촉매 + news_curator 활성
-- **범위**: INTERVIEW-SLOT 6개 채움 — `NewsSource` 어댑터(`fetch_news` 흡수)+`classify_news_items`(LLM mock)+`news_items`/`news_digest_snapshot` 2테이블(멱등 ALTER)+`build_news_digest(date[, ticker])`+3소비자 배선(market_view 흡수·buy_score N 블렌드·news_curator `_maybe_build_news_digest_md`). 5점수 `build_*`/`reads_*` 패턴 mirror. 브리핑 동작 불변
-- **예상 산출**: news_curator SLOT S2 클로즈 + buy_score N 뉴스 촉매 절반 실측 + market_view 뉴스 톤 내러티브
+### 1. LB-MS3 NEWS-SOURCE-001 **MS-B** (분류 + digest) — 진행중 SPEC 이어가기
+- **왜**: MS-A 데이터 백본 완료(어댑터·DB 영속). MS-B = 뉴스에 라벨을 입히고 거친 집계를 산출하는 두뇌층. 이게 있어야 MS-C 소비 배선이 의미를 가짐
+- **범위**: `classify_news_items()`(LLM 라벨, `anchors.py::select_anchors_via_llm` mirror — Gemini thinking_budget=0·llm_call_cache type='news_classify'·**TESTING=1 mock**) + `build_news_digest(date,scope,ticker)` 결정론 집계(tone 5단·category_counts·top_themes·catalyst_tilt) + `render_news_digest_md()` + `knowledge/canon/news/01-classification-doctrine.md`(N1~N5). **시작 시 SPEC 계약 테이블명 `news_items`→`news_source_items` 정정**
+- **예상 산출**: 분류된 뉴스 + digest 단일 산출물 (소비 배선 전 두뇌층 완성)
 
-### 2. INFRA-US-MACRO-SNAPSHOT-001 (미장 매크로) — MARKET-VIEW SLOT 흡수
-- **왜**: entry_posture에 **미장 야간**(SPX·NDX·VIX·DXY·US10Y) 축 가산 + one_liner "미장 risk_on/off" 토큰. MARKET-VIEW-SYNTHESIS-001이 위치만 확보(`us-macro-hook` SLOT)해 둠. LEFT-BRAIN 자식
-- **범위**: `/spec-interview` — yfinance/FRED 미장 매크로 collector + market_view entry_posture 흡수
-- **예상 산출**: INFRA-US-MACRO-SNAPSHOT-001 → 진입 자세가 미장까지 반영
+### 2. LB-MS3 NEWS-SOURCE-001 **MS-C/D** (소비 배선 + 라이브)
+- **왜**: digest를 market_view 내러티브·buy_score N 촉매·news_curator 해석에 흘림 → 왼쪽 뇌 9번째 지식부 활성. 끝나면 LB-MS3 완료(왼쪽 뇌 3/4)
+- **범위**: market_view 흡수 + buy_score N 블렌드(`:221` SLOT 해소) + news_curator hook(reads_news_digest, 5점수 패턴 mirror) + persona SLOT S2 클로즈 + `_news_digest_probe.py` 라이브 + production-chat 검증
+- **예상 산출**: news_curator 활성 + buy_score N 뉴스 촉매 + market_view 뉴스 톤
 
-### 3. dev cron 미작동 근본 해소 (운영 부채 — LB-MS2 라이브 누적 전제)
-- **왜**: 18:05 cron은 코드상 정상 등록이나 dev 머신 서버 미상주 시 미발동 → sector_rs/chart/fundamentals 적재 전부 영향. 순환매·universe 다일 누적의 실 전제. 현재는 수동 ramp 필요
+### 3. dev cron 미작동 근본 해소 (운영 부채 — 라이브 누적 전제)
+- **왜**: 18:05 cron은 코드상 정상이나 dev 머신 서버 미상주 시 미발동 → sector_rs/chart/fundamentals/뉴스 적재 전부 영향. 순환매·universe 다일 누적의 실 전제
 - **범위**: 서버 상주 운영 or 수동 트리거 endpoint(`POST /api/admin/refresh-snapshots` 류) 검토. 작은 작업
 - **예상 산출**: 매일 장후 적재가 사람 개입 없이 누적 → 순환매 ≥2일 후 자동 라이브
 
@@ -165,6 +149,7 @@
 ## 🧩 마지막 세션이 남긴 맥락 (바로 쓸 수 있도록)
 
 ### 완성된 자산
+- **`collectors/news_source.py` (NEWS-SOURCE-001 MS-A)** — `NewsSource` Protocol + `RssNewsSource`(fetch_news_items 흡수)/`ManualNewsSource`/`PerplexityNewsSource`(stub) + `collect_from_sources`(dedup) + DB 헬퍼(`news_source_items` url 멱등 / `news_digest_snapshot` scope|date 멱등) + config 로더. `NewsItem` 라벨 9필드(`news_rss.py`, to_dict 4키 하위호환 + to_record/from_record). schema v11. **MS-B 분류·MS-C 소비 배선 대기**
 - `pipelines/market_briefing_pre/` (← morning_pre) — 8 stages, 실 LLM 실증 완료. notify stage `skip_notify` 존중
 - `pipelines/market_briefing_now/` — 3 stages, KIS 22콜 + KRX 1콜 ~28s, LLM 없는 raw 발송
 - `collectors/kr_{indices,sectors,leading_stocks,supply_demand,futures_supply_demand}.py` — 5주체 수급(KIS) + KOSPI200 선물 3주체(KRX)
