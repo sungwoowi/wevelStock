@@ -141,7 +141,7 @@ plan_file: <관련 플랜 파일 경로 있으면>
 
 기준: c_worked 에 기록된 "작업 내용" 은 메모리 금지. "사용자가 새로 밝힌 선호/원칙/피드백" 만 메모리 대상.
 
-### Step 6 — 커밋 & main FF 머지 (조건부)
+### Step 6 — 커밋 & main FF 머지 & push (조건부)
 
 `git status` + `git log main..HEAD` 를 먼저 확인해 **필요할 때만** 진행. 둘 다 비어있으면 이 Step 스킵.
 
@@ -157,12 +157,15 @@ git -C "<메인 worktree 루트>" merge --ff-only <현재-브랜치>
 ```
 (메인 worktree 루트는 `git rev-parse --git-common-dir | sed 's,/\.git/*$,,'` 로 획득)
 
+**C. push (기본 동작)** — 커밋/FF 머지 후 `git push` 로 원격 동기화까지 자동 수행.
+> 사용자 상시 선호 (2026-06-07): wrap-up 은 **커밋·푸시까지 한 번에**. 매번 "푸시 해줘" 라고 안 적어도 됨. push 실패(원격 거부·인증·non-FF) 시 **중단하고 사용자에게 알림** — 자동 재시도·force 금지.
+
 **안전장치**:
 - FF 불가(`main` 이 독립 커밋 받음) 시 머지 **중단**하고 사용자에게 알림 — 자동으로 merge commit 만들지 말 것
-- `git push` 는 **절대 자동화 금지**. 원격 동기화는 사용자가 명시적으로 요청했을 때만
-- 사용자가 /wrap-up 초기에 "커밋 말고 세션 기록만" 이라고 한 경우 이 Step 스킵
+- `git push --force` 류 파괴적 푸시 금지(일반 push 만). push 거부 시 자동 force 금지 — 사용자 확인.
+- 사용자가 /wrap-up 초기에 "커밋 말고 세션 기록만" / "push 하지마" 라고 한 경우 해당 부분만 스킵
 
-커밋 해시 + `main` 새 tip 을 다음 Step 요약에 포함.
+커밋 해시 + `main` 새 tip + push 결과 를 다음 Step 요약에 포함.
 
 ### Step 7 — 결과 요약 출력
 사용자에게 다음을 간결히 보고:
@@ -176,7 +179,7 @@ git -C "<메인 worktree 루트>" merge --ff-only <현재-브랜치>
 🗺  단계: {{전진시킨 roadmap/마일스톤 + SPEC status 변화 (예: ANSWER-FIDELITY-001 implementing→verified) / drift 없음}}
 🧠 MEMORY.md: {{갱신 or 변경 없음}}
 💾 커밋: {{<해시> <메시지> or "커밋 대상 없음"}}
-🚀 main: {{FF merge → <새 tip> or "이미 최신" or "skip (사용자 요청)"}}
+🚀 main/push: {{FF merge → <새 tip> + push <remote/branch> or "이미 최신" or "skip (사용자 요청)"}}
 
 다음 세션 열 땐:
   cd C:\Users\HOME\claude\wevelStock
