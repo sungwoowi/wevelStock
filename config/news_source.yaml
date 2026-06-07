@@ -1,7 +1,8 @@
 # NEWS-SOURCE-001 — 뉴스부 자료층 설정 (하드코딩 0)
 #
-# MS-A (데이터 백본) 범위: 카테고리/시간축 라벨 정의 + 자료원 토글.
-# tone tilt 임계 · catalyst 블렌드 가중 · digest 캐싱 은 MS-B/MS-C 에서 추가한다.
+# MS-A (데이터 백본): 카테고리/시간축 라벨 정의 + 자료원 토글.
+# MS-B (분류·digest): classify (LLM 라벨) + digest (tone tilt 임계 · top_themes).
+# catalyst 블렌드 가중(buy_score N) 은 MS-C 에서 추가한다.
 # watchdog hot reload 호환 (reload_news_source_config 로 캐시 클리어).
 
 # 카테고리 6 (M3 — user_want_spec 5종 + 시장심리)
@@ -34,3 +35,29 @@ sources:
     enabled: true
   perplexity:
     enabled: false       # 이 환경 MCP 미연결 — drop-in SLOT (capability gap)
+
+# 개별 뉴스 LLM 분류 (MS-B — classify_news_items)
+# provider=gemini 명시(Anthropic 미결제 — claude-* default 금지). thinking_budget=0
+# (Gemini-2.5 thinking 토큰 max_output 잠식 → JSON 잘림 방지). 라벨 불변 → 캐시 영속(긴 TTL).
+classify:
+  provider: gemini       # 실 호출 백엔드 (null 이면 call_llm 기본 provider)
+  model: null            # null → call_llm 이 cfg.gemini.model (flash, BALANCED tier) 사용
+  max_tokens: 512        # JSON 잘림 방지 하한
+  cache_ttl_days: 365    # 뉴스 라벨은 불변 → 사실상 영속 캐시
+
+# 거친 종합 (MS-B — build_news_digest). 정밀 점수 폐기(M4): tone 5단 tilt 만.
+# tone = Σ(direction 부호 × magnitude × confidence/100) / Σweight → [-1,1] → 5단 매핑.
+digest:
+  # net tilt 임계 (정규화 [-1,1]). 경계 이하면 해당 밴드.
+  tone_bands:
+    bearish: -0.50       # net <= -0.50
+    lean_bearish: -0.15  # net <= -0.15
+    lean_bullish: 0.15   # net <  0.15  → neutral / 이상 lean_bullish
+    bullish: 0.50        # net >= 0.50  → bullish
+  # catalyst_tilt strength = |net tilt| → weak/mid/strong
+  catalyst_strength:
+    mid: 0.30            # |net| >= 0.30 → mid
+    strong: 0.60         # |net| >= 0.60 → strong
+  top_themes_n: 3        # top_themes 클러스터 상위 N
+  trigger_titles_n: 3    # 테마당 대표 제목 수
+  lookback_limit: 500    # 날짜 필터 전 조회 상한

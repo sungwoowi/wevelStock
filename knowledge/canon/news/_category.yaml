@@ -1,0 +1,6 @@
+category_id: news
+title: 뉴스 분류 독트린
+description: 뉴스 카테고리·시간축·방향·강도·범위 라벨링 + tone 집계 철학 (NEWS-SOURCE-001 N1~N5)
+target_analysts: [news_curator]
+when_to_inject: always
+related_categories: [market_macro, flow_analysis]

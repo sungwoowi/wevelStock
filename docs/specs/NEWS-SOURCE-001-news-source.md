@@ -32,7 +32,7 @@ depends_on:
 contracts:
   - name: news-item-v1
     version: "1.0"
-    description: "개별 뉴스 1건 + LLM 분류 라벨. NewsItem = {title, url, source, published_at, category∈{macro_policy,industry_trend,geopolitics,policy_political,corporate_events,market_sentiment}, time_axis∈{ephemeral_shock,short_theme,structural_trend}, direction∈{up,neutral,down}, magnitude∈{1,2,3}, confidence(0~100), affected{scope∈{market,sector,ticker}, refs[]}, labeled_by∈{llm,manual,rss_raw}}. 자료원=NewsSource 어댑터(RssNewsSource=fetch_news 흡수 / ManualNewsSource=본문·유튜브 요약 직접 / PerplexityNewsSource=drop-in SLOT). news_items 테이블 DB-first upsert(URL 멱등)."
+    description: "개별 뉴스 1건 + LLM 분류 라벨. NewsItem = {title, url, source, published_at, category∈{macro_policy,industry_trend,geopolitics,policy_political,corporate_events,market_sentiment}, time_axis∈{ephemeral_shock,short_theme,structural_trend}, direction∈{up,neutral,down}, magnitude∈{1,2,3}, confidence(0~100), affected{scope∈{market,sector,ticker}, refs[]}, labeled_by∈{llm,manual,rss_raw}}. 자료원=NewsSource 어댑터(RssNewsSource=fetch_news 흡수 / ManualNewsSource=본문·유튜브 요약 직접 / PerplexityNewsSource=drop-in SLOT). **`news_source_items` 테이블** DB-first upsert(URL 멱등) — 구현 시 레거시 브리핑 테이블 `news_items`(run_id PK, persist.py)와 충돌해 `news_source_items` 로 개명(MS-A 자가발견)."
   - name: news-digest-v1
     version: "1.0"
     description: "build_news_digest(date[, ticker]) 단일 산출물. NewsDigest = {date, scope, tone∈{bearish,lean_bearish,neutral,lean_bullish,bullish}(거친 5단 tilt — 정밀 점수 아님), category_counts{cat:{up,neutral,down}}, top_themes[{theme, time_axis, trigger_titles[]}], catalyst_tilt{direction, strength∈{weak,mid,strong}}(종목/섹터 scope 시 buy_score N 블렌드용), raw_labels(LLM 주입용 분류 텍스트 묶음), source∈{db,computed,empty}}. 시장 전반 → market_view 흡수 / 종목·섹터 → buy_score N축 촉매. news_digest_snapshot DB-first 멱등(scope|date 키)."
@@ -105,7 +105,7 @@ contracts:
 
 ### 하는 것 (MVP)
 1. `collectors/news_source.py` — `NewsItem` 라벨 확장 계약 + `NewsSource` Protocol + `RssNewsSource`(fetch_news 흡수) + `ManualNewsSource` + `classify_news_items()`(LLM 라벨, Gemini FAST/BALANCED tier·`thinking_budget=0`·`llm_call_cache` 멱등) + `build_news_digest(date, scope, ticker=None)`(결정론 집계: tone tilt + category_counts + top_themes + catalyst_tilt) + `render_news_digest_md()`([8] 주입 블록).
-2. DB: `news_items`(url 멱등 PK) + `news_digest_snapshot`(scope|date 멱등) 테이블 — `schema.sql` + `connection.py::_apply_migrations` 멱등 ALTER(기존 dev DB 호환, market_view v10 패턴 mirror).
+2. DB: `news_source_items`(url 멱등 PK — **레거시 브리핑 `news_items` 충돌로 개명**) + `news_digest_snapshot`(scope|date 멱등) 테이블 — `schema.sql` + `connection.py` (v11 신규 테이블, ALTER 불필요. market_view v10 패턴 mirror).
 3. `knowledge/canon/news/01-classification-doctrine.md`(분류·시간축 판단 기준 + 명제 N1~N5) + `_category.yaml` + news_curator manifest `canon_categories`/persona `## Knowledge Categories` 갱신.
 4. 소비 배선:
    - market_view: `collectors/market_view.py::build_market_view` 가 시장 scope digest 의 tone·top_themes 를 `reasons`/`one_liner` 내러티브로 흡수(결정론, M5 단일 read).
@@ -180,7 +180,7 @@ ephemeral_shock/short_theme/structural_trend 가르는 기준 명제화(canon/ne
 사용자 시간축 판단 직관을 canon 으로 흡수(자료 0 시드라 초안은 Claude 시드 + 사용자 확인). -->
 
 ## 다른 팀/스키마 영향
-- **DB 스키마 추가 2**: `news_items`, `news_digest_snapshot`(멱등 ALTER, `_apply_migrations` 패턴, 기존 dev DB 호환).
+- **DB 스키마 추가 2**: `news_source_items`(레거시 브리핑 `news_items` 충돌로 개명), `news_digest_snapshot`(v11 신규 테이블, ALTER 불필요).
 - **collectors/news_rss.py**: `NewsItem` 라벨 필드 확장(하위호환 — 브리핑 collect_news 는 라벨 없이도 동작) + `RssNewsSource` 래퍼. 브리핑 파이프라인 *동작 불변*.
 - **collectors/market_view.py**: digest 내러티브 흡수(추가 입력, 기존 결정론 로직과 공존 — one_liner 머리·뉴스 톤 본문).
 - **collectors/buy_score_inputs.py**: N축 블렌드(뉴스 없으면 현 동작 보존, graceful).
