@@ -1,0 +1,36 @@
+# NEWS-SOURCE-001 — 뉴스부 자료층 설정 (하드코딩 0)
+#
+# MS-A (데이터 백본) 범위: 카테고리/시간축 라벨 정의 + 자료원 토글.
+# tone tilt 임계 · catalyst 블렌드 가중 · digest 캐싱 은 MS-B/MS-C 에서 추가한다.
+# watchdog hot reload 호환 (reload_news_source_config 로 캐시 클리어).
+
+# 카테고리 6 (M3 — user_want_spec 5종 + 시장심리)
+categories:
+  - macro_policy        # 거시·통화·재정 (금리/유동성/환율)
+  - industry_trend      # 산업 흐름 (반도체/2차전지/방산 등)
+  - geopolitics         # 지정학 (전쟁/제재/공급망)
+  - policy_political     # 정치·정책 (선거/규제/입법)
+  - corporate_events    # 기업 이벤트 (실적/M&A/신제품)
+  - market_sentiment    # 시장심리 (공포·탐욕·버블·조정 내러티브)
+
+# 시간축 3단 (M6 — 단발→지속, 가변)
+time_axes:
+  - ephemeral_shock     # 단발 충격 (당일~수일)
+  - short_theme         # 단기 테마 (~1~2주)
+  - structural_trend    # 지속 흐름 (분기+)
+
+# 방향/강도 (개별 뉴스 LLM 라벨 — MS-B)
+directions: [up, neutral, down]
+magnitudes: [1, 2, 3]
+
+# 자료원 어댑터 토글 (M1 — RSS 1차 라이브, 수동 옵션, Perplexity drop-in)
+sources:
+  rss:
+    enabled: true
+    limit_per_source: 15
+    # Google News 검색 쿼리 (None 이면 fetch_news 기본 큐레이션 사용)
+    queries: null
+  manual:
+    enabled: true
+  perplexity:
+    enabled: false       # 이 환경 MCP 미연결 — drop-in SLOT (capability gap)

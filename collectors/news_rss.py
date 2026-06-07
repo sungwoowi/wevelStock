@@ -39,14 +39,65 @@ class NewsItem:
     url: str
     source: str
     published_at: str | None = None
+    # --- NEWS-SOURCE-001 라벨 (전부 Optional — 브리핑 collect_news 는 라벨 없이 동작) ---
+    body: str | None = None  # 본문/유튜브 요약 (ManualNewsSource). RSS 는 제목만 → None
+    category: str | None = None  # macro_policy|industry_trend|geopolitics|policy_political|corporate_events|market_sentiment
+    time_axis: str | None = None  # ephemeral_shock|short_theme|structural_trend
+    direction: str | None = None  # up|neutral|down
+    magnitude: int | None = None  # 1|2|3
+    confidence: int | None = None  # 0~100
+    affected_scope: str | None = None  # market|sector|ticker
+    affected_refs: list[str] = field(default_factory=list)
+    labeled_by: str | None = None  # llm|manual|rss_raw
+    collected_at: str | None = None  # ISO8601 (UTC) — 수집 시각
 
     def to_dict(self) -> dict:
+        """브리핑 collect_news 하위호환 — 기존 4 키 그대로 (동작 불변)."""
         return {
             "title": self.title,
             "url": self.url,
             "source": self.source,
             "published_at": self.published_at,
         }
+
+    def to_record(self) -> dict:
+        """라벨 포함 전체 직렬화 (news_items DB / JSON round-trip). `affected` 는 계약대로 중첩."""
+        return {
+            "title": self.title,
+            "url": self.url,
+            "source": self.source,
+            "published_at": self.published_at,
+            "body": self.body,
+            "category": self.category,
+            "time_axis": self.time_axis,
+            "direction": self.direction,
+            "magnitude": self.magnitude,
+            "confidence": self.confidence,
+            "affected": {"scope": self.affected_scope, "refs": list(self.affected_refs)},
+            "labeled_by": self.labeled_by,
+            "collected_at": self.collected_at,
+        }
+
+    @classmethod
+    def from_record(cls, d: dict) -> "NewsItem":
+        """to_record() 역직렬화. 중첩 `affected` 와 평면 affected_* 둘 다 수용."""
+        affected = d.get("affected") or {}
+        return cls(
+            title=d["title"],
+            url=d["url"],
+            source=d.get("source", ""),
+            published_at=d.get("published_at"),
+            body=d.get("body"),
+            category=d.get("category"),
+            time_axis=d.get("time_axis"),
+            direction=d.get("direction"),
+            magnitude=d.get("magnitude"),
+            confidence=d.get("confidence"),
+            affected_scope=d.get("affected_scope") or affected.get("scope"),
+            affected_refs=list(d.get("affected_refs") or affected.get("refs") or []),
+            labeled_by=d.get("labeled_by"),
+            collected_at=d.get("collected_at"),
+        )
 
 
 def _strip_html(text: str) -> str:
@@ -101,15 +152,18 @@ async def _fetch_feed(url: str, source: str, limit: int = 20) -> list[NewsItem]:
         return []
 
 
-async def fetch_news(
+async def fetch_news_items(
     *,
     queries: list[str] | None = None,
     limit_per_source: int = 15,
-) -> list[dict]:
-    """Fetch news from multiple sources in parallel.
+) -> list[NewsItem]:
+    """Fetch news from multiple sources in parallel → list[NewsItem].
 
     queries: Google News search terms. Defaults to a curated list
              focused on US markets + KR-relevant themes.
+
+    RssNewsSource (NEWS-SOURCE-001) 가 이 함수를 래핑한다. 브리핑 collect_news 는
+    하위호환을 위해 dict 를 반환하는 fetch_news() 를 계속 쓴다.
     """
     if queries is None:
         queries = [
@@ -139,4 +193,14 @@ async def fetch_news(
             merged.append(item)
 
     log.info("news_collected", total=len(merged), sources=len(tasks))
-    return [it.to_dict() for it in merged]
+    return merged
+
+
+async def fetch_news(
+    *,
+    queries: list[str] | None = None,
+    limit_per_source: int = 15,
+) -> list[dict]:
+    """브리핑 collect_news 하위호환 — fetch_news_items() 를 dict 로 변환 (동작 불변)."""
+    items = await fetch_news_items(queries=queries, limit_per_source=limit_per_source)
+    return [it.to_dict() for it in items]

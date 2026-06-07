@@ -3,7 +3,7 @@ spec_id: NEWS-SOURCE-001
 title: 뉴스부 자료층 — 영속 분류·시간축 라벨 news_items + build_news_digest 단일 소스 → market_view·buy_score N축 촉매·뉴스큐레이터
 team: shared
 type: feature
-status: draft
+status: implementing
 level: implementation
 parent: LEFT-BRAIN-COMPLETION-001          # LB-MS3
 generates:

@@ -71,6 +71,9 @@ class Database:
             except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
                 pass
 
+        # v10 (market_view) / v11 (news_source_items + news_digest_snapshot) 는 신규 *테이블* 추가라
+        # 별도 ALTER 불필요 — schema.sql 의 CREATE TABLE IF NOT EXISTS 가 새 DB·기존 DB 모두 처리.
+
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, timeout=10.0, isolation_level=None)

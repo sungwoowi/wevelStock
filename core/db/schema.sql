@@ -446,6 +446,49 @@ CREATE TABLE IF NOT EXISTS market_view_snapshot (
 CREATE INDEX IF NOT EXISTS idx_market_view_date ON market_view_snapshot(date);
 
 -- ============================================================
+-- v11: 뉴스부 자료층 (news_items + news_digest_snapshot) — NEWS-SOURCE-001
+-- ============================================================
+-- 개별 뉴스 1건 + LLM 분류 라벨 (MS-B). 자료원=NewsSource 어댑터. url 멱등 PK.
+-- 브리핑 일회성 RSS 를 영속·분류·다중소비자 학습층으로 승격 (중복 X).
+-- 주: 레거시 run-scoped `news_items`(브리핑 persist, run_id PK)와 이름 충돌 회피 →
+--     본 SPEC 영속 학습층은 `news_source_items` (collector 모듈명 일치).
+CREATE TABLE IF NOT EXISTS news_source_items (
+    url             TEXT PRIMARY KEY,        -- 멱등 키 (기사 URL)
+    title           TEXT NOT NULL,
+    source          TEXT,                    -- "Yahoo"|"CNBC"|"GoogleNews"|"manual"
+    published_at    TEXT,                    -- RSS pubDate (원문)
+    body            TEXT,                    -- 본문/유튜브 요약 (ManualNewsSource). RSS=NULL
+    category        TEXT,                    -- macro_policy|industry_trend|geopolitics|policy_political|corporate_events|market_sentiment
+    time_axis       TEXT,                    -- ephemeral_shock|short_theme|structural_trend
+    direction       TEXT,                    -- up|neutral|down
+    magnitude       INTEGER,                 -- 1|2|3
+    confidence      INTEGER,                 -- 0~100
+    affected_scope  TEXT,                    -- market|sector|ticker
+    affected_refs_json TEXT,                 -- ["005930", ...]
+    labeled_by      TEXT,                    -- llm|manual|rss_raw
+    collected_at    TEXT,                    -- ISO8601 (UTC) 수집 시각
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_news_source_items_collected ON news_source_items(collected_at);
+CREATE INDEX IF NOT EXISTS idx_news_source_items_category ON news_source_items(category);
+
+-- build_news_digest(date[, ticker]) 단일 산출물 영속 — 결정론 집계 (M4/M5). (scope, date) 멱등 PK.
+-- scope = "market" | "ticker:005930" | "sector:반도체". 정밀 점수 필드 없음 (거친 tilt).
+CREATE TABLE IF NOT EXISTS news_digest_snapshot (
+    scope           TEXT NOT NULL,           -- "market" | "ticker:<code>" | "sector:<name>"
+    date            TEXT NOT NULL,           -- "2026-06-07" (KST)
+    tone            TEXT,                    -- bearish|lean_bearish|neutral|lean_bullish|bullish (5단 tilt)
+    category_counts_json TEXT,               -- {cat:{up,neutral,down}}
+    top_themes_json TEXT,                    -- [{theme, time_axis, trigger_titles[]}]
+    catalyst_tilt_json TEXT,                 -- {direction, strength} (종목/섹터 scope → buy_score N 블렌드)
+    raw_labels      TEXT,                    -- LLM 주입용 분류 텍스트 묶음
+    source          TEXT,                    -- db | computed | empty
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (scope, date)
+);
+CREATE INDEX IF NOT EXISTS idx_news_digest_date ON news_digest_snapshot(date);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -463,3 +506,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (7);
 INSERT OR IGNORE INTO schema_version (version) VALUES (8);
 INSERT OR IGNORE INTO schema_version (version) VALUES (9);
 INSERT OR IGNORE INTO schema_version (version) VALUES (10);
+INSERT OR IGNORE INTO schema_version (version) VALUES (11);
