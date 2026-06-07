@@ -180,6 +180,7 @@ async def build_pipeline_prompt(
     canon_categories: list[str] | None = None,
     market_snapshot_md: str | None = None,
     market_view_md: str | None = None,
+    news_digest_md: str | None = None,
     chart_data_md: str | None = None,
     alpha_3tf_md: str | None = None,
     fundamental_data_md: str | None = None,
@@ -259,6 +260,14 @@ async def build_pipeline_prompt(
             "type": "text",
             "text": market_view_md if market_view_md.lstrip().startswith("##")
                 else f"## 시장관 종합\n{market_view_md}",
+        })
+
+    # [3c] 뉴스 종합 (not cached — 결정론 집계 DB-first, NEWS-SOURCE-001 MS-C, news_curator 한정)
+    if news_digest_md:
+        blocks.append({
+            "type": "text",
+            "text": news_digest_md if news_digest_md.lstrip().startswith("##")
+                else f"## 뉴스 종합\n{news_digest_md}",
         })
 
     # [4] Chart data (not cached — 60s 갱신, INFRA-CHART-DATA-001)

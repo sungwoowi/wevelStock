@@ -3,7 +3,7 @@ spec_id: NEWS-SOURCE-001
 title: 뉴스부 자료층 — 영속 분류·시간축 라벨 news_items + build_news_digest 단일 소스 → market_view·buy_score N축 촉매·뉴스큐레이터
 team: shared
 type: feature
-status: implementing
+status: verified
 level: implementation
 parent: LEFT-BRAIN-COMPLETION-001          # LB-MS3
 generates:
@@ -194,7 +194,14 @@ ephemeral_shock/short_theme/structural_trend 가르는 기준 명제화(canon/ne
 - 단계 지도: `scripts/project_status.py` → LEFT-BRAIN 트리에 NEWS-SOURCE-001 draft 등재(미작성→draft), 구현 후 implementing/verified.
 
 ## 완료 정의 (이 SPEC)
-RSS+수동 자료원으로 뉴스가 분류·시간축 라벨링되어 `news_items` 에 영속 누적 + `build_news_digest` 단일 산출물이 market_view 내러티브(시장 전반)·buy_score N 촉매(종목)·news_curator 해석에 동시에 흐른다 + news_curator 가 "자료원 미결정 거부" 를 벗어나 digest 기반 분류·해석 + 회귀/validate 통과 + 브리핑 동작 불변. (UX/UI 어드민·Perplexity·유튜브 자동·RAG·일일 cron·정밀 점수는 후속/의도적 제외.)
+RSS+수동 자료원으로 뉴스가 분류·시간축 라벨링되어 `news_source_items` 에 영속 누적 + `build_news_digest` 단일 산출물이 market_view 내러티브(시장 전반)·buy_score N 촉매(종목)·news_curator 해석에 동시에 흐른다 + news_curator 가 "자료원 미결정 거부" 를 벗어나 digest 기반 분류·해석 + 회귀/validate 통과 + 브리핑 동작 불변. (UX/UI 어드민·Perplexity·유튜브 자동·RAG·일일 cron·정밀 점수는 후속/의도적 제외.)
+
+## 구현 완료 (verified, 2026-06-07)
+- **MS-A** 데이터 백본 — 어댑터 3종 + `news_source_items`/`news_digest_snapshot` 2테이블 + config.
+- **MS-B** 분류·digest — `classify_news_items`(LLM, anchors mirror) + `build_news_digest`(결정론 tone 5단) + `render_news_digest_md` + canon `news/01-classification-doctrine.md`(N1~N5).
+- **MS-C** 소비 배선 — C1 news_curator hook(`reads_news_digest`+compose `[8]`+SLOT S2 클로즈) / C2 market_view 흡수(시장 톤·테마 → reasons·one_liner) / C3 buy_score N 블렌드(종목 catalyst_tilt, config `n_axis_blend`).
+- **MS-D** 라이브 — `scripts/_news_digest_probe.py` 실 RSS 50건 + 실 Gemini 분류 + market digest(tone neutral, market_sentiment 8↑/15↓ 등) + 종목 005930 catalyst_tilt down/strong → N 7.0→4.5 블렌드 실증. **944 passed / validate 0 errors / 브리핑 동작 불변.**
+- 후속(SLOT): UX/UI 어드민 · Perplexity MCP · 유튜브 자동 · 뉴스 본문 RAG · 일일 적재 cron 배선(LEFT-BRAIN Top 3) · 브리핑 collect_news→news DB 통합.
 
 ## 면담 5라운드 결단 요약 (영구 권위, 2026-06-07 spec-interview)
 - **R1 본질**: 9번째 0시드 지식부(뉴스부) 자료층. market_view 내러티브 + buy_score N 촉매 + news_curator 활성. 브리핑 일회성 RSS 의 *영속·분류·다중소비자 승격*(중복 X).

@@ -61,3 +61,13 @@ digest:
   top_themes_n: 3        # top_themes 클러스터 상위 N
   trigger_titles_n: 3    # 테마당 대표 제목 수
   lookback_limit: 500    # 날짜 필터 전 조회 상한
+
+  # MS-C C3 — 종목 scope catalyst_tilt → buy_score N축 블렌드 (M7: 종목 뉴스→종목 점수).
+  # 뉴스 없으면 52주 신고가만(현 동작 보존). 가중 합은 정규화(÷합).
+  n_axis_blend:
+    high_weight: 0.6     # 52주 신고가 가중
+    news_weight: 0.4     # 뉴스 촉매 가중
+    tilt_scores:         # catalyst_tilt {direction, strength} → 0~10
+      up:   {weak: 6.0, mid: 7.5, strong: 9.5}
+      neutral: 5.0
+      down: {weak: 4.0, mid: 2.5, strong: 0.5}

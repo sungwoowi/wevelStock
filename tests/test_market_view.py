@@ -162,6 +162,50 @@ def test_synthesize_deterministic_full():
     assert view.confidence == 70
 
 
+def _news_digest(tone: str, *, themes=None, source: str = "computed"):
+    """C2 흡수 테스트용 경량 NewsDigest."""
+    from collectors.news_source import NewsDigest
+
+    return NewsDigest(
+        date="2026-06-06", scope="market", tone=tone,
+        top_themes=themes or [], source=source,
+    )
+
+
+def test_synthesize_absorbs_news_tone_into_reasons_and_one_liner():
+    """C2 — 시장 scope digest tone·top_themes 가 reasons + one_liner 에 흡수 (NEWS-SOURCE-001 M5)."""
+    macro = _macro({"position": "above_both", "trend": "uptrend", "slope": 1.0, "breadth": 0.60, "dd": 0})
+    today = [_rs("방산", 8.0), _rs("2차전지", 6.0)]
+    digest = _news_digest(
+        "bullish",
+        themes=[{"theme": "금리인하", "time_axis": "structural_trend", "trigger_titles": ["t1"]}],
+    )
+    view = synthesize_market_view(
+        macro, today, None, market="KOSPI", date_str="2026-06-06", news_digest=digest,
+    )
+    assert any("뉴스 톤" in r and "호재 우세" in r for r in view.reasons)
+    assert "금리인하" in " ".join(view.reasons)
+    assert "뉴스 호재 우세" in view.one_liner
+
+
+def test_synthesize_news_none_backward_compatible():
+    """C2 — news_digest=None (기본) → 뉴스 reason 없음 (하위호환)."""
+    macro = _macro({"position": "above_both", "trend": "uptrend", "slope": 1.0, "breadth": 0.60, "dd": 0})
+    view = synthesize_market_view(macro, [_rs("방산", 8.0)], None, market="KOSPI", date_str="2026-06-06")
+    assert not any("뉴스 톤" in r for r in view.reasons)
+    assert "뉴스" not in view.one_liner
+
+
+def test_synthesize_empty_news_not_absorbed():
+    """C2 — source='empty' digest → 흡수 생략 (중립 톤 노이즈 방지)."""
+    macro = _macro({"position": "above_both", "trend": "uptrend", "slope": 1.0, "breadth": 0.60, "dd": 0})
+    digest = _news_digest("neutral", source="empty")
+    view = synthesize_market_view(
+        macro, [_rs("방산", 8.0)], None, market="KOSPI", date_str="2026-06-06", news_digest=digest,
+    )
+    assert not any("뉴스 톤" in r for r in view.reasons)
+
+
 def test_sector_labels_clean_etf_brand_names():
     """ETF 브랜드명 → 친화 섹터명 (config sector_labels, ticker 기준). one_liner·leading·rotation 일관."""
     # 실 ticker 사용 (config/market_view.yaml sector_labels): 139260=금융, 244580=바이오

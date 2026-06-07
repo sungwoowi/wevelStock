@@ -458,3 +458,104 @@ def test_render_empty_digest():
     d = NewsDigest(date="2026-06-07", scope="market", tone="neutral", source="empty")
     md = render_news_digest_md(d)
     assert "분류된 뉴스 없음" in md
+
+
+# ---------------------------------------------------------------------------
+# MS-C1 — run_analyst hook (_maybe_build_news_digest_md) + compose [8] 주입
+# ---------------------------------------------------------------------------
+async def test_news_digest_hook_off_for_non_reader(isolated_db: Database):
+    """reads_news_digest=False 분석가 → (None, base_meta), digest 미빌드."""
+    from core.inference.run_analyst import _maybe_build_news_digest_md, load_analyst_spec
+
+    spec = load_analyst_spec("wealth_strategist")  # reads_news_digest 미설정
+    md, meta = await _maybe_build_news_digest_md(spec, None)
+    assert md is None
+    assert meta == {"news_digest_failures": []}
+
+
+async def test_news_digest_hook_on_for_news_curator(isolated_db: Database):
+    """news_curator(reads_news_digest=True) → [8] 블록 md (빈 digest여도 헤더)."""
+    from core.inference.run_analyst import _maybe_build_news_digest_md, load_analyst_spec
+
+    spec = load_analyst_spec("news_curator")
+    assert spec.reads_news_digest is True
+    md, meta = await _maybe_build_news_digest_md(spec, None)
+    assert md is not None
+    assert "## [8] 뉴스 종합" in md
+    assert "news_digest" in meta
+    assert meta["news_digest"]["source"] == "empty"  # 격리 DB = 뉴스 0
+
+
+async def test_news_digest_hook_ticker_scope(isolated_db: Database):
+    """target_ticker 주면 ticker scope digest."""
+    from collectors.news_source import upsert_news_items
+    from core.inference.run_analyst import _maybe_build_news_digest_md, load_analyst_spec
+
+    upsert_news_items([_labeled("http://q1", "up", 3, refs=["005930"], title="삼성 호재")])
+    spec = load_analyst_spec("news_curator")
+    md, meta = await _maybe_build_news_digest_md(spec, "005930")
+    assert meta["news_digest"]["scope"] == "ticker:005930"
+
+
+async def test_compose_injects_news_digest_block():
+    """build_pipeline_prompt(news_digest_md=...) → [8] 블록 blocks 에 포함."""
+    from core.knowledge import compose as compose_mod
+
+    bundle = await compose_mod.build_pipeline_prompt(
+        context_id="news_curator",
+        persona_path=None,
+        include_shared_canon=False,
+        include_memory=False,
+        query_for_rag=None,
+        rag_dept=None,
+        news_digest_md="## [8] 뉴스 종합 (NEWS-SOURCE-001)\nTEST-TONE-MARKER",
+    )
+    assert any("TEST-TONE-MARKER" in b["text"] for b in bundle.blocks)
+
+
+# ---------------------------------------------------------------------------
+# MS-C3 — buy_score N축 뉴스 catalyst_tilt 블렌드
+# ---------------------------------------------------------------------------
+def test_news_catalyst_to_score_mapping():
+    from collectors.buy_score_inputs import _news_catalyst_to_score
+
+    cfg = load_news_source_config()["digest"]["n_axis_blend"]
+    assert _news_catalyst_to_score({"direction": "up", "strength": "strong"}, cfg) == 9.5
+    assert _news_catalyst_to_score({"direction": "down", "strength": "strong"}, cfg) == 0.5
+    assert _news_catalyst_to_score({"direction": "neutral", "strength": "weak"}, cfg) == 5.0
+    assert _news_catalyst_to_score(None, cfg) is None
+
+
+def test_blend_news_catalyst_empty_keeps_high(isolated_db: Database):
+    """뉴스 0 (empty digest) → 52주 신고가 점수 보존 (현 동작 graceful)."""
+    from collectors.buy_score_inputs import _blend_news_catalyst
+
+    reasons: list[str] = []
+    axis = {"n": "charts_52w"}
+    out = _blend_news_catalyst(8.0, "005930", "2026-06-07", axis, reasons)
+    assert out == 8.0
+    assert axis["n"] == "charts_52w"
+    assert any("뉴스 촉매 없음" in r for r in reasons)
+
+
+def test_blend_news_catalyst_down_lowers_n(isolated_db: Database):
+    """종목 강한 악재 뉴스 → catalyst_tilt down/strong → N 하향 블렌드."""
+    from collectors.buy_score_inputs import _blend_news_catalyst
+
+    upsert_news_items([_labeled("http://bad", "down", 3, refs=["005930"], confidence=90)])
+    reasons: list[str] = []
+    axis = {"n": "charts_52w"}
+    out = _blend_news_catalyst(10.0, "005930", "2026-06-07", axis, reasons)
+    assert out < 10.0  # 0.6×10 + 0.4×0.5 = 6.2 → 6.0
+    assert "news_tilt" in axis["n"]
+    assert any("뉴스 촉매 블렌드" in r for r in reasons)
+
+
+def test_blend_news_catalyst_other_ticker_not_mixed(isolated_db: Database):
+    """다른 종목 뉴스는 블렌드에 안 섞임 (ticker scope 격리, M7)."""
+    from collectors.buy_score_inputs import _blend_news_catalyst
+
+    upsert_news_items([_labeled("http://other", "down", 3, refs=["000660"], confidence=90)])
+    reasons: list[str] = []
+    out = _blend_news_catalyst(8.0, "005930", "2026-06-07", {"n": "charts_52w"}, reasons)
+    assert out == 8.0  # 005930 뉴스 없음 → 보존

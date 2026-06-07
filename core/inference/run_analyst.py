@@ -94,6 +94,7 @@ class AnalystSpec:
     reads_screening: bool = False  # INFRA-SCORE-INPUTS-001 v2 S-Score — stock_picker 만 True
     reads_buyscore: bool = False  # INFRA-SCORE-INPUTS-001 v3 buy_score — stock_picker 만 True
     reads_market_view: bool = False  # MARKET-VIEW-SYNTHESIS-001 시장관 종합 — market_state_analyzer 만 True
+    reads_news_digest: bool = False  # NEWS-SOURCE-001 MS-C 뉴스 종합 [8] — news_curator 만 True
 
 
 @dataclass
@@ -139,6 +140,7 @@ def load_analyst_spec(analyst_id: str) -> AnalystSpec:
         reads_screening=bool(raw.get("reads_screening", False)),
         reads_buyscore=bool(raw.get("reads_buyscore", False)),
         reads_market_view=bool(raw.get("reads_market_view", False)),
+        reads_news_digest=bool(raw.get("reads_news_digest", False)),
     )
 
 
@@ -781,6 +783,36 @@ async def _maybe_build_market_view_md(
     return render_market_view_md(view), market_view_metadata(view)
 
 
+async def _maybe_build_news_digest_md(
+    spec: AnalystSpec,
+    target_ticker: str | None,
+) -> tuple[str | None, dict[str, Any]]:
+    """NEWS-SOURCE-001 MS-C — reads_news_digest 충족 시 뉴스 종합 [8] md.
+
+    news_curator 만 활성. build_news_digest 는 결정론 집계(DB-first, LLM 0) —
+    target_ticker 있으면 종목 scope, 없으면 시장 전반(market). 뉴스 미수집 시
+    source='empty' digest 를 그대로 렌더(거부 아님, "분류된 뉴스 없음").
+    """
+    base_meta: dict[str, Any] = {"news_digest_failures": []}
+    if not spec.reads_news_digest:
+        return None, base_meta
+    try:
+        from collectors.market_view import _today_kst_str
+        from collectors.news_source import (
+            build_news_digest,
+            news_digest_metadata,
+            render_news_digest_md,
+        )
+
+        digest = build_news_digest(_today_kst_str(), ticker=target_ticker or None)
+    except Exception as e:  # noqa: BLE001
+        log.warning("news_digest_inject_failed", error=str(e))
+        base_meta["news_digest_failures"] = [f"build_news_digest:{type(e).__name__}"]
+        return None, base_meta
+
+    return render_news_digest_md(digest), news_digest_metadata(digest)
+
+
 async def run_analyst(
     analyst_id: str,
     messages: list[dict],
@@ -838,6 +870,7 @@ async def run_analyst(
         spec, target_ticker, snapshot
     )
     market_view_md, market_view_meta = await _maybe_build_market_view_md(spec)
+    news_digest_md, news_digest_meta = await _maybe_build_news_digest_md(spec, target_ticker)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -850,6 +883,7 @@ async def run_analyst(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         market_view_md=market_view_md,
+        news_digest_md=news_digest_md,
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
@@ -924,6 +958,7 @@ async def run_analyst(
         **screening_meta,
         **buyscore_meta,
         **market_view_meta,
+        **news_digest_meta,
     }
 
     log.info(
@@ -992,6 +1027,7 @@ async def run_analyst_stream(
         spec, target_ticker, snapshot
     )
     market_view_md, market_view_meta = await _maybe_build_market_view_md(spec)
+    news_digest_md, news_digest_meta = await _maybe_build_news_digest_md(spec, target_ticker)
 
     bundle = await build_pipeline_prompt(
         context_id=spec.id,
@@ -1004,6 +1040,7 @@ async def run_analyst_stream(
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
         market_view_md=market_view_md,
+        news_digest_md=news_digest_md,
         chart_data_md=chart_data_md,
         alpha_3tf_md=alpha_3tf_md,
         fundamental_data_md=fundamental_data_md,
@@ -1102,6 +1139,7 @@ async def run_analyst_stream(
         **screening_meta,
         **buyscore_meta,
         **market_view_meta,
+        **news_digest_meta,
         "content": md_src.get("content", ""),  # 누적 텍스트 (검증용)
     }
 

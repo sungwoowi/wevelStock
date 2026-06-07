@@ -337,6 +337,16 @@ def build_one_liner(
     return " · ".join(parts)
 
 
+# NEWS-SOURCE-001 MS-C C2 — 시장 전반 뉴스 톤 한국어 (one_liner / reason 흡수)
+_NEWS_TONE_KR = {
+    "bearish": "악재 우세",
+    "lean_bearish": "약세 기울기",
+    "neutral": "중립",
+    "lean_bullish": "강세 기울기",
+    "bullish": "호재 우세",
+}
+
+
 def synthesize_market_view(
     macro: Any,
     today_rs: list[SectorRS],
@@ -345,6 +355,7 @@ def synthesize_market_view(
     market: str,
     date_str: str,
     config: dict[str, Any] | None = None,
+    news_digest: Any = None,
 ) -> MarketView:
     """결정론 종합 (Stage 1) — LLM 없음. M2 크로스체크 전 baseline.
 
@@ -352,6 +363,7 @@ def synthesize_market_view(
         macro: MarketMacro 또는 dict (regime 분류 입력).
         today_rs: 오늘 섹터 RS (rs_score 내림차순 가정).
         prev_rs: N일 전 섹터 RS (순환매 비교 기준). None = 첫날 graceful.
+        news_digest: 시장 scope NewsDigest (NEWS-SOURCE-001 M5). None/empty 면 흡수 생략.
     """
     cfg = config or load_market_view_config()
     top_n = int(cfg.get("rotation", {}).get("leading_top_n", 3))
@@ -375,6 +387,18 @@ def synthesize_market_view(
         reasons.append("순환매 판단 보류 (다일 누적 부족 또는 유의미한 이동 없음)")
     if dd is not None:
         reasons.append(f"분산일(25일) {int(dd)}건" + (" — kill switch 발동" if int(dd or 0) >= int(cfg.get("entry_posture", {}).get("kill_switch_dd", 4)) else ""))
+
+    # C2 — 시장 전반 뉴스 톤 흡수 (NEWS-SOURCE-001 M5: 시장 뉴스 → 시장관 내러티브).
+    if news_digest is not None and getattr(news_digest, "source", "empty") != "empty":
+        tone = getattr(news_digest, "tone", "neutral")
+        tone_kr = _NEWS_TONE_KR.get(tone, tone)
+        themes = getattr(news_digest, "top_themes", None) or []
+        theme_part = (
+            " · 테마 " + ", ".join(str(t.get("theme")) for t in themes[:2]) if themes else ""
+        )
+        reasons.append(f"뉴스 톤 {tone_kr}(tone={tone}){theme_part}")
+        if tone in ("bullish", "bearish", "lean_bullish", "lean_bearish"):
+            one_liner = f"{one_liner} · 뉴스 {tone_kr}"
 
     return MarketView(
         date=date_str,
@@ -527,8 +551,18 @@ async def build_market_view(
     prev = load_prev_sector_rs(today, market, window_days=window)
     prev_rs = prev[1] if prev else None
 
+    # C2 — 시장 전반 뉴스 digest (graceful, persist=False — 소비 read 용. 영속은 뉴스 파이프라인 책임).
+    news_digest = None
+    try:
+        from collectors.news_source import build_news_digest as _build_news_digest
+
+        news_digest = _build_news_digest(today, persist=False)
+    except Exception as e:  # noqa: BLE001
+        log.warning("market_view_news_digest_failed", market=market, error=str(e))
+
     view = synthesize_market_view(
-        macro, today_rs, prev_rs, market=market, date_str=today, config=cfg
+        macro, today_rs, prev_rs, market=market, date_str=today, config=cfg,
+        news_digest=news_digest,
     )
 
     # M2 seam — rotation Stage 2 LLM 크로스체크 (cross_check_rotation_via_llm).

@@ -127,6 +127,67 @@ def compute_demand_score(
     return _clamp(_round_to_half(num / wsum))
 
 
+def _news_catalyst_to_score(tilt: dict | None, blend_cfg: dict) -> float | None:
+    """catalyst_tilt {direction, strength} → 0~10 (config tilt_scores). neutral→5, 미매핑→None."""
+    if not tilt:
+        return None
+    table = blend_cfg.get("tilt_scores") or {}
+    direction = tilt.get("direction", "neutral")
+    if direction == "neutral":
+        return float(table.get("neutral", 5.0))
+    band = table.get(direction)
+    if not isinstance(band, dict):
+        return None
+    return float(band.get(tilt.get("strength", "weak"), 5.0))
+
+
+def _blend_news_catalyst(
+    n_high: float,
+    ticker_s: str,
+    cutoff_date: str | None,
+    axis_source: dict[str, str],
+    reasons: list[str],
+) -> float:
+    """N축 = 52주 신고가(n_high) + 종목 scope 뉴스 catalyst_tilt 가중 블렌드 (NEWS-SOURCE-001 M7).
+
+    뉴스 없으면(미수집/중립/실패) n_high 그대로 반환(현 동작 보존, graceful).
+    가중 합은 정규화(÷(w_high+w_news)) — config 가중이 1 합 아니어도 안전.
+    """
+    try:
+        from collectors.market_view import _today_kst_str
+        from collectors.news_source import build_news_digest, load_news_source_config
+        from collectors.scoring import _clamp, _round_to_half
+
+        blend_cfg = (load_news_source_config().get("digest") or {}).get("n_axis_blend") or {}
+        nd = build_news_digest(cutoff_date or _today_kst_str(), ticker=ticker_s, persist=False)
+        if nd.source == "empty":
+            reasons.append("N 뉴스 촉매 없음 — 52주 신고가만 (오늘 종목 뉴스 미분류)")
+            return n_high
+        n_news = _news_catalyst_to_score(nd.catalyst_tilt, blend_cfg)
+        if n_news is None:
+            reasons.append("N 뉴스 촉매 중립 — 52주 신고가만")
+            return n_high
+        w_high = float(blend_cfg.get("high_weight", 0.6))
+        w_news = float(blend_cfg.get("news_weight", 0.4))
+        wsum = w_high + w_news if (w_high + w_news) > 0 else 1.0
+        blended = _clamp(_round_to_half((w_high * n_high + w_news * n_news) / wsum))
+        axis_source["n"] = (
+            axis_source["n"] + "+news_tilt"
+            if axis_source["n"] != "neutral_fallback"
+            else "news_tilt"
+        )
+        tilt = nd.catalyst_tilt
+        reasons.append(
+            f"N 뉴스 촉매 블렌드: 신고가 {n_high:.1f}×{w_high} + "
+            f"촉매({tilt.get('direction')}/{tilt.get('strength')}={n_news:.1f})×{w_news} → {blended:.1f}"
+        )
+        return blended
+    except Exception as e:  # noqa: BLE001
+        log.warning("buyscore_news_blend_failed", ticker=ticker_s, error=str(e))
+        reasons.append("N 뉴스 촉매 블렌드 실패 — 52주 신고가만")
+        return n_high
+
+
 def compute_institution_ratio(net_sums: dict[str, int] | None) -> float | None:
     """기관 net 비중 = institution_net / (|foreign|+|institution|+1) → -1..+1. 부재 시 None."""
     if not net_sums:
@@ -218,7 +279,12 @@ async def build_buy_score_inputs(
         except Exception as e:  # noqa: BLE001
             log.warning("buyscore_chart_failed", ticker=ticker_s, error=str(e))
             reasons.append(f"N 산출 실패 ({type(e).__name__}) → 중립")
-    reasons.append("N 뉴스부(신제품) 0시드 — 52주 신고가만 (SLOT: NEWS-SOURCE-001)")
+
+        # C3 — 종목 scope 뉴스 catalyst_tilt 블렌드 (NEWS-SOURCE-001 MS-C, M7).
+        # N = New(신고가 + 신제품/뉴스 촉매). 뉴스 없으면 52주 신고가만(보존).
+        n = _blend_news_catalyst(n, ticker_s, cutoff_date, axis_source, reasons)
+    else:
+        reasons.append("N 중립 — ticker 부재")
 
     # ---- S / I — flow_inputs (collector 직접 호출). S = demand composite(momentum+inflow+거래량) ----
     inflow_raw: float | None = None

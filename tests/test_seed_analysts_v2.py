@@ -63,7 +63,7 @@ EXPECTED_CANON_CATEGORIES = {
         "flow_analysis/sector_flow",
         "flow_analysis/stock_flow",
     ],
-    "news_curator": [],  # SLOT S2 — 자료원 결정 후 SPEC 갱신, 현재 빈 list
+    "news_curator": ["news"],  # NEWS-SOURCE-001 MS-B canon news/01-classification-doctrine (N1~N5)
 }
 
 EXPECTED_DEPT = {
@@ -308,15 +308,19 @@ def test_stock_picker_g1_guard_two_scores() -> None:
     assert "한 점수만" in text or "둘 다" in text or "양쪽" in text
 
 
-def test_news_curator_slot_s2_data_source_pending() -> None:
-    """news_curator SLOT S2 (자료원 미결정) 명시 + canon_categories 빈 list."""
+def test_news_curator_slot_s2_closed_reads_news_digest() -> None:
+    """NEWS-SOURCE-001 MS-C — SLOT S2 클로즈: reads_news_digest + canon_categories=[news]."""
     spec = load_analyst_spec("news_curator")
-    assert spec.canon_categories == []  # 자료원 결정 후 SPEC 갱신, 현재 빈 list
+    assert spec.canon_categories == ["news"]  # canon news/01-classification-doctrine 활성
+    assert spec.reads_news_digest is True  # [8] 뉴스 종합 digest 주입
 
     persona_path = ANALYSTS_DIR / "news_curator" / "persona.md"
     text = persona_path.read_text(encoding="utf-8")
-    assert "SLOT S2" in text or "자료원" in text
-    assert "Perplexity" in text or "별도 SPEC" in text
+    # 거부 상태 청산: 자료원 = digest [8], 더 이상 "자료원 미결정" 거부 아님
+    assert "디제스트" in text or "digest" in text
+    assert "자료원 미결정" not in text
+    # canon N1~N5 인용 가능
+    assert "N1" in text and "N5" in text
 
 
 def test_flow_analyzer_f_score_4_axis_weights() -> None:
@@ -355,7 +359,7 @@ ALL_8_ANALYSTS = [
     "trader",
     "stock_analyst",
 ]
-# news_curator 는 SLOT S2 (자료원 미결정, canon_categories 빈 list) → 본 검증 제외
+# news_curator 는 boundary 매트릭스 완전성 검증 대상에서 별도 (간접 read 분석가) → 본 검증 제외
 
 
 @pytest.mark.parametrize("analyst_id", ALL_8_ANALYSTS)
