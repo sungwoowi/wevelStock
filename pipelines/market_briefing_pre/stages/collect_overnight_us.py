@@ -29,6 +29,18 @@ class CollectOvernightUsStage(Stage):
         errors = [k for k, v in raw.items() if isinstance(v, dict) and "error" in v]
         status = "warning" if errors else "ok"
 
+        # 장전 us_macro_snapshot 영속 (INFRA-US-MACRO-SNAPSHOT-001 U3 — 18:05 허브와 둘 다).
+        #   compute_us_macro 는 DB-first 멱등 — 같은 KST 날짜면 18:05 적재와 동일값 갱신.
+        #   double-fetch(이 stage fetch_overnight + compute_us_macro) dedupe 는 SLOT (SPEC 명시).
+        #   graceful — 영속 실패가 브리핑을 막지 않음.
+        try:
+            from collectors.us_macro import compute_us_macro
+
+            us_snap = await compute_us_macro(force_refresh=True)
+            log.info("overnight_us_macro_persisted", risk_signal=us_snap.risk_signal, source=us_snap.source)
+        except Exception as e:  # noqa: BLE001
+            log.warning("overnight_us_macro_persist_failed", error=str(e))
+
         log.info(
             "overnight_us_collected",
             pipeline=ctx.pipeline_id,

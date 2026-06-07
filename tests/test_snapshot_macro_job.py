@@ -17,6 +17,7 @@ import pytest
 from collectors import market_macro as mm
 from collectors import market_view as mv
 from collectors import supply_demand_history as sdh
+from collectors import us_macro as um
 from server.schedulers.jobs.snapshot_macro import run_snapshot_macro_refresh
 
 
@@ -46,7 +47,7 @@ class _FakeView:
 @pytest.fixture
 def patched_collectors(monkeypatch: pytest.MonkeyPatch) -> dict:
     """세 collector 를 호출 추적 mock 으로 교체. 호출 인자 기록."""
-    calls: dict = {"supply": 0, "macro": 0, "view": []}
+    calls: dict = {"supply": 0, "macro": 0, "us_macro": 0, "view": []}
 
     async def fake_supply():
         calls["supply"] += 1
@@ -56,12 +57,17 @@ def patched_collectors(monkeypatch: pytest.MonkeyPatch) -> dict:
         calls["macro"] += 1
         return {"refreshed": ["KOSPI", "KOSDAQ"], "failures": []}
 
+    async def fake_us_macro():
+        calls["us_macro"] += 1
+        return {"date": "2026-06-07", "risk_signal": "risk_off", "extreme": "none", "source": "computed"}
+
     async def fake_view(market="KOSPI", *, force_refresh=False, cross_check=True):
         calls["view"].append({"market": market, "force_refresh": force_refresh})
         return _FakeView(market=market)
 
     monkeypatch.setattr(sdh, "refresh_supply_demand_today", fake_supply)
     monkeypatch.setattr(mm, "refresh_market_macro_all", fake_macro)
+    monkeypatch.setattr(um, "refresh_us_macro", fake_us_macro)
     monkeypatch.setattr(mv, "build_market_view", fake_view)
     return calls
 
@@ -77,9 +83,11 @@ def test_all_three_stages_invoked(patched_collectors: dict) -> None:
 
     assert patched_collectors["supply"] == 1
     assert patched_collectors["macro"] == 1
+    assert patched_collectors["us_macro"] == 1
     assert patched_collectors["view"] == [{"market": "KOSPI", "force_refresh": True}]
 
-    assert set(result) >= {"supply", "market_macro", "market_view", "elapsed_s"}
+    assert set(result) >= {"supply", "market_macro", "us_macro", "market_view", "elapsed_s"}
+    assert result["us_macro"]["risk_signal"] == "risk_off"
     assert result["market_view"]["regime"] == "moderate_bull"
     assert result["market_view"]["rotation"] == "바이오→금융"
     assert result["market_view"]["one_liner"]

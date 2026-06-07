@@ -26,6 +26,12 @@ cross_check:
 prepend:
   enabled: true           # formatter 가 모든 production-chat 답변 머리에 시장관 1줄 prepend
 
+# 미장 야간 매크로 흡수 (INFRA-US-MACRO-SNAPSHOT-001 — us-macro-hook SLOT).
+# risk_off → entry_posture 한 단계 강등 / vix_panic → 방어 게이트 / one_liner 미장 토큰.
+# 분류 임계 자체는 config/us_macro.yaml. 여기선 흡수 on/off 만.
+us_macro:
+  enabled: true
+
 # 섹터 ETF ticker → 사용자 친화 섹터명 (one_liner·[7] 블록 표기용).
 # SectorRS.sector 는 ETF 브랜드명("TIGER 200 금융")이라 답변엔 순수 섹터명("금융")이 자연스럽다.
 # ticker 키 = 이름 인코딩 무관·안정. 미매칭 ticker 는 ETF 원명 fallback.

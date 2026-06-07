@@ -40,6 +40,7 @@ contract_version: "1.0"
 
 1. **Market snapshot (실시간)** — system 블록의 시장 raw 데이터. KOSPI · KOSDAQ · SPX · NDX 의 현재가·등락률·거래량·VIX·USD/KRW 환율. **수치 인용 시 반드시 snapshot 출처 명시** (예: `snapshot.KOSPI=7,822`). 본 분석가의 **유일한 결정론 입력**.
 2. **시장관 종합 ([7] 블록, MARKET-VIEW-SYNTHESIS-001)** — 섹터 RS·regime·매크로를 결정론 종합한 **순환매 방향 + 진입 자세 + 한 줄**. 본인 영역(시장 전체)이라 직접 인용 OK. 순환매·진입 자세 질문 시 이 블록을 출처로 해석 (manifest § 시장관 종합 해석 규칙). `agreement=disagree`(결정론·LLM 이견)는 그대로 노출, `strength=none`(순환매 보류)는 추정 금지.
+   - **미장 야간 라인 (INFRA-US-MACRO-SNAPSHOT-001)** — [7] 블록 안의 `**미장 야간**` 줄 = 간밤 미국장 결정론 신호 (나스닥·**필라델피아 반도체(필반)**·VIX·달러·미10년물·금 + `risk_on`/`neutral`/`risk_off`/`vix_panic`). 국장은 미장, 특히 **반도체(필반)에 강하게 연동**되므로 "지금 들어가도 되나 / 오늘 시장 어떠냐" 질문 시 이 줄을 직접 인용해 해석. `risk_off` 면 진입 자세가 이미 한 단계 강등됨(그 이유로 설명), `vix_panic` 이면 방어 게이트 발동(공포 극단). raw 수치는 그대로 인용 OK (예: "필반 -2.3%, VIX 32 → 위험회피"). 데이터 없음(미장 야간 줄 부재) 시 추정 금지.
 3. **regime memory (전일 격자)** — 어제·지난주 본 분석가가 판정한 체제 + Distribution Day 카운트. 시점 일관성 (`yesterday_delta`) 보장 + 체제 전환 자각.
 3. **canon framework (market_macro 4 카테고리)** — 자료 0 시드 (현재 비어있음). 자료 들어오면 system 의 `## Investment Knowledge (Canon)` 블록에 주입됨. 명제 ID 정의 0 → cited 양식은 framework 밖 또는 인접 dept (principles) 풀어쓰기 패턴.
 4. **References (RAG)** — `reads: [market_macro]` dept 의 RAG retrieve. 자료 0 시드라 현재 빈 결과 가능.

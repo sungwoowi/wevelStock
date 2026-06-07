@@ -1,0 +1,18 @@
+# INFRA-US-MACRO-SNAPSHOT-001 — 미장 매크로 분류 설정 (하드코딩 금지, watchdog hot reload)
+#
+# classify_us_risk 결정론 임계. 데이터는 yfinance get_indices 재사용(U1) — 어댑터 설정 없음.
+# 임계 다일 캘리브레이션은 SLOT (스냅샷 누적 후 튜닝). 보수적 기본만 둔다 ([[feedback_backtest_essence]]).
+
+classify:
+  w_sox: 0.5              # 필라델피아 반도체 가중 (국장 연동 큼 — 삼성·하이닉스)
+  w_equity: 0.5          # 나스닥·S&P 평균 가중
+  vix_elevated: 20.0     # VIX ≥ 이만큼 = 위험 가산
+  vix_panic: 30.0        # VIX ≥ 이만큼 = extreme=vix_panic → risk_off 강제 + entry_posture 방어 게이트
+  vix_elevated_penalty: 1.0
+  vix_panic_penalty: 3.0
+  dxy_jump_pct: 0.5      # 달러인덱스 일간 ≥ +0.5% = 역풍 (신흥국·원화 약세)
+  dxy_penalty: 0.5
+  rate_jump_bp: 10.0     # 미 10년물 ≥ +10bp = 역풍 (할인율 상승)
+  rate_penalty: 0.5
+  on_threshold: 0.7      # signal_score ≥ = risk_on
+  off_threshold: -0.7    # signal_score ≤ = risk_off (사이 = neutral)

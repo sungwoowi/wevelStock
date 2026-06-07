@@ -79,6 +79,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
     "cross_check": {"enabled": True, "provider": "gemini", "model": "gemini-2.5-flash-lite", "ttl_days": 1},
     "prepend": {"enabled": True},
+    "us_macro": {"enabled": True},   # INFRA-US-MACRO-SNAPSHOT-001 흡수 토글 (entry_posture 강등·게이트 + one_liner 토큰)
     "sector_labels": {},
 }
 
@@ -170,12 +171,45 @@ def _sector_label(etf_ticker: str, fallback: str, config: dict[str, Any]) -> str
     return str(labels.get(etf_ticker) or fallback)
 
 
+_POSTURE_DOWNGRADE: dict[str, str] = {
+    "aggressive": "neutral",
+    "neutral": "defensive",
+    "defensive": "defensive",
+}
+
+
+def apply_us_macro_to_posture(
+    base_posture: str,
+    us_macro: Any,
+    *,
+    config: dict[str, Any] | None = None,
+) -> str:
+    """미장 야간 신호를 KR 결정론 진입자세에 적용 (U2 — 단계 강등 + 극단 게이트, 비대칭).
+
+    - us extreme=vix_panic → defensive 강제 (DD kill switch 와 동급 하드 게이트).
+    - us risk_off → 한 단계 강등 (aggressive→neutral→defensive).
+    - us risk_on / neutral / unavailable / None → 변경 없음 (비대칭 — 상향 SLOT).
+    us_macro = USMacroSnapshot (risk_signal/extreme/source) 또는 None.
+    """
+    cfg = (config or load_market_view_config()).get("us_macro", {})
+    if not cfg.get("enabled", True) or us_macro is None:
+        return base_posture
+    if getattr(us_macro, "source", "unavailable") == "unavailable":
+        return base_posture
+    if getattr(us_macro, "extreme", "none") == "vix_panic":
+        return "defensive"
+    if getattr(us_macro, "risk_signal", "neutral") == "risk_off":
+        return _POSTURE_DOWNGRADE.get(base_posture, base_posture)
+    return base_posture
+
+
 def entry_posture(
     regime: str,
     breadth_ratio: float | None,
     distribution_count: int | None,
     *,
     config: dict[str, Any] | None = None,
+    us_macro: Any = None,
 ) -> str:
     """진입 자세 결정론 — "지금 들어갈 때냐".
 
@@ -184,22 +218,28 @@ def entry_posture(
       2. 천장/하락 체제(parabolic, *_bear) → defensive.
       3. 강세 체제 + 폭 강함 + 분산일 적음 → aggressive.
       4. 그 외(sideways/폭 약한 강세) → neutral.
+    그 뒤 미장 야간 신호 적용 (U2 — risk_off 강등 / vix_panic 방어 게이트).
     """
-    cfg = (config or load_market_view_config()).get("entry_posture", {})
+    cfg_full = config or load_market_view_config()
+    cfg = cfg_full.get("entry_posture", {})
     kill = int(cfg.get("kill_switch_dd", 4))
     ceiling = int(cfg.get("ceiling_dd", 5))
     breadth_strong = float(cfg.get("breadth_strong", 0.55))
     dd = int(distribution_count or 0)
 
     if dd >= kill:
-        return "defensive"
-    if regime in ("parabolic", "moderate_bear", "strong_bear"):
-        return "defensive"
-    if regime in ("strong_bull", "moderate_bull"):
+        base = "defensive"
+    elif regime in ("parabolic", "moderate_bear", "strong_bear"):
+        base = "defensive"
+    elif regime in ("strong_bull", "moderate_bull"):
         if breadth_ratio is not None and breadth_ratio >= breadth_strong and dd < ceiling:
-            return "aggressive"
-        return "neutral"
-    return "neutral"  # sideways / unknown
+            base = "aggressive"
+        else:
+            base = "neutral"
+    else:
+        base = "neutral"  # sideways / unknown
+
+    return apply_us_macro_to_posture(base, us_macro, config=cfg_full)
 
 
 def _base_confidence(regime: str) -> int:
@@ -356,6 +396,7 @@ def synthesize_market_view(
     date_str: str,
     config: dict[str, Any] | None = None,
     news_digest: Any = None,
+    us_macro: Any = None,
 ) -> MarketView:
     """결정론 종합 (Stage 1) — LLM 없음. M2 크로스체크 전 baseline.
 
@@ -364,6 +405,7 @@ def synthesize_market_view(
         today_rs: 오늘 섹터 RS (rs_score 내림차순 가정).
         prev_rs: N일 전 섹터 RS (순환매 비교 기준). None = 첫날 graceful.
         news_digest: 시장 scope NewsDigest (NEWS-SOURCE-001 M5). None/empty 면 흡수 생략.
+        us_macro: USMacroSnapshot (INFRA-US-MACRO-SNAPSHOT-001). None/unavailable 면 흡수 생략.
     """
     cfg = config or load_market_view_config()
     top_n = int(cfg.get("rotation", {}).get("leading_top_n", 3))
@@ -375,7 +417,7 @@ def synthesize_market_view(
     rotation, change_map = build_rotation_stage1(today_rs, prev_rs, config=cfg)
     leading = _sector_entries(today_rs, change_map, top_n=top_n, config=cfg)
     fading = _fading_entries(today_rs, change_map, top_n=top_n, config=cfg)
-    posture = entry_posture(regime, breadth, dd, config=cfg)
+    posture = entry_posture(regime, breadth, dd, config=cfg, us_macro=us_macro)
     one_liner = build_one_liner(regime, leading, rotation, posture)
 
     reasons: list[str] = [
@@ -399,6 +441,15 @@ def synthesize_market_view(
         reasons.append(f"뉴스 톤 {tone_kr}(tone={tone}){theme_part}")
         if tone in ("bullish", "bearish", "lean_bullish", "lean_bearish"):
             one_liner = f"{one_liner} · 뉴스 {tone_kr}"
+
+    # 미장 야간 흡수 (INFRA-US-MACRO-SNAPSHOT-001 — us-macro-hook SLOT 충족).
+    if us_macro is not None and getattr(us_macro, "source", "unavailable") != "unavailable":
+        from collectors.us_macro import us_macro_reason, us_one_liner_token
+
+        us_reason = us_macro_reason(us_macro)
+        if us_reason:
+            reasons.append(us_reason)
+        one_liner = f"{one_liner}{us_one_liner_token(us_macro)}"
 
     return MarketView(
         date=date_str,
@@ -560,9 +611,19 @@ async def build_market_view(
     except Exception as e:  # noqa: BLE001
         log.warning("market_view_news_digest_failed", market=market, error=str(e))
 
+    # 미장 야간 매크로 (INFRA-US-MACRO-SNAPSHOT-001 — DB-first read, graceful).
+    us_macro = None
+    if cfg.get("us_macro", {}).get("enabled", True):
+        try:
+            from collectors.us_macro import compute_us_macro
+
+            us_macro = await compute_us_macro()
+        except Exception as e:  # noqa: BLE001
+            log.warning("market_view_us_macro_failed", market=market, error=str(e))
+
     view = synthesize_market_view(
         macro, today_rs, prev_rs, market=market, date_str=today, config=cfg,
-        news_digest=news_digest,
+        news_digest=news_digest, us_macro=us_macro,
     )
 
     # M2 seam — rotation Stage 2 LLM 크로스체크 (cross_check_rotation_via_llm).
@@ -810,6 +871,15 @@ def render_market_view_md(view: MarketView) -> str:
     lines.append(
         f"**순환매**: {r.direction} (강도={r.strength}, 검증={r.method}/{r.agreement})"
     )
+    # 미장 야간 라인 — DB-first read 로 디커플 (MarketView 가 DB 복원돼도 주입 가능, 스키마 변경 0).
+    try:
+        from collectors.us_macro import get_today_us_macro, render_us_macro_md
+
+        us_snap = get_today_us_macro(view.date)
+        if us_snap is not None and us_snap.source != "unavailable":
+            lines.append(render_us_macro_md(us_snap))
+    except Exception:  # noqa: BLE001 — 미장 라인 부재가 시장관 블록을 막지 않음
+        pass
     if view.reasons:
         lines.append("")
         lines.append("**근거**:")

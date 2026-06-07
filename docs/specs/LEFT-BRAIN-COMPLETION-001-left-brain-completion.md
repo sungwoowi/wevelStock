@@ -62,7 +62,7 @@ depends_on:
 |---|---|---|---|
 | `ANSWER-FIDELITY-001` | implementation | verified | LB-MS1 **완료** — F1 raw누수+F2 근거축가변+F3 비교 양종목 전부 라이브 검증 (868 passed) |
 | `MARKET-VIEW-SYNTHESIS-001` | implementation | verified | LB-MS2 **완료** (2026-06-06) — 결정론 종합 + market_state_analyzer 해석 + formatter 1줄 prepend. 순환매=결정론 다일 후보 ⨯ Gemini 크로스체크. M1/M2/M3 + 33테스트 + **라이브 검증**(실 데이터·실 Gemini agree). 잔여 SLOT=일일 cron·미장매크로·전략가 publish |
-| `INFRA-US-MACRO-SNAPSHOT-001` | implementation | 백로그 | LB-MS2 입력 (③에 흡수) |
+| `INFRA-US-MACRO-SNAPSHOT-001` | implementation | verified | LB-MS2 입력 (③에 흡수). **완료 2026-06-07** — yfinance 재사용(FRED SLOT) + us_macro_snapshot 영속(18:05+장전) + risk-on/off 결정론 + MarketView entry_posture 단계강등·vix_panic 게이트·one_liner 흡수. MS-1~4 + 22테스트 + **라이브 검증**(실 risk-off 장 필반 -10.26% → defensive 강등). **= 왼쪽 뇌 4/4** |
 | `NEWS-SOURCE-001` | implementation | 백로그 (방향성 합의됨) | LB-MS3. `/spec-interview` 필요 |
 
 ## 범위 밖 (의도적 — 함정 회피)

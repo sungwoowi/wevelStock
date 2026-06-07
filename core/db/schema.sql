@@ -489,6 +489,32 @@ CREATE TABLE IF NOT EXISTS news_digest_snapshot (
 CREATE INDEX IF NOT EXISTS idx_news_digest_date ON news_digest_snapshot(date);
 
 -- ============================================================
+-- v12: 미장 매크로 스냅샷 (us_macro_snapshot) — INFRA-US-MACRO-SNAPSHOT-001
+-- ============================================================
+-- 미국 야간 6 지표 일자 영속 + risk-on/off 결정론 분류. 데이터는 yfinance get_indices 재사용(U1).
+-- 신규 테이블이라 ALTER 불필요 — CREATE IF NOT EXISTS 가 새 DB·기존 DB 모두 처리 (v10/v11 패턴).
+-- date PK (KST). 같은 날짜 = 그날 새벽 마감된 동일 미장 세션 → 18:05·장전 두 트리거 멱등 동일값.
+CREATE TABLE IF NOT EXISTS us_macro_snapshot (
+    date              TEXT PRIMARY KEY,        -- "2026-06-07" (KST)
+    nasdaq_change_pct REAL,
+    sp500_change_pct  REAL,
+    sox_change_pct    REAL,                    -- 필라델피아 반도체 (^SOX)
+    vix               REAL,                    -- VIX 수준 (공포지수)
+    vix_change_pct    REAL,
+    dxy               REAL,                    -- 달러인덱스
+    dxy_change_pct    REAL,
+    us_10y            REAL,                    -- 미 10년물 금리 수준 (%)
+    us_10y_change_bp  REAL,                    -- 전일 대비 bp
+    gold_change_pct   REAL,
+    risk_signal       TEXT,                    -- risk_on | neutral | risk_off
+    signal_score      REAL,
+    extreme           TEXT,                    -- none | vix_panic
+    reasons_json      TEXT,
+    source            TEXT,                    -- db | computed | stale | unavailable
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -507,3 +533,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (8);
 INSERT OR IGNORE INTO schema_version (version) VALUES (9);
 INSERT OR IGNORE INTO schema_version (version) VALUES (10);
 INSERT OR IGNORE INTO schema_version (version) VALUES (11);
+INSERT OR IGNORE INTO schema_version (version) VALUES (12);

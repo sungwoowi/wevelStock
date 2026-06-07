@@ -9,6 +9,7 @@ Verifies:
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -98,6 +99,9 @@ async def test_runner_executes_with_mocks() -> None:
     with (
         patch("pipelines.market_briefing_pre.stages.collect_overnight_us.fetch_overnight",
               new=AsyncMock(return_value=overnight_mock)),
+        # INFRA-US-MACRO-SNAPSHOT-001 — stage 의 장전 us_macro 영속이 실 yfinance 호출 안 하도록 mock.
+        patch("collectors.us_macro.compute_us_macro",
+              new=AsyncMock(return_value=SimpleNamespace(risk_signal="neutral", source="computed"))),
         patch("pipelines.market_briefing_pre.stages.collect_night_futures.fetch_night_futures",
               new=AsyncMock(return_value=futures_mock)),
         patch("pipelines.market_briefing_pre.stages.collect_news.fetch_news",
