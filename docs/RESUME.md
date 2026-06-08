@@ -9,19 +9,22 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **🧠 왼쪽 뇌 완성 ✅ — LEFT-BRAIN-COMPLETION-001 roadmap 4/4 (100%) (2026-06-08)**. 마지막 자식 **INFRA-US-MACRO-SNAPSHOT-001 verified** — 미장 야간 6지표(나스닥·필반·VIX·달러·미10년물·금)는 이미 yfinance 로 수집됨 → 영속(`us_macro_snapshot`) + risk-on/off 결정론 분류 + MarketView 흡수(entry_posture 단계강등·vix_panic 게이트·one_liner 미장 토큰). 라이브 실 risk-off 장 포착(필반 -10.26%→defensive 강등) + **사용자 웹앱 직접 확인 완료**. **966 passed**. 다음 = 오른쪽 뇌(비중→가상매매→채점→복리) roadmap 착수 = 사용자 사인오프 대기.
+**현재 위치**: **🧠 왼쪽 뇌 완성 ✅ + 운영 누적 배관 완성 (2026-06-08)**. LEFT-BRAIN-COMPLETION-001 roadmap 4/4(100%) 후, **dev cron 미작동 부채 해소** — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) **세 surface 가 동일 `run_daily_refresh()` 단일 호출점** 공유 + **뉴스 일일 cron 합류**(전엔 함수만 있고 미등록). 라이브 ×3(CLI 2 + endpoint 1) = 실 RSS 50 + 실 Gemini classify 50 + us_macro risk_off + market_view defensive 흡수 + 멱등(26s→8s 캐시 hit). **974 passed**. 다음 = 오른쪽 뇌(비중→가상매매→채점→복리) roadmap 착수 = 사용자 사인오프 대기.
 
-**본 세션 산출** (INFRA-US-MACRO-SNAPSHOT-001 MS-1~4):
-- `collectors/us_macro.py` 신규 — `USMacroSnapshot` + `classify_us_risk`(결정론) + `compute_us_macro` DB-first(get_indices 재사용·graceful) + `refresh_us_macro` cron + render/흡수 helper.
-- `collectors/market_view.py` — `apply_us_macro_to_posture`(U2 강등·게이트) + entry_posture/synthesize/build_market_view/render 에 us_macro 흡수(하위호환 None).
-- `core/db/schema.sql` v12 `us_macro_snapshot`(date PK) + `config/{us_macro,market_view}.yaml`.
-- `server/schedulers/jobs/snapshot_macro.py`(18:05 허브 3단계) + `pipelines/market_briefing_pre/stages/collect_overnight_us.py`(장전) + `market_state_analyzer/persona.md`(미장 야간 해석).
-- `scripts/_us_macro_probe.py` 라이브 + `docs/specs/INFRA-US-MACRO-SNAPSHOT-001` verified + 테스트 +22(966).
+**본 세션 산출** (dev cron 해소):
+- `server/schedulers/jobs/news_ingest.py` 신규 — `run_news_ingest` collect→upsert→classify→digest 격리.
+- `server/schedulers/jobs/daily_refresh.py` 신규 — `run_daily_refresh` macro+news 통합 단일 호출점.
+- `server/schedulers/jobs/__init__.py` — 18:05 cron → `run_daily_refresh`(id `infra::daily_refresh`).
+- `server/api/infra.py` 신규 + `server/main.py` 라우터 등록 + `justfile` `refresh-daily` + 테스트 +8(974).
 
-**이번 세션에 굳힌 판단 (2026-06-08 INFRA-US-MACRO-SNAPSHOT-001)**:
+**이번 세션에 굳힌 판단 (2026-06-08 dev cron 해소)**:
+- **3-surface 단일 호출점**: cron·CLI·endpoint 모두 `run_daily_refresh()` 하나 호출 → 분기 0, 멱등이라 어느 경로·몇 번이든 안전. dev 머신은 Windows 작업 스케줄러가 `just refresh-daily` 돌리면 서버 미상주여도 누적 이어짐(코드 준비 완료, OS 등록은 사용자 수동).
+- **뉴스 cron 합류 = market scope only**: 일일 허브는 종목/섹터 scope 미적재(buy_score N·섹터 뉴스는 답변 시점 on-demand). 다일 누적 필요 시 종목 루프 SLOT.
+- **운영 배선 부채 = 신규 SPEC 불요**: macro=INFRA-SNAPSHOT-EXTEND 운영 보강, 뉴스 cron=NEWS-SOURCE-001 명시 SLOT. 기존 generates/패턴 내라 SDD 게이트 통과.
+
+**직전 세션 판단 (2026-06-08 INFRA-US-MACRO-SNAPSHOT-001)**:
 - **U1 데이터는 이미 있다 → 영속+분류+흡수만**: 미장 6지표 yfinance get_indices 재사용(신규 어댑터 0, FRED SLOT). 새 인프라 SPEC 전에 기존 수집 자산부터 확인(어댑터 중복 회피).
 - **U2 미장→entry_posture = 단계 강등 + 극단 게이트, 비대칭**: risk_off→한 단계 강등 / vix_panic→방어 하드 게이트(DD kill switch mirror) / risk_on 자동 상향 X(보수). raw 는 LLM 주입, 게이트는 극단만([[feedback_score_collapse_advisory]] 일관).
-- **U3 영속 둘 다(18:05 허브 + 장전)**: KST date 멱등이라 같은 세션 동일값(충돌 X). 흡수=MarketView 한 곳(스키마 변경 0, render 가 get_today_us_macro 디커플 read).
 
 **직전 세션 판단 (2026-06-07 NEWS-SOURCE-001 MS-C/D — LB-MS3)**:
 - **뉴스부 = 재료(digest)만, 소비는 분석부서**: 종목 뉴스→buy_score N catalyst_tilt, 시장 뉴스→market_view tone·테마, 분석가→news_curator [3c] read. digest 단일 산출물 각자 read(import 금지). 라이브 실 RSS+Gemini end-to-end 검증.
@@ -33,9 +36,6 @@
 **직전 세션 판단 (2026-06-07 NEWS-SOURCE-001 MS-A/SPEC)**:
 - **신규 테이블명 = `news_source_items`(NOT `news_items`)**: 레거시 브리핑 테이블 충돌 → 개명. 어댑터 흡수=동작 불변(fetch_news 래퍼, 브리핑 회귀 0).
 - **뉴스 정밀 점수화는 정직하지 않다 → 거친 tilt + 내러티브**(M4): 상황의존·비선형·희소충격. 개별 뉴스 *판단*=LLM, *집계*만 결정론([[feedback_score_collapse_advisory]] 일관). buy_score N=CAN SLIM "New"(신고가+촉매).
-
-**직전 세션 판단 (2026-06-07 일일 적재 cron)**:
-- **순환매 활성화 = 일일 적재 누적이 전제**: rotation은 *이동*이라 다일 윈도우 필요. **dev cron 미작동이 진짜 ramp 차단점**(서버 미상주 시 18:05 미발동 → sector_rs/chart/fundamentals/뉴스 적재 전부 영향).
 
 **직전 세션 판단 (2026-06-06 시장관 종합)**:
 - **시장관 종합 = 결정론 함수 + 기존 분석가 해석** (신규 분석가 X): synthesize_market_view가 sector_rs+regime+macro 종합 → market_state_analyzer가 read·해석. 5점수 패턴(결정론 수치→LLM 해석) 동일, 역할 중복 회피.
@@ -68,11 +68,11 @@
 
 **WAVE-ALPHA (cycle 14, commit `7c60944`/`e2ee94b`)** — 풀세트 활성(상세는 c_worked 2026-05-22/23 + git): `collectors/anchors.py`(2-Stage 하이브리드 anchor + 3tf α + 캐싱) + stock_analyst persona/manifest v5(verdict 매트릭스·holding_period·환각 가드 3중) + canon fractal_wave 21 명제(WA/WF/WL/WE). smoke 005930 = weekly sweet 1.31. LLM Stage 2 JSON 결함 → deterministic_fallback(SLOT S6).
 
-**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. **잔여 = dev cron 미작동 근본 해소**(서버 미상주 시 18:05 전체 적재 미발동, Top 3 #2) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
+**미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-08 (INFRA-US-MACRO-SNAPSHOT-001 SPEC + 구현 MS-1~4 → verified, **왼쪽 뇌 4/4 완성**)
-**마지막 세션 로그**: [2026-06-08_us-macro-snapshot-left-brain-complete.md](c_worked/2026-06-08_us-macro-snapshot-left-brain-complete.md). 직전 = [2026-06-07_news-source-ms-c-ms-d-consume-live-5.md](c_worked/2026-06-07_news-source-ms-c-ms-d-consume-live-5.md).
-**산출**: `collectors/us_macro.py` 신규(classify_us_risk 결정론 + DB-first + 흡수 helper) / market_view 흡수(entry_posture 강등·게이트·one_liner) / schema v12 `us_macro_snapshot` / config 2 / snapshot_macro 18:05 허브 + 장전 briefing 영속 / market_state_analyzer persona / `scripts/_us_macro_probe.py` 라이브(실 risk-off 장 필반 -10.26%→defensive) / SPEC verified. **966 passed** / validate 0 errors. 사용자 웹앱 직접 확인.
+**마지막 작업일**: 2026-06-08 (dev cron 미작동 해소 — 일일 적재 3-surface 통합 + 뉴스 cron 합류)
+**마지막 세션 로그**: [2026-06-08_dev-cron-daily-refresh-unification-2.md](c_worked/2026-06-08_dev-cron-daily-refresh-unification-2.md). 직전 = [2026-06-08_us-macro-snapshot-left-brain-complete.md](c_worked/2026-06-08_us-macro-snapshot-left-brain-complete.md).
+**산출**: `server/schedulers/jobs/news_ingest.py` 신규(collect→classify→digest) / `daily_refresh.py` 신규(macro+news 단일 호출점) / `jobs/__init__.py` 18:05 cron→`run_daily_refresh` / `server/api/infra.py` 신규 + main 라우터 + `justfile` `refresh-daily` / 테스트 +8. **974 passed** / validate 0 errors. 라이브 ×3(CLI 2 + endpoint 1) 실 RSS 50+Gemini 50+us_macro risk_off.
 **Git**: feat 코드 + docs wrap-up → main 직접 + push.
 
 ---
@@ -86,15 +86,15 @@
 - **범위**: LEFT-BRAIN roadmap `done` 닫기 + `RIGHT-BRAIN-*` roadmap SPEC 작성(`/spec-interview`). 첫 자식 후보 = Layer 4 계좌관리자(4계좌 비중 결정) or GUIDANCE-ACCURACY-TRACKER-001(채점 루프). **사용자 사인오프 + 우선순위 인터뷰 필요**.
 - **예상 산출**: roadmap SPEC frozen → 오른쪽 뇌 첫 마일스톤 정의
 
-### 2. dev cron 미작동 근본 해소 (운영 부채 — 라이브 누적 전제)
-- **왜**: 18:05 cron + 장전 적재가 dev 머신 서버 미상주 시 미발동 → us_macro/sector_rs/chart/뉴스 다일 누적 전부 영향. 순환매·universe 다일 누적의 실 전제.
-- **범위**: 서버 상주 운영 or 수동 트리거 endpoint(`POST /api/admin/refresh-snapshots` 류) + 뉴스 일일 적재(classify_news_items) cron 합류. 작은 작업.
-- **예상 산출**: 매일 장후 적재가 사람 개입 없이 누적
-
-### 3. gemini transient 503 retry 배선 (작은 부채)
-- **왜**: `provider="gemini"` 명시 호출이 503(모델 과부하)에서 fallback 없이 죽음. production-chat·analyst 실 경로에 노출.
+### 2. gemini transient 503 retry 배선 (작은 부채)
+- **왜**: `provider="gemini"` 명시 호출이 503(모델 과부하)에서 fallback 없이 죽음. production-chat·analyst·news_ingest classify 실 경로에 노출.
 - **범위**: `core/llm/client.py` provider 명시 경로에 transient 503 1~2회 재시도(KIS rate limiter 패턴 mirror). allow_fallback=False라도 같은 provider retry는 허용.
 - **예상 산출**: production-chat 503 일시 장애 자가 회복
+
+### 3. (운영) Windows 작업 스케줄러 등록 + 뉴스 ticker/sector scope (선택)
+- **왜**: dev cron 코드는 완성됐으나 OS 등록(`just refresh-daily` 평일 18:05)은 **사용자 수동** — 미등록 시 여전히 누적 안 됨. 일일 cron 은 market scope 뉴스만 적재(종목 catalyst_tilt 는 답변 시점 on-demand).
+- **범위**: 사용자 Task Scheduler 등록 안내/확인 + (필요 시) news_ingest 에 종목 루프 추가해 ticker/sector digest 다일 누적.
+- **예상 산출**: 서버 없이 매일 자동 누적 실가동 + 종목 뉴스 다일 윈도우
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
