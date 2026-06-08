@@ -9,17 +9,22 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **🧠 왼쪽 뇌 완성 ✅ + 뉴스 종목/섹터 scope 다일 누적 (2026-06-09)**. LEFT-BRAIN-COMPLETION-001 roadmap 4/4(100%) 유지. 일일 cron 이 `market` 1개만 적재하던 뉴스 digest 를 **market + 거래대금 상위 50종 + 섹터 15 = 66 scope** 로 확장. **핵심 결함 해소** = classify 시 `affected_refs` 정규화(종목명→6자리 코드)로 `"005930" in ["삼성전자"]=False` 조용한 누락 봉합(종목 scope·on-demand buy_score N 모두). digest 빌드는 결정론이라 추가 LLM 0. 989 passed + 라이브 66 scope·멱등·정규화 실발화 확인. 다음 = 오른쪽 뇌(비중→가상매매→채점→복리) roadmap 착수 = 사용자 사인오프 대기.
+**현재 위치**: **✋ 오른쪽 뇌 roadmap 착수 ✅ (2026-06-09)**. 왼쪽 뇌(LEFT-BRAIN-COMPLETION-001) 4/4 종결·`status: done`. `PROJECT-NORTH-STAR-001` **1/2(50%)** 진입 — 두 번째 기둥 `RIGHT-BRAIN-COMPLETION-001`(비중→가상매매→채점→복리) roadmap + **4 자식 SPEC 의존 사슬** 신설. 첫 자식 `ACCOUNT-MANAGER-001`(Layer4 비중) **판단 로직 인터뷰 확정**(비중=리스크×regime 두 레버 / 분할=과열도 함수 / 게이트=축소+손절누락만 차단 / MVP=풀). 본 세션=설계(SPEC)만, 코드 X. 다음 = ACCOUNT-MANAGER-001 SDD 구현(수치 SLOT 채우고 sizing.py + accounts.yaml + 스키마 + 테스트).
 
-**본 세션 산출** (뉴스 종목/섹터 scope 누적 — RESUME Top 3 #3):
-- `collectors/news_source.py` affected_refs 정규화 레이어(`_normalize_affected_refs` 외 4헬퍼) + classify 3함수 `name_code_map`/`sector_map` 전파 + **upsert source quirk 제거**(빈 집계 'empty' 정직 저장).
-- `server/schedulers/jobs/news_ingest.py` `_build_universe_and_name_map`(KIS 상위 + 하드코딩 `KR_NAME_TO_TICKER` 병합) + 다중 scope 루프(각 독립 격리·universe 실패 fallback).
-- `config/news_source.yaml` `scope_universe_limit: 50` / `persist_empty_scopes: true`. tests 정규화 11 + 루프 9.
+**본 세션 산출** (오른쪽 뇌 roadmap 착수 — RESUME Top 1):
+- `docs/specs/RIGHT-BRAIN-COMPLETION-001-right-brain-completion.md` (신규 roadmap) — 4 마일스톤(RB-MS1 비중/MS2 가상매매/MS3 채점/MS4 복리) + 경계 결단 4건(가상 전용·4계좌·코스피+미장 벤치마크·7계명 하드) + children 4 등재.
+- `docs/specs/ACCOUNT-MANAGER-001-position-sizing.md` (RB-MS1 첫 자식) — 비중 판단 로직 4건 확정, 수치·스키마만 SLOT.
+- `docs/specs/PAPER-TRADING-001-virtual-fills.md` (RB-MS2 스켈레톤) + `WEALTH-COMPOUND-TRACKER-001-compounding-curve.md` (RB-MS4 스켈레톤).
+- `PROJECT-NORTH-STAR-001`(child 연결+표) + `LEFT-BRAIN-COMPLETION-001`(→done) + `GUIDANCE-ACCURACY-TRACKER-001`(parent 편입=RB-MS3, drift 14→13).
 
-**이번 세션에 굳힌 판단 (2026-06-09 뉴스 scope 누적)**:
-- **affected_refs 정규화 = classify 시 저장(read-time 아님)**: 종목명→6자리 코드/섹터→풀네임 으로 박아 필터 멤버십이 매칭. 미매칭 ref 는 **원본 보존**(drop 아님 — 재현/감사성 + 마스터 테이블 도입 시 재분류 안전판). name↔code 출처는 injectable map 추상화(마스터 테이블 SLOT, 인터페이스 불변).
-- **scope 루프 = 결정론이라 LLM 비용 0**: classify 1회 후 build_news_digest 다중 scope 는 이미 분류된 items 재집계만. `(scope,date)` PK 멱등이라 어느 경로·몇 번이든 안전. persist_empty=true 로 빈 날도 기록('미수집' vs 'neutral' 구분).
-- **upsert source 정직화**: `get_news_digest` 가 항상 'db' 반환(캐시 출처 마커, 의도적)이라 저장 source 컬럼 읽는 소비자 0 → quirk 제거 안전(SQL 조회만 정직).
+**이번 세션에 굳힌 판단 (2026-06-09 오른쪽 뇌 roadmap)**:
+- **비중 = 리스크×regime 두 레버 (보수/공격 고정 선택 회피)**: 레버1=종목당 고정 리스크R(`수량=계좌자본×R÷(진입가−stop)`, 변동성 큰 종목 자동 축소→MDD 구조 통제), 레버2=총 배포 한도를 regime/entry_posture 로 변조(강세장 상향 80% 천장/위험장 하향). 점수(buy_score/S/α)는 R 배수 상한 advisory. "사람이 공격성 안 정하고 시장상태가 정함" — 보수의 못따라감·공격의 MDD 양쪽 동시 해소.
+- **분할 = 과열도(extension) 함수**: 좋은 타점(저과열·anchor 지지) front-load(60/30/10) / 고점(고과열) back-load 소액(20/30/50) or 보류. 사용자 직관 그대로 + 라이브 WAVE-ALPHA extension_score 재사용. 평단 머리 안 무겁게.
+- **7계명 게이트 = 자동 축소 기본 + 손절 누락만 하드 차단**: 비중 한도 초과는 한도까지 깎아 통과(차단 X), stop_loss 누락만 진입 거부(7계명4 위반 + 리스크 역산 불가). 사유는 production 친화 자연어.
+- **roadmap 거버넌스**: children 은 파일 존재 시만 진행도 파생. depends_on 본문 콜론(`:`)은 YAML dict 파싱→검증 실패(콜론 회피). LEFT-BRAIN status→done 으로 roadmap 종결 신호.
+
+**직전 세션 판단 (2026-06-09 뉴스 scope 누적)**:
+- **affected_refs 정규화 = classify 시 저장**: 종목명→6자리 코드/섹터→풀네임 박아 필터 멤버십 매칭. 미매칭 ref 원본 보존(재현/감사성). name↔code = injectable map(마스터 테이블 SLOT). scope 루프는 결정론이라 LLM 0(`(scope,date)` PK 멱등).
 
 **직전 세션 판단 (2026-06-08 작업 스케줄러 등록)**:
 - **OS cron 등록 = PowerShell Register-ScheduledTask + -WorkingDirectory**: schtasks escaping 회피. `-WorkingDirectory` 가 "Start in" → `uv run` 레포 정상 해석. `wevelStock-daily-refresh` 평일 18:05, `LastTaskResult=0`. 서버 미상주여도 로그온 시 자동 누적.
@@ -75,31 +80,33 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-09 (뉴스 종목/섹터 scope digest 다일 누적 — affected_refs 정규화 + cron scope 루프)
-**마지막 세션 로그**: [2026-06-09_news-scope-accumulation.md](c_worked/2026-06-09_news-scope-accumulation.md). 직전 = [2026-06-08_windows-task-scheduler-daily-refresh-3.md](c_worked/2026-06-08_windows-task-scheduler-daily-refresh-3.md).
-**산출**: 뉴스 일일 cron 다중 scope(market+universe 50+섹터 15=66) + affected_refs 정규화(classify 시 종목명→6자리 코드 저장, 조용한 누락 봉합). 989 passed + 라이브 66 scope·멱등·정규화 실발화(Samsung→005930).
-**Git**: 코드(feat) + wrap-up docs(docs) 2 커밋 → main 직접 + push.
+**마지막 작업일**: 2026-06-09 (오른쪽 뇌 roadmap 착수 — RIGHT-BRAIN-COMPLETION-001 + 4 자식 SPEC)
+**마지막 세션 로그**: [2026-06-09_right-brain-roadmap-spec-2.md](c_worked/2026-06-09_right-brain-roadmap-spec-2.md). 직전 = [2026-06-09_news-scope-accumulation.md](c_worked/2026-06-09_news-scope-accumulation.md).
+**산출**: RIGHT-BRAIN-COMPLETION-001 roadmap + 4 자식 SPEC(ACCOUNT-MANAGER-001 비중 판단 로직 확정 / PAPER-TRADING-001 / GUIDANCE 편입 / WEALTH-COMPOUND 스켈레톤). NORTH-STAR 1/2, LEFT-BRAIN done, drift 14→13. project_status·validate 0 errors. 코드 X(SDD 설계).
+**Git**: SPEC 7파일 + wrap-up docs(c_worked·RESUME·SESSIONS) → main 직접 + push.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 왼쪽 뇌 완성 → 오른쪽 뇌 전환
+## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 RB-MS1 구현
 
-**🧠 LEFT-BRAIN-COMPLETION-001 roadmap 4/4 (100%) 완료 ✅** (LB-MS1 답변누수 + LB-MS2 시장관 종합 + LB-MS3 뉴스부 + INFRA-US-MACRO 미장매크로 전부 verified). 왼쪽 뇌(수집→분석→답변)가 북극성 4판단을 새지 않고 발행. `uv run python scripts/project_status.py`로 단계 지도 확인.
+**✋ RIGHT-BRAIN-COMPLETION-001 roadmap 착수 ✅ (0/4)** — 4 자식 SPEC 의존 사슬(RB-MS1 비중 → MS2 가상매매 → MS3 채점 → MS4 복리) 신설. 첫 자식 ACCOUNT-MANAGER-001 판단 로직 확정. `uv run python scripts/project_status.py`로 단계 지도 확인. **NORTH-STAR 1/2(50%)**.
 
-### 1. 오른쪽 뇌 roadmap 착수 결정 — 다음 큰 방향
-- **왜**: 사용자 본질("매일 도는 책임지는 페이퍼 트레이딩 데스크")의 미착수 절반 = **오른쪽 뇌(손발+책임: 비중 Layer4 → 가상매매 → 시장(코스피)대비 채점 → 복리)**. 왼쪽 뇌 완성 = 이제 판단을 *실행·책임*으로 잇는 단계.
-- **범위**: LEFT-BRAIN roadmap `done` 닫기 + `RIGHT-BRAIN-*` roadmap SPEC 작성(`/spec-interview`). 첫 자식 후보 = Layer 4 계좌관리자(4계좌 비중 결정) or GUIDANCE-ACCURACY-TRACKER-001(채점 루프). **사용자 사인오프 + 우선순위 인터뷰 필요**.
-- **예상 산출**: roadmap SPEC frozen → 오른쪽 뇌 첫 마일스톤 정의
+### 1. ACCOUNT-MANAGER-001 SDD 구현 (RB-MS1 비중) — 다음 큰 작업
+- **왜**: 오른쪽 뇌 의존 사슬의 머리. 권고→4계좌별 자금액·비중·분할 = 가상매매·채점의 전제. 판단 로직(리스크×regime 두 레버 / 분할=과열도 함수 / 게이트=축소+손절누락 차단 / MVP=풀)은 인터뷰 확정됨 — 남은 건 수치·스키마 SLOT + 구현.
+- **범위**: `/spec-interview` 로 수치 SLOT(R값·regime 밴드·과열도↔분할 비율)·스키마 컬럼 마저 확정 → SDD: `agents/account_manager/{persona,manifest}` + `core/account/sizing.py`(리스크×regime, 결정론) + `config/accounts.yaml`(4계좌 1000만) + `account_state/positions` 스키마 + 테스트. depends_on=STRATEGY-TRACK-001 권고 객체.
+- **예상 산출**: `swing:`/`long:` 권고 → 계좌별 비중·분할·차수 산출 (첫 production 시연), 7계명 위반 시 축소/차단
 
-### 2. gemini transient 503 retry 배선 (작은 부채)
-- **왜**: `provider="gemini"` 명시 호출이 503(모델 과부하)에서 fallback 없이 죽음. production-chat·analyst·news_ingest classify 실 경로에 노출.
-- **범위**: `core/llm/client.py` provider 명시 경로에 transient 503 1~2회 재시도(KIS rate limiter 패턴 mirror). allow_fallback=False라도 같은 provider retry는 허용.
+### 2. PAPER-TRADING-001 (RB-MS2 가상매매) — RB-MS1 후
+- **왜**: "매일 도는 데스크" 의 *도는* 부분. 비중 지시→가상 체결 기록→채점·복리 데이터 원천.
+- **범위**: ACCOUNT-MANAGER 구현 후 `/spec-interview` 로 INTERVIEW-SLOT(체결가·매도/손익·매일 데스크 루프 run_daily_refresh 합류) 채우고 SDD.
+- **예상 산출**: 권고→가상 체결 row 멱등 적재 + 계좌별 보유·평가손익 조회
+
+### 3. gemini transient 503 retry 배선 (이월 작은 부채)
+- **왜**: `provider="gemini"` 명시 호출이 503에서 fallback 없이 죽음. production-chat·analyst·news classify 노출. 본 RB 구현 전 짬에 처리 가능.
+- **범위**: `core/llm/client.py` provider 명시 경로에 transient 503 1~2회 재시도(KIS rate limiter 패턴 mirror). allow_fallback=False라도 같은 provider retry 허용.
 - **예상 산출**: production-chat 503 일시 장애 자가 회복
 
-### 3. (선택) 뉴스 한국 소스 보강
-- **왜**: 종목/섹터 scope 루프는 ✅ 2026-06-09 완료(66 scope 멱등). 단 현 RSS 가 Yahoo/CNBC 미국 편중이라 한국 종목 scope 대부분 빈 누적 — 정규화는 정상이나 입력 뉴스에 한국 종목 언급이 적음.
-- **범위**: `config/news_source.yaml` `sources.rss.queries` 에 Google News 한국 쿼리 추가 또는 한국 매체 RSS 어댑터 추가. 종목 catalyst_tilt 실누적 밀도 향상.
-- **예상 산출**: 종목 뉴스 다일 윈도우 실데이터 누적 (~0.3~0.5 세션)
+(이월 백로그: 뉴스 한국 소스 보강(RSS 미국 편중, `config/news_source.yaml` Google News 한국 쿼리) / regime run간 흔들림 히스테리시스)
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
