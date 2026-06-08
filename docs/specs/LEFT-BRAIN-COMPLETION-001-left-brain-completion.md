@@ -4,7 +4,7 @@ title: 왼쪽 뇌 완성 — 분석·답변 절반의 신뢰성 종결 (roadmap)
 team: shared
 type: roadmap
 level: roadmap          # roadmap = 큰 방향·마일스톤 보유, 코드 직접 생성 X (자식 SPEC이 함)
-status: draft
+status: done            # 4/4 완료 (2026-06-09) — LB-MS1/2/3 + INFRA-US-MACRO 전부 verified. 오른쪽 뇌 착수
 version: 1
 owner: production_chat
 generates: []           # roadmap SPEC 은 코드를 직접 생성하지 않음. 자식 implementation SPEC 이 generates 를 가짐

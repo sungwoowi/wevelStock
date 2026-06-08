@@ -7,8 +7,8 @@ status: implementing
 level: roadmap
 generates: []
 children:
-  - LEFT-BRAIN-COMPLETION-001     # 왼쪽 뇌 (분석·답변) — 진행 중
-  # - RIGHT-BRAIN-COMPLETION-001  # 오른쪽 뇌 (비중·가상매매·채점·복리) — 왼쪽 뇌 완성 후 신설
+  - LEFT-BRAIN-COMPLETION-001     # 왼쪽 뇌 (분석·답변) — 완료 4/4 (done)
+  - RIGHT-BRAIN-COMPLETION-001    # 오른쪽 뇌 (비중·가상매매·채점·복리) — 착수 (2026-06-09)
 depends_on: []
 ---
 
@@ -31,8 +31,8 @@ depends_on: []
 
 | 기둥 | roadmap | 정의 | 상태 |
 |---|---|---|---|
-| 🧠 왼쪽 뇌 | `LEFT-BRAIN-COMPLETION-001` | 오감+뇌: 수집 → 분석가9 → 전략가A/B → 답변. 북극성 4판단을 *새지 않고* 발행 | **진행 중** |
-| ✋ 오른쪽 뇌 | `RIGHT-BRAIN-COMPLETION-001` (미신설) | 손발+책임: 비중결정(Layer4) → 가상매매 → 시장대비 채점 → 복리추적 | 왼쪽 뇌 완성 후 |
+| 🧠 왼쪽 뇌 | `LEFT-BRAIN-COMPLETION-001` | 오감+뇌: 수집 → 분석가9 → 전략가A/B → 답변. 북극성 4판단을 *새지 않고* 발행 | **완료 4/4 (done, 2026-06-09)** |
+| ✋ 오른쪽 뇌 | `RIGHT-BRAIN-COMPLETION-001` | 손발+책임: 비중결정(Layer4) → 가상매매 → 시장대비 채점 → 복리추적 | **착수 (2026-06-09, 첫 자식 ACCOUNT-MANAGER-001)** |
 
 > 순서 = 왼쪽 뇌 먼저 완성(신뢰성 있는 판단) → 오른쪽 뇌(그 판단을 실행·채점). 둘이 다 서야 "실전 도움" 선을 넘는다.
 

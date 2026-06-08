@@ -5,6 +5,8 @@ team: shared
 type: infra
 status: draft
 version: 1
+level: implementation
+parent: RIGHT-BRAIN-COMPLETION-001   # RB-MS3 채점 — 오른쪽 뇌 roadmap 편입 (2026-06-09)
 owner: agent_layer
 generates:
   - core/guidance/recorder.py                    # 권고 발행 시 자동 기록
