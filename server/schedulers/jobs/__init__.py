@@ -9,10 +9,12 @@ from core.logging import get_logger
 
 from server.schedulers.jobs.backup import run_backup
 from server.schedulers.jobs.charts import run_chart_refresh
+from server.schedulers.jobs.daily_refresh import run_daily_refresh
 from server.schedulers.jobs.daily_rollup import run_daily_rollup
 from server.schedulers.jobs.fundamentals import run_fundamentals_refresh
 from server.schedulers.jobs.memory_cleanup import run_memory_cleanup
 from server.schedulers.jobs.monthly_rollup import run_monthly_rollup
+from server.schedulers.jobs.news_ingest import run_news_ingest
 from server.schedulers.jobs.snapshot_macro import run_snapshot_macro_refresh
 from server.schedulers.jobs.weekly_rollup import run_weekly_rollup
 
@@ -77,12 +79,13 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         replace_existing=True,
     )
     registered += 1
-    # INFRA-SNAPSHOT-EXTEND-001 — 평일 18:00 KST snapshot macro refresh (고정 cron).
-    # chart_ohlcv refresh 와 동시각이라 순차 실행 (KIS rate limit 안전 / 본 job 가 후순위).
+    # 평일 18:05 KST 일일 적재 통합 허브 (고정 cron). macro(snapshot_macro 4단계) + 뉴스 합류.
+    # chart_ohlcv refresh(18:00) 뒤라 순차 실행 (KIS rate limit 안전 / 본 job 가 후순위).
+    # cron·CLI(`just refresh-daily`)·endpoint(POST /api/infra/refresh-snapshots) 가 동일 호출점 공유.
     scheduler.add_job(
-        run_snapshot_macro_refresh,
+        run_daily_refresh,
         CronTrigger(day_of_week="mon-fri", hour=18, minute=5, timezone=tz),
-        id="infra::snapshot_macro_refresh",
+        id="infra::daily_refresh",
         replace_existing=True,
     )
     registered += 1
@@ -92,4 +95,5 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
 
 __all__ = ["register_infra_jobs", "run_backup", "run_daily_rollup", "run_weekly_rollup",
            "run_monthly_rollup", "run_memory_cleanup", "run_chart_refresh",
-           "run_fundamentals_refresh", "run_snapshot_macro_refresh"]
+           "run_fundamentals_refresh", "run_snapshot_macro_refresh", "run_news_ingest",
+           "run_daily_refresh"]

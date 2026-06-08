@@ -130,8 +130,13 @@ fetch-fundamental ticker *flags="":
 
 # === 시장 스냅샷 확장 (INFRA-SNAPSHOT-EXTEND-001) ===
 
-# 시장매크로 + 5주체 60일 수급 통합 refresh
-# (수동 백업, cron `5 18 * * 1-5` 평일 18:05 KST 자동 실행 — chart_refresh 5분 후)
+# 일일 적재 통합 (macro 4단계 + 뉴스 수집·분류·집계) — 서버 없이 1회 실행 후 종료.
+# dev 머신은 Windows 작업 스케줄러가 평일 18:05 이 레시피를 호출하면 서버 미상주여도 누적 이어짐.
+# (cron `5 18 * * 1-5` / endpoint POST /api/infra/refresh-snapshots 와 동일 호출점)
+refresh-daily:
+    uv run python -c "import asyncio; from server.schedulers.jobs.daily_refresh import run_daily_refresh; import json; print(json.dumps(asyncio.run(run_daily_refresh()), ensure_ascii=False, indent=2))"
+
+# 시장매크로 + 5주체 60일 수급 통합 refresh (macro 만, 뉴스 제외 — 디버깅용)
 refresh-snapshot-macro:
     uv run python -c "import asyncio; from server.schedulers.jobs.snapshot_macro import run_snapshot_macro_refresh; import json; print(json.dumps(asyncio.run(run_snapshot_macro_refresh()), ensure_ascii=False, indent=2))"
 
