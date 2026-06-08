@@ -3,7 +3,7 @@ spec_id: ACCOUNT-MANAGER-001
 title: Layer 4 계좌관리자 — 권고 → 4계좌별 비중·자금액·분할매수 (7계명 강제)
 team: account_manager
 type: feature
-status: draft
+status: implementing
 version: 1
 level: implementation
 parent: RIGHT-BRAIN-COMPLETION-001

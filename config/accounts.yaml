@@ -1,0 +1,64 @@
+# ACCOUNT-MANAGER-001 (RB-MS1) — 4계좌 정의 + 비중 산정 파라미터.
+#
+# 비중 = 종목당 고정 리스크 R(stop 역산) × regime 변조 총 배포 한도 두 레버 + 과열도 분할 + 7계명 게이트.
+# 수치는 **보수적 기본값** — 다일 누적 후 튜닝 SLOT (config 수정은 재시작 없이 반영).
+# 가상(페이퍼) 전용. 계좌당 1000만원 시드.
+
+accounts:
+  - account_id: kr_long     # 국장 중장기 (Track A)
+    market: KR
+    track: A
+    horizon: long
+    seed_krw: 10000000
+    label: 국장 중장기
+  - account_id: kr_swing    # 국장 단기 (Track B)
+    market: KR
+    track: B
+    horizon: swing
+    seed_krw: 10000000
+    label: 국장 단기
+  - account_id: us_long     # 미장 중장기 (Track A)
+    market: US
+    track: A
+    horizon: long
+    seed_krw: 10000000
+    label: 미장 중장기
+  - account_id: us_swing    # 미장 단기 (Track B)
+    market: US
+    track: B
+    horizon: swing
+    seed_krw: 10000000
+    label: 미장 단기
+
+sizing:
+  # 레버 1 — 종목당 고정 리스크 R (계좌자본 대비 1회 허용 손실)
+  risk_per_trade:
+    A: 0.01     # 중장기 1%
+    B: 0.015    # 단기 1.5%
+  conviction_threshold: 7.0    # 점수(buy/S/α/F) ≥ 이 값 = 고확신 카운트
+  conviction_min_scores: 3     # 7계명 5번 — 최소 3개 교차 시만 R 보너스
+  conviction_r_bonus: 0.5      # 고확신 → +0.5R 상한 (advisory)
+
+  # 레버 2 — entry_posture(regime+breadth+분산일+미장 종합) → 총 배포 천장
+  deployment_cap:
+    aggressive: 0.80   # 7계명 1번 천장
+    neutral: 0.60
+    defensive: 0.45
+  vix_panic_freeze: true   # 극단 게이트 — vix_panic 시 신규 진입 동결(방어 하드)
+
+  # 7계명 하드 제약
+  commandments:
+    max_total_deployment: 0.80     # 1번 총 비중 80%
+    max_single_position: 0.15      # 2번 단일 종목 15%
+    max_trading_deployment: 0.20   # 3번 트레이딩(단기 계좌) 20%
+
+  # 분할매수 — 과열도(extension_score, 높을수록 저과열) 구간 → 차수 비율
+  split_entry:
+    bands:
+      - min_ext: 7.0          # 저과열·좋은 타점 → front-load (평단 머리 가볍게)
+        ratios: [0.6, 0.3, 0.1]
+      - min_ext: 4.0          # 중립
+        ratios: [0.4, 0.3, 0.3]
+      - min_ext: 0.0          # 고과열 → back-load 소액
+        ratios: [0.2, 0.3, 0.5]
+    neutral_ratios: [0.4, 0.3, 0.3]   # extension 부재(MA 없음) → 중립

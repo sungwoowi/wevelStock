@@ -515,6 +515,36 @@ CREATE TABLE IF NOT EXISTS us_macro_snapshot (
 );
 
 -- ============================================================
+-- v13: 가상 계좌 상태 + 보유 (account_state + account_positions) — ACCOUNT-MANAGER-001 (RB-MS1)
+-- ============================================================
+-- 본 SPEC 가 스키마 *정의*. 비중 산정(MS1)은 DB-first read(없으면 seed 부트스트랩),
+-- 가상 체결 *write* 는 RB-MS2(PAPER-TRADING-001). 신규 테이블 → CREATE IF NOT EXISTS 멱등.
+-- 가상(페이퍼) 전용 — 실 KIS 주문 아님. 4계좌(config/accounts.yaml) account_id PK.
+CREATE TABLE IF NOT EXISTS account_state (
+    account_id              TEXT PRIMARY KEY,        -- kr_long | kr_swing | us_long | us_swing
+    seed_krw                REAL NOT NULL,
+    cash_krw                REAL,                    -- 가용 현금 (RB-MS2 갱신)
+    deployed_weight         REAL NOT NULL DEFAULT 0, -- 총 누적 비중 0~1 (7계명 1번 추적)
+    trading_deployed_weight REAL NOT NULL DEFAULT 0, -- 트레이딩(단기) 누적 비중 (7계명 3번)
+    updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 계좌×종목 보유 (가상). RB-MS2 가 가상 체결로 write/갱신. MS1 은 read only.
+CREATE TABLE IF NOT EXISTS account_positions (
+    account_id     TEXT NOT NULL,
+    ticker         TEXT NOT NULL,
+    track          TEXT,                    -- A | B
+    avg_price      REAL,                    -- 평단 (가상 체결 누적)
+    shares         REAL,                    -- 보유 수량
+    weight         REAL,                    -- 계좌 대비 비중 0~1
+    tranche_count  INTEGER DEFAULT 0,       -- 진행된 분할 차수
+    opened_at      TEXT,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (account_id, ticker)
+);
+CREATE INDEX IF NOT EXISTS idx_account_positions_account ON account_positions(account_id);
+
+-- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -534,3 +564,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (9);
 INSERT OR IGNORE INTO schema_version (version) VALUES (10);
 INSERT OR IGNORE INTO schema_version (version) VALUES (11);
 INSERT OR IGNORE INTO schema_version (version) VALUES (12);
+INSERT OR IGNORE INTO schema_version (version) VALUES (13);

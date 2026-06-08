@@ -59,7 +59,7 @@ depends_on:
 
 | 자식 SPEC | level | status | 비고 |
 |---|---|---|---|
-| `ACCOUNT-MANAGER-001` | implementation | draft | RB-MS1. 2026-06-09 인터뷰로 첫 자식 확정 + **판단 로직 확정**(비중=리스크×regime 두 레버 / 분할=과열도 함수 / 게이트=축소 기본·손절누락만 차단 / MVP=풀). 남은 SLOT=수치 튜닝·스키마 디테일. **다음 세션 SDD 구현** |
+| `ACCOUNT-MANAGER-001` | implementation | **implementing** | RB-MS1. 2026-06-09 **SDD 구현 완료**(generates 6파일: sizing.py 두 레버+게이트 / portfolio.py / accounts.yaml / schema v13 / persona·manifest + render + probe + 38 테스트, 1027 passed). 남은 것 = production_chat 배선(Layer3→Layer4, RB-MS2와 묶음) + 수치 캘리브레이션 |
 | `PAPER-TRADING-001` | implementation | draft (스켈레톤) | RB-MS2. 가상 체결·계좌 책임 추적. INTERVIEW-SLOT(체결가·매도/손익·매일 데스크 루프). RB-MS1 구현 후 채움 |
 | `GUIDANCE-ACCURACY-TRACKER-001` | implementation | draft | RB-MS3. 기존 백로그 draft(5 KPI). 본 roadmap 으로 편입(parent 연결) — drift 해소. 채점 벤치마크에 미장 지수(S&P/나스닥) 추가 정렬 필요 |
 | `WEALTH-COMPOUND-TRACKER-001` | implementation | draft (스켈레톤) | RB-MS4. 복리 곡선·목표 진척. INTERVIEW-SLOT(자산곡선·복리목표). RB-MS3 후 채움 |
