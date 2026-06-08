@@ -333,6 +333,96 @@ async def test_classify_preserves_manual_affected(isolated_db: Database):
 
 
 # ---------------------------------------------------------------------------
+# affected_refs 정규화 (classify 시 캐노니컬화 — 조용한 누락 방지)
+# ---------------------------------------------------------------------------
+def _sector_map() -> dict:
+    return ns._build_sector_map()
+
+
+def test_normalize_ticker_name_to_code():
+    name_map = {ns._norm_key("삼성전자"): "005930"}
+    out = ns._normalize_affected_refs(
+        ["삼성전자"], "ticker", name_code_map=name_map, sector_map=_sector_map()
+    )
+    assert out == ["005930"]
+
+
+def test_normalize_ticker_passthrough_six_digit():
+    out = ns._normalize_affected_refs(
+        ["005930"], "ticker", name_code_map=None, sector_map=_sector_map()
+    )
+    assert out == ["005930"]
+
+
+def test_normalize_ticker_unmatched_preserved():
+    """미매칭 ref 는 drop 하지 않고 원본 보존 (재현/감사성 + 마스터 도입 안전판)."""
+    out = ns._normalize_affected_refs(
+        ["듣보종목"], "ticker", name_code_map={}, sector_map=_sector_map()
+    )
+    assert out == ["듣보종목"]
+
+
+def test_normalize_sector_stem_to_canonical():
+    out = ns._normalize_affected_refs(
+        ["반도체"], "sector", name_code_map=None, sector_map=_sector_map()
+    )
+    assert out == ["KODEX 반도체"]
+
+
+def test_normalize_sector_fullname_passthrough():
+    out = ns._normalize_affected_refs(
+        ["KODEX 반도체"], "sector", name_code_map=None, sector_map=_sector_map()
+    )
+    assert out == ["KODEX 반도체"]
+
+
+def test_normalize_dedup_name_and_code_collapse():
+    """종목명 + 코드 동시 등장 → 코드로 수렴(1건)."""
+    name_map = {ns._norm_key("삼성전자"): "005930"}
+    out = ns._normalize_affected_refs(
+        ["삼성전자", "005930"], "ticker", name_code_map=name_map, sector_map=_sector_map()
+    )
+    assert out == ["005930"]
+
+
+def test_normalize_scope_none_tries_ticker_then_sector():
+    name_map = {ns._norm_key("삼성전자"): "005930"}
+    out = ns._normalize_affected_refs(
+        ["삼성전자", "반도체"], None, name_code_map=name_map, sector_map=_sector_map()
+    )
+    assert out == ["005930", "KODEX 반도체"]
+
+
+async def test_classify_normalizes_affected_refs(isolated_db: Database):
+    """classify 시 LLM 자유 텍스트 refs("삼성전자") → 6자리 코드 캐노니컬화."""
+    item = _item("http://nz", "삼성 신고가")
+    labels = dict(_VALID_LABELS, affected_scope="ticker", affected_refs=["삼성전자"])
+    with patch("collectors.news_source.call_llm", return_value=_llm_resp(labels)):
+        out = await classify_news_items(
+            [item], skip_cache=True, name_code_map={"삼성전자": "005930"}
+        )
+    assert out[0].affected_refs == ["005930"]
+
+
+async def test_digest_ticker_scope_matches_after_normalization(isolated_db: Database):
+    """핵심 결함 회귀 — classify 정규화 후 종목 scope 필터가 매칭(조용한 누락 해소)."""
+    item = _item("http://nd", "삼성전자 호재")
+    item.collected_at = "2026-06-07T09:00:00+00:00"
+    labels = dict(
+        _VALID_LABELS, direction="up", magnitude=3, confidence=90,
+        affected_scope="ticker", affected_refs=["삼성전자"],
+    )
+    with patch("collectors.news_source.call_llm", return_value=_llm_resp(labels)):
+        out = await classify_news_items(
+            [item], skip_cache=True, name_code_map={"삼성전자": "005930"}
+        )
+    upsert_news_items(out)
+    d = build_news_digest("2026-06-07", ticker="005930")
+    assert d.source == "computed"   # 정규화 전이면 "삼성전자" 라벨 → empty(누락) 였을 것
+    assert d.scope == "ticker:005930"
+
+
+# ---------------------------------------------------------------------------
 # MS-B — build_news_digest (결정론 집계)
 # ---------------------------------------------------------------------------
 def _labeled(url, direction, magnitude, *, category="macro_policy",
@@ -353,6 +443,15 @@ def test_digest_empty_is_neutral(isolated_db: Database):
     assert d.source == "empty"
     assert d.tone == "neutral"
     assert d.scope == "market"
+
+
+def test_digest_empty_stored_source_is_honest(isolated_db: Database):
+    """빈 집계는 'empty' 그대로 영속 — 'computed' 로 덮지 않음(미수집 vs neutral 구분)."""
+    build_news_digest("2026-06-07", persist=True)
+    row = isolated_db.fetch_one(
+        "SELECT source FROM news_digest_snapshot WHERE scope='market' AND date='2026-06-07'"
+    )
+    assert row["source"] == "empty"
 
 
 def test_digest_bullish_tone(isolated_db: Database):

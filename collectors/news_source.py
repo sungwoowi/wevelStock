@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -337,7 +338,9 @@ def upsert_news_digest(digest: NewsDigest) -> None:
                 json.dumps(digest.top_themes, ensure_ascii=False),
                 json.dumps(digest.catalyst_tilt, ensure_ascii=False),
                 digest.raw_labels,
-                "computed" if digest.source == "empty" else digest.source,
+                # source 정직 저장 — 빈 집계는 'empty' 그대로 (미수집/neutral 구분).
+                # get_news_digest 는 캐시 출처 마커로 'db' 를 반환하므로 소비자 분기 무영향.
+                digest.source,
             ),
         )
 
@@ -523,8 +526,96 @@ def _validate_classification(result: Any) -> dict | None:
     }
 
 
-def _apply_classification(item: NewsItem, labels: dict) -> None:
-    """검증된 라벨을 NewsItem 에 적용. 수동 입력 affected_* 는 보존 (LLM 미덮어쓰기)."""
+# ---------------------------------------------------------------------------
+# affected_refs 정규화 (classify 시 캐노니컬화 — 조용한 누락 방지)
+#   LLM 자유 텍스트 refs("삼성전자") ↔ universe ticker(6자리 "005930") 불일치 →
+#   `"005930" in ["삼성전자"]` = False 로 종목 scope·on-demand buy_score N 누락.
+#   classify 시 종목명→6자리 코드 / 섹터 표현→캐노니컬 풀네임 으로 박아 필터를 매칭.
+#   미매칭 ref 는 원본 보존(drop 아님) — 재현/감사성 + 마스터 테이블 도입 시 재분류 안전판.
+# ---------------------------------------------------------------------------
+_TICKER_CODE_RE = re.compile(r"^\d{6}$")
+_SECTOR_BRAND_TOKENS = {"KODEX", "TIGER", "ACE", "200"}
+
+
+def _norm_key(s: str) -> str:
+    """정규화 매칭 키 — 공백 제거 + 소문자 (영문 대소문자·공백 차이 흡수)."""
+    return "".join(str(s).split()).lower()
+
+
+def _build_sector_map() -> dict[str, str]:
+    """DEFAULT_TRACKED_ETFS → {정규화키: 캐노니컬 풀네임}. 항상 결정론.
+
+    키 = 풀네임("KODEX 반도체") + 브랜드 접두 제거 stem("반도체") + ETF ticker.
+    값 = 캐노니컬 섹터명(풀네임) — sector_rs_snapshot.sector 저장값과 정합.
+    같은 collectors 레이어 import (파이프라인 간 import 아님).
+    """
+    from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
+
+    mapping: dict[str, str] = {}
+    for ticker, name in DEFAULT_TRACKED_ETFS:
+        mapping.setdefault(_norm_key(name), name)
+        mapping.setdefault(ticker.lower(), name)
+        stem = " ".join(tok for tok in name.split() if tok not in _SECTOR_BRAND_TOKENS)
+        if stem:
+            mapping.setdefault(_norm_key(stem), name)
+    return mapping
+
+
+def _normalize_ticker_ref(ref: str, name_code_map: dict[str, str] | None) -> str | None:
+    """종목 ref → 6자리 KRX 코드. 6자리 숫자는 통과, 종목명은 map 조회. 미스 None."""
+    s = str(ref).strip()
+    if _TICKER_CODE_RE.match(s):
+        return s
+    if name_code_map:
+        return name_code_map.get(_norm_key(s))
+    return None
+
+
+def _normalize_sector_ref(ref: str, sector_map: dict[str, str]) -> str | None:
+    """섹터 ref → 캐노니컬 풀네임. 미스 None."""
+    return sector_map.get(_norm_key(ref))
+
+
+def _normalize_affected_refs(
+    refs: list[str],
+    scope: str | None,
+    *,
+    name_code_map: dict[str, str] | None,
+    sector_map: dict[str, str],
+) -> list[str]:
+    """affected_refs 캐노니컬화 — scope 힌트로 종목/섹터 해소, 미스는 원본 보존.
+
+    종목 → 6자리 코드, 섹터 → 풀네임. dedup(순서 보존, name+code 는 code 로 수렴).
+    scope=None/market 은 종목 우선 후 섹터 시도. 결정론(백테스팅 재현).
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for ref in refs:
+        if scope == "sector":
+            canon = _normalize_sector_ref(ref, sector_map)
+        elif scope == "ticker":
+            canon = _normalize_ticker_ref(ref, name_code_map)
+        else:  # market / None — 종목 먼저, 실패 시 섹터
+            canon = _normalize_ticker_ref(ref, name_code_map) or _normalize_sector_ref(ref, sector_map)
+        final = canon if canon is not None else str(ref).strip()
+        if final and final not in seen:
+            seen.add(final)
+            out.append(final)
+    return out
+
+
+def _apply_classification(
+    item: NewsItem,
+    labels: dict,
+    *,
+    name_code_map: dict[str, str] | None = None,
+    sector_map: dict[str, str] | None = None,
+) -> None:
+    """검증된 라벨을 NewsItem 에 적용. 수동 입력 affected_* 는 보존 (LLM 미덮어쓰기).
+
+    LLM 가 추정한 affected_refs 는 캐노니컬화(종목명→코드/섹터→풀네임)하여 적용 —
+    수동 refs 는 보존 가드 안에서만 변환하므로 사람 입력은 미변경.
+    """
     item.category = labels["category"]
     item.time_axis = labels["time_axis"]
     item.direction = labels["direction"]
@@ -534,15 +625,26 @@ def _apply_classification(item: NewsItem, labels: dict) -> None:
     if not item.affected_scope:
         item.affected_scope = labels["affected_scope"]
     if not item.affected_refs:
-        item.affected_refs = labels["affected_refs"]
+        smap = sector_map if sector_map is not None else _build_sector_map()
+        item.affected_refs = _normalize_affected_refs(
+            labels["affected_refs"],
+            labels["affected_scope"],
+            name_code_map=name_code_map,
+            sector_map=smap,
+        )
     item.labeled_by = "llm"
 
 
 async def _classify_one(
     item: NewsItem, *, model: str, provider: str | None, max_tokens: int,
     ttl_days: int, skip_cache: bool,
+    name_code_map: dict[str, str] | None = None,
+    sector_map: dict[str, str] | None = None,
 ) -> NewsItem:
-    """단일 뉴스 분류 — 캐시 → LLM → 검증 → 적용. 실패 시 item 미변경 (graceful)."""
+    """단일 뉴스 분류 — 캐시 → LLM → 검증 → 적용. 실패 시 item 미변경 (graceful).
+
+    name_code_map/sector_map 는 affected_refs 캐노니컬화에 쓰임 (캐시·LLM 양 경로 동일 적용).
+    """
     input_hash = hashlib.sha256(
         _classify_cache_key(item.url, item.title, model).encode("utf-8")
     ).hexdigest()
@@ -552,7 +654,9 @@ async def _classify_one(
         if cached is not None:
             labels = _validate_classification(cached)
             if labels is not None:
-                _apply_classification(item, labels)
+                _apply_classification(
+                    item, labels, name_code_map=name_code_map, sector_map=sector_map
+                )
             return item
 
     try:
@@ -576,7 +680,7 @@ async def _classify_one(
         log.info("news_classify_invalid", url=item.url)
         return item
 
-    _apply_classification(item, labels)
+    _apply_classification(item, labels, name_code_map=name_code_map, sector_map=sector_map)
     if not skip_cache:
         _store_cached_classification(
             input_hash,
@@ -596,6 +700,8 @@ async def classify_news_items(
     model: str | None = None,
     provider: str | None = None,
     skip_cache: bool = False,
+    name_code_map: dict[str, str] | None = None,
+    sector_map: dict[str, str] | None = None,
 ) -> list[NewsItem]:
     """개별 뉴스에 LLM 분류 라벨 부여 (in-place + 반환). M4: 판단=LLM.
 
@@ -608,6 +714,9 @@ async def classify_news_items(
         model: LLM 모델. None 시 config classify.model → call_llm 기본.
         provider: LLM 백엔드. None 시 config classify.provider (기본 gemini).
         skip_cache: True 면 캐시 bypass (테스트용).
+        name_code_map: {종목명: 6자리코드} — affected_refs 캐노니컬화용 (키는 내부 정규화).
+            None 이면 6자리 숫자 ref 만 통과(종목명 미해소). 보통 news_ingest 가 주입.
+        sector_map: 섹터 정규화 맵. None 이면 DEFAULT_TRACKED_ETFS 로 자동 구성.
 
     Returns:
         라벨이 채워진 같은 NewsItem 목록 (분류 성공분만 labeled_by='llm').
@@ -620,11 +729,19 @@ async def classify_news_items(
     max_tokens = int(cfg.get("max_tokens", 512))
     ttl_days = int(cfg.get("cache_ttl_days", 365))
 
+    # 맵은 묶음당 1회 구성 (per-item 재구성 회피). 주입 name_code_map 키는 정규화.
+    if sector_map is None:
+        sector_map = _build_sector_map()
+    norm_name_code_map = (
+        {_norm_key(k): v for k, v in name_code_map.items()} if name_code_map else None
+    )
+
     results = await asyncio.gather(
         *[
             _classify_one(
                 it, model=model, provider=provider, max_tokens=max_tokens,
                 ttl_days=ttl_days, skip_cache=skip_cache,
+                name_code_map=norm_name_code_map, sector_map=sector_map,
             )
             for it in items
         ]
@@ -642,6 +759,19 @@ async def classify_news_items(
 
 def _digest_cfg() -> dict[str, Any]:
     return (load_news_source_config().get("digest") or {})
+
+
+def digest_scope_universe_limit() -> int:
+    """종목 scope 다일 누적 상한 (거래대금 상위 N). 부재 시 50."""
+    try:
+        return int(_digest_cfg().get("scope_universe_limit", 50))
+    except (TypeError, ValueError):
+        return 50
+
+
+def digest_persist_empty_scopes() -> bool:
+    """빈 종목/섹터 scope 도 영속할지 (기본 True — '미수집' vs 'neutral' 구분)."""
+    return bool(_digest_cfg().get("persist_empty_scopes", True))
 
 
 def _item_signed_weight(item: NewsItem) -> tuple[float, float]:

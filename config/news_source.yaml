@@ -62,6 +62,11 @@ digest:
   trigger_titles_n: 3    # 테마당 대표 제목 수
   lookback_limit: 500    # 날짜 필터 전 조회 상한
 
+  # 일일 cron 다중 scope 누적 (NEWS-SOURCE-001 후속 — 종목/섹터 scope 다일 윈도우).
+  # market + universe 거래대금 상위 N + DEFAULT_TRACKED_ETFS 14섹터 를 매일 결정론 집계.
+  scope_universe_limit: 50    # 종목 scope 상한 (거래대금 상위 N)
+  persist_empty_scopes: true  # 빈 종목/섹터 scope 도 기록 ('미수집' vs 'neutral' 구분)
+
   # MS-C C3 — 종목 scope catalyst_tilt → buy_score N축 블렌드 (M7: 종목 뉴스→종목 점수).
   # 뉴스 없으면 52주 신고가만(현 동작 보존). 가중 합은 정규화(÷합).
   n_axis_blend:
