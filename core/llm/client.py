@@ -445,52 +445,68 @@ async def _dispatch_provider(
             gemini_model = getattr(
                 getattr(cfg, "gemini", None), "model", None
             ) or "gemini-2.5-flash"
-        try:
-            return await _call_gemini_real(
-                system, messages, gemini_model, max_tokens, temperature,
-                thinking_budget=thinking_budget,
-            )
-        except Exception as gemini_error:  # noqa: BLE001
-            log.error("llm_call_failed", provider="gemini", error=str(gemini_error))
-            if not allow_fallback:
-                raise
-            log.warning(
-                "llm_gemini_failed_falling_back",
-                error=str(gemini_error),
-                fallback="claude_code",
-            )
-            # Fallback chain: gemini → claude_code → mock.
-            # claude_code uses local CLI subprocess (Pro/Max subscription, no API key).
-            from core.llm.claude_code_backend import call_claude_code
-
+        # 일시적 서버 과부하(503 UNAVAILABLE·overloaded·500 INTERNAL)·일시 rate-limit 흡수용
+        # bounded 재시도. 크레딧 고갈(RESOURCE_EXHAUSTED)·인증 등 영구 실패는 즉시 중단(재시도 무의미).
+        gemini_error: Exception | None = None
+        for _attempt in range(3):
             try:
-                resp = await call_claude_code(
-                    system=system,
-                    messages=messages,
-                    model=model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    binary=cfg.claude_code.binary,
-                    timeout_sec=cfg.claude_code.timeout_sec,
-                    extra_args=list(cfg.claude_code.extra_args),
-                    json_schema=json_schema,
+                return await _call_gemini_real(
+                    system, messages, gemini_model, max_tokens, temperature,
+                    thinking_budget=thinking_budget,
                 )
-                resp["raw"]["primary_provider_error"] = str(gemini_error)
-                resp["raw"]["fallback_used"] = "claude_code"
+            except Exception as e:  # noqa: BLE001
+                gemini_error = e
+                msg = str(e) or repr(e)
+                transient = (
+                    any(t in msg for t in ("503", "UNAVAILABLE", "overloaded", "high demand", "500 INTERNAL"))
+                    and "RESOURCE_EXHAUSTED" not in msg
+                )
+                if transient and _attempt < 2:
+                    log.warning("llm_gemini_transient_retry", attempt=_attempt + 1, error=msg)
+                    await asyncio.sleep(0.8 * (_attempt + 1))
+                    continue
+                break
+
+        log.error("llm_call_failed", provider="gemini", error=str(gemini_error))
+        if not allow_fallback:
+            raise gemini_error  # type: ignore[misc]
+        log.warning(
+            "llm_gemini_failed_falling_back",
+            error=str(gemini_error),
+            fallback="claude_code",
+        )
+        # Fallback chain: gemini → claude_code → mock.
+        # claude_code uses local CLI subprocess (Pro/Max subscription, no API key).
+        from core.llm.claude_code_backend import call_claude_code
+
+        try:
+            resp = await call_claude_code(
+                system=system,
+                messages=messages,
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                binary=cfg.claude_code.binary,
+                timeout_sec=cfg.claude_code.timeout_sec,
+                extra_args=list(cfg.claude_code.extra_args),
+                json_schema=json_schema,
+            )
+            resp["raw"]["primary_provider_error"] = str(gemini_error)
+            resp["raw"]["fallback_used"] = "claude_code"
+            return resp
+        except Exception as claude_error:  # noqa: BLE001
+            log.error(
+                "llm_call_failed",
+                provider="gemini+claude_code",
+                gemini_error=str(gemini_error),
+                claude_error=str(claude_error),
+            )
+            if cfg.mock_if_no_key and mock_fallback_allowed:
+                resp = _mock_response(system, messages, model)
+                resp["raw"]["error"] = str(gemini_error)
+                resp["raw"]["fallback_error"] = str(claude_error)
                 return resp
-            except Exception as claude_error:  # noqa: BLE001
-                log.error(
-                    "llm_call_failed",
-                    provider="gemini+claude_code",
-                    gemini_error=str(gemini_error),
-                    claude_error=str(claude_error),
-                )
-                if cfg.mock_if_no_key and mock_fallback_allowed:
-                    resp = _mock_response(system, messages, model)
-                    resp["raw"]["error"] = str(gemini_error)
-                    resp["raw"]["fallback_error"] = str(claude_error)
-                    return resp
-                raise
+            raise
 
     # provider == "anthropic"
     try:

@@ -3,7 +3,7 @@ spec_id: PAPER-TRADING-001
 title: 가상매매 — 비중 지시 → 가상 체결·계좌 책임 추적 (매일 도는 데스크)
 team: account_manager
 type: feature
-status: implementing
+status: verified
 version: 1
 level: implementation
 parent: RIGHT-BRAIN-COMPLETION-001
@@ -36,8 +36,10 @@ contracts:
 
 # PAPER-TRADING-001 — 가상매매 (RB-MS2)
 
-> **RIGHT-BRAIN-COMPLETION-001 의 둘째 자식 (RB-MS2).** ACCOUNT-MANAGER-001(RB-MS1) 후속.
-> INTERVIEW-SLOT 3개 채움 완료 (2026-06-09 spec-interview). 체결 모델 = **지정가 도달 판정**(손절선이 분할·손절 구분).
+> **RIGHT-BRAIN-COMPLETION-001 의 둘째 자식 (RB-MS2). status=verified (2026-06-09).**
+> INTERVIEW-SLOT 3개 채움 + M1~M5 구현 + 51 테스트 + 결정론 probe + **실 LLM `swing:` 라이브 검증**.
+> 체결 모델 = **지정가 도달 판정**(손절선이 분할·손절 구분).
+> **검증**: 실 Gemini `swing: 삼성전자` → 전략가 실 YAML(verdict=wait) → 파서 포착 → team_outputs 영속(REC-20260609-005930-B) → 데스크 게이팅 정상(wait→체결 0). buy→체결 경로는 결정론 probe 입증. (실 LLM 검증 시 transient 503 다발 → `core/llm/client.py` gemini bounded 재시도 신설로 안정화.)
 
 ## 목적
 
