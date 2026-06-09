@@ -32,6 +32,7 @@ HELP_TEXT = (
     "/briefing_pre_force — 09:00 이후에도 LLM 실시간 실행 (서버 다운 등 복구용, ~30s)\n"
     "/briefing_now — 장중 실시간 시장 관찰 — KIS 시세 (~30s)\n"
     "/accounts — 가상 4계좌 보유현황·평가손익\n"
+    "/retro — 최근 90일 가이던스 회고 (시장 대비 적중도)\n"
     "/help — 이 메시지"
 )
 
@@ -213,6 +214,27 @@ async def cmd_accounts(
         return
     if update.message is not None:
         await update.message.reply_text(render_accounts_text(accounts_resp["items"], holdings_by_id))
+
+
+async def cmd_retro(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """가이던스 회고 — 최근 90일 가상매매 적중도(시장 대비 초과수익·적중률)."""
+    if not _authorized(update):
+        return
+    from core.guidance.kpi import get_kpi_summary
+    from core.guidance.retrospective import render_retrospective
+
+    try:
+        summary = get_kpi_summary(period_days=90)
+        text = render_retrospective(summary)
+    except Exception as e:  # noqa: BLE001
+        log.warning("cmd_retro_error", error=str(e))
+        if update.message is not None:
+            await update.message.reply_text(f"회고 조회 실패: {e}")
+        return
+    if update.message is not None:
+        await update.message.reply_text(text)
 
 
 async def cmd_help(

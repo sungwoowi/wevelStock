@@ -3,29 +3,28 @@ spec_id: GUIDANCE-ACCURACY-TRACKER-001
 title: 가이던스 적중도 5 KPI 추적 — 권고 ID + 가격 추적 + 트랙별 가중치 + 회고 자동 보고
 team: shared
 type: infra
-status: draft
+status: implementing
 version: 1
 level: implementation
 parent: RIGHT-BRAIN-COMPLETION-001   # RB-MS3 채점 — 오른쪽 뇌 roadmap 편입 (2026-06-09)
 owner: agent_layer
+# ── 슬림 MVP 재정렬 (2026-06-09 spec-interview, RB-MS2 기반). 하단 원 상세는 후속 참조. ──
 generates:
-  - core/guidance/recorder.py                    # 권고 발행 시 자동 기록
-  - core/guidance/tracker.py                     # 30/60/90일 가격 갱신 cron
-  - core/guidance/kpi.py                         # 5 KPI 계산 + 트랙별 가중치
-  - core/guidance/retrospective.py               # 회고 자동 보고
-  - server/api/guidance.py                       # GET /api/guidance/records, /api/guidance/kpi
-  - core/db/migrations/0NN_guidance_records.sql  # DB 마이그레이션
+  - core/guidance/benchmark.py                   # 트랙×시장 지수 보유기간 수익률 (chart_ohlcv/yfinance 재사용)
+  - core/guidance/kpi.py                         # account_fills+team_outputs read → 핵심 KPI + 벤치마크 초과 집계 (집계 view, 복사 X)
+  - core/guidance/retrospective.py               # `/회고` 양식 렌더
+  - server/api/guidance.py                       # GET /api/guidance/kpi, /api/guidance/retrospective
 modifies:
-  - core/db/schema.sql                           # guidance_records 테이블 추가
   - server/telegram/                             # `/회고` 명령 신설
 depends_on:
-  - ANALYST-PERSONAS-001 (v2 — 점수 인용 양식)
-  - STRATEGY-TRACK-001 (전략가 권고 = strategist-recommendation-v1 객체)
+  - PAPER-TRADING-001 (account_fills 실현손익·체결일·매도사유 = 채점 입력 — RB-MS3 핵심 의존)
+  - STRATEGY-TRACK-001 (전략가 권고 = strategist-recommendation-v1, team_outputs 영속)
+  - RIGHT-BRAIN-COMPLETION-001 (소속 roadmap — RB-MS3)
 contracts:
-  - name: strategist-recommendation-v1
-    version: "1.0"                               # STRATEGY-TRACK-001 정의
-  - name: guidance-record-v1
-    version: "1.0"                               # 본 SPEC 신규 — 추적 데이터 구조
+  - name: guidance-kpi-v1
+    version: "1.0"                               # 본 SPEC 신규 — KPI 집계 결과 구조 (집계 view 산출)
+# (후속 SLOT: core/guidance/{recorder,tracker}.py·guidance_records 테이블·독립 30/60/90 KIS 가격 추적
+#  = 비체결 wait/hold 권고 채점 + 자가진단 정확도 KPI 용. MVP 는 account_fills 실현 기반만.)
 ---
 
 # GUIDANCE-ACCURACY-TRACKER-001 — 적중도 5 KPI 추적
@@ -39,6 +38,39 @@ contracts:
 - 트랙별 가중치 차별 (A: 수익금 게임 / B: 손익비 게임)
 - `회고` 단축어 → 90일 보고 자동 출력
 - Layer 5 회고분석가 (별도 SPEC) 의 PROPOSAL 입력 원천
+
+## 슬림 MVP 재정렬 (2026-06-09 spec-interview — 권위, 하단 원 상세보다 우선)
+
+> 본 SPEC 은 RB-MS2 전 작성(prism 차용). RB-MS2(PAPER-TRADING-001)가 권고→가상체결→**실현손익**을
+> 이미 영속하므로, 독립 가격 추적·별도 테이블을 폐기하고 **RB-MS2 데이터를 읽어 채점**한다.
+
+**① 데이터 원천 = RB-MS2 재사용** (신규 가격 추적 cron 0):
+- `account_fills`(PAPER-TRADING-001) — 실제 가상 체결·**realized_pnl_krw**·filled_date·매도 사유(target/stop).
+- `team_outputs`(track_a/track_b) — 권고 entry/stop/target/track/verdict (`load_active_recommendations` 패턴).
+- `account_positions`/`holdings` — 미실현 평가손익·보유기간.
+- 채점 대상 = **데스크가 실제 체결·청산한 권고**("책임지는 데스크"=자기가 한 매매 채점). 비체결(wait/hold)은 후속 SLOT.
+
+**② 벤치마크 = 시장 대비 정직한 검산** (잣대이지 공격 목표 아님):
+- 트랙×시장 지수: 국장(KR)=코스피, 미장(US)=S&P500(또는 나스닥, config). 보유기간 [체결일, 청산일] 구간 지수 수익률.
+- **초과수익(알파) = 권고 실현수익률 − 동기간 지수수익률**. "이 시스템이 그냥 지수 사두는 것보다 나은가" 의 검산. 여러 KPI 중 하나(MDD·적중률과 나란히), 알파 최대화 강박 X.
+- 지수 데이터 = chart_ohlcv/yfinance 재사용(신규 수집 0).
+
+**③ 핵심 KPI (MVP — 전부 account_fills 실현 기반, +5% 가정 임계 아님)**:
+1. **실현 수익률(%)** — 청산 권고의 realized_pnl / 투입 자본.
+2. **벤치마크 초과(알파, %p)** — 실현수익률 − 보유기간 지수수익률.
+3. **방향 적중률(%)** — 청산 권고 중 realized_pnl > 0 비율 (실제 익절/손절 결과로 판정).
+4. **R/R 실현율(%)** — 실제 (청산가−진입가)/(진입가−stop) vs 권고 R/R.
+5. **트랙 분리** — A vs B 승률·평균 보유일·MDD(일중 저점 기준) 분리 노출.
+
+**④ 저장 = 집계 view (복사 0, 진실 원천 하나)**:
+- `core/guidance/kpi.py::get_kpi_summary(track, period_days)` 가 team_outputs+account_fills 를 **read·계산**. 별도 guidance_records 테이블 폐기(중복·drift 회피, CLAUDE.md 절대원칙 1). KPI 스냅샷 영속도 MVP 는 불요(on-demand 집계).
+
+**MVP 비목표(후속 SLOT)**: 독립 30/60/90 KIS 가격 추적 / wait·hold 비체결 권고 채점 / 자가진단 정확도 KPI#4(권고에 🔴 라벨 부재) / KPI 가중치 자동학습 / 회고분석가 PROPOSAL / KPI 스냅샷 영속·일일 cron.
+
+**의사결정 SLOT 해소** (하단 S1~S6):
+- S1 가격 출처 → **RB-MS2 account_fills 실현(독립 KIS 추적 폐기, MVP)**. S2 자가진단 → **MVP 제외**(라벨 부재).
+- S3 추적 기간 → **실제 체결일~청산일**(고정 30/60/90 폐기, 데스크 실현 기준). S4 `회고` → production_chat + 텔레그램.
+- S5 MDD → 일중 저점 기준(보수, account_fills/holdings 기반). S6 회고분석가 입력 → `get_kpi_summary` 집계 view.
 
 ## 배경 / 문제
 

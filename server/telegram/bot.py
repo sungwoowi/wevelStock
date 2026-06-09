@@ -49,6 +49,7 @@ def build_application() -> Application | None:
         cmd_briefing_pre,
         cmd_briefing_pre_force,
         cmd_help,
+        cmd_retro,
     )
 
     app = Application.builder().token(token).build()
@@ -56,6 +57,7 @@ def build_application() -> Application | None:
     app.add_handler(CommandHandler("briefing_pre_force", cmd_briefing_pre_force))
     app.add_handler(CommandHandler("briefing_now", cmd_briefing_now))
     app.add_handler(CommandHandler("accounts", cmd_accounts))
+    app.add_handler(CommandHandler("retro", cmd_retro))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("start", cmd_help))
     return app
@@ -70,6 +72,7 @@ async def _setup_bot_commands(app: Application) -> None:
                 BotCommand("briefing_pre_force", "09:00 이후 LLM 실시간 실행 (~30s)"),
                 BotCommand("briefing_now", "장중 실시간 시장 관찰 — KIS 시세 (~30s)"),
                 BotCommand("accounts", "가상 4계좌 보유현황·평가손익"),
+                BotCommand("retro", "최근 90일 가이던스 회고 (시장 대비 적중도)"),
                 BotCommand("help", "명령어 목록"),
             ]
         )
