@@ -90,7 +90,8 @@
 
 **✋ RB-MS2(PAPER-TRADING-001) 가상매매 ✅** — M1~M5 + 51 테스트 + 라이브 probe(end-to-end). status implementing(실 LLM `swing:` 검증 시 verified). `uv run python scripts/project_status.py` 로 단계 지도 확인. **NORTH-STAR 1/2 · PAPER-TRADING ◀ ACTIVE**.
 
-### 1. 실 LLM `swing:` 라이브 검증 → PAPER-TRADING-001 verified 승격
+### 1. 실 LLM `swing:` 라이브 검증 → PAPER-TRADING-001 verified 승격 (⚠️ Gemini 크레딧 충전 후)
+- **⚠️ 차단(2026-06-09)**: 검증 시도 시 **Gemini 429 RESOURCE_EXHAUSTED(크레딧 고갈)** + claude_code 폴백도 Anthropic 미결제 → 작동 LLM provider 없음([[project-anthropic-unbilled-gemini-only]]). 코드 문제 아님(분류는 정상: swing 삼성전자→005930→track_b). **해소=AI Studio Gemini 크레딧 충전** 후 `uv run python scripts/_paper_trading_live_verify.py` 재실행.
 - **왜**: 결정론 probe+51 tests 는 로직 입증. 남은 capstone = **실 strategist YAML 이 파서와 정합**하는지 라이브 확인(persona↔`parse_recommendation`). 통과 시 RIGHT-BRAIN 첫 verified.
 - **범위**: production_chat 으로 `swing: 삼성전자` 실 발행(Gemini) → `load_active_recommendations` 에 잡히는지 → `run_desk_today` 굴림 → `GET /api/accounts/{id}/holdings`·`/accounts` 텔레그램 조회. 8 분석가+전략가 LLM 다수 호출(비용·503 유의).
 - **예상 산출**: 실 권고→가상체결→보유 한 바퀴 라이브 + PAPER-TRADING-001 status verified.
