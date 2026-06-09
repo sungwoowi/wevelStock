@@ -60,11 +60,15 @@ async def run_daily_refresh() -> dict[str, Any]:
         log.exception("daily_refresh_news_failed", error=str(e))
         news_result = {"error": str(e)}
 
-    # 3단계: 가상매매 데스크 한 바퀴 (활성 권고 → 지정가 도달 가상 체결, 멱등).
+    # 3단계: 가상매매 데스크 한 바퀴 (활성 권고 → 지정가 도달 가상 체결, 멱등) +
+    #         자산 스냅샷(RB-MS4: 매일 총자산 한 줄 → 복리 자산 곡선).
     try:
+        from core.account.compounding import snapshot_equity
         from core.account.desk import run_desk_today
 
         desk_result = run_desk_today()
+        snaps = snapshot_equity()
+        desk_result["equity_snapshots"] = len(snaps)
     except Exception as e:  # noqa: BLE001
         log.exception("daily_refresh_desk_failed", error=str(e))
         desk_result = {"error": str(e)}

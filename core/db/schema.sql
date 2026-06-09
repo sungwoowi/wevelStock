@@ -569,6 +569,24 @@ CREATE TABLE IF NOT EXISTS account_fills (
 );
 CREATE INDEX IF NOT EXISTS idx_account_fills_account ON account_fills(account_id, ticker);
 
+-- v15: 일별 계좌 자산 스냅샷 (account_equity_snapshot) — WEALTH-COMPOUND-TRACKER-001 (RB-MS4)
+-- ============================================================
+-- 데스크가 매일 도는 끝에 계좌별 총자산 한 줄 저장(going-forward 마크투마켓 자산 곡선).
+-- equity = seed + 누적 실현손익(account_fills) + 미실현(holdings 오늘 종가). equity-snapshot-v1.
+-- 멱등 키 = (date, account_id). ON CONFLICT REPLACE. 가상(페이퍼) 전용.
+CREATE TABLE IF NOT EXISTS account_equity_snapshot (
+    date              TEXT NOT NULL,            -- YYYY-MM-DD
+    account_id        TEXT NOT NULL,
+    seed_krw          REAL NOT NULL,
+    realized_cum_krw  REAL NOT NULL DEFAULT 0,  -- 누적 실현손익 (account_fills sell)
+    unrealized_krw    REAL NOT NULL DEFAULT 0,  -- 미실현 (보유 평가손익, 오늘 종가)
+    equity_krw        REAL NOT NULL,            -- seed + realized_cum + unrealized
+    deployed_weight   REAL NOT NULL DEFAULT 0,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_equity_snapshot_account ON account_equity_snapshot(account_id, date DESC);
+
 -- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
@@ -591,3 +609,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (11);
 INSERT OR IGNORE INTO schema_version (version) VALUES (12);
 INSERT OR IGNORE INTO schema_version (version) VALUES (13);
 INSERT OR IGNORE INTO schema_version (version) VALUES (14);
+INSERT OR IGNORE INTO schema_version (version) VALUES (15);

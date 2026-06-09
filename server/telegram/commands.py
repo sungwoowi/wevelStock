@@ -33,6 +33,7 @@ HELP_TEXT = (
     "/briefing_now — 장중 실시간 시장 관찰 — KIS 시세 (~30s)\n"
     "/accounts — 가상 4계좌 보유현황·평가손익\n"
     "/retro — 최근 90일 가이던스 회고 (시장 대비 적중도)\n"
+    "/wealth — 복리 자산 추적 (자산 곡선·연 18% 목표 진척·MDD)\n"
     "/help — 이 메시지"
 )
 
@@ -232,6 +233,29 @@ async def cmd_retro(
         log.warning("cmd_retro_error", error=str(e))
         if update.message is not None:
             await update.message.reply_text(f"회고 조회 실패: {e}")
+        return
+    if update.message is not None:
+        await update.message.reply_text(text)
+
+
+async def cmd_wealth(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """복리 자산 추적 — 자산 곡선(실현 vs 총) + 연 18% 목표 진척 + MDD."""
+    if not _authorized(update):
+        return
+    from core.account.compounding import (
+        get_compound_progress,
+        get_equity_curve,
+        render_compound_summary,
+    )
+
+    try:
+        text = render_compound_summary(get_compound_progress(), get_equity_curve())
+    except Exception as e:  # noqa: BLE001
+        log.warning("cmd_wealth_error", error=str(e))
+        if update.message is not None:
+            await update.message.reply_text(f"자산 조회 실패: {e}")
         return
     if update.message is not None:
         await update.message.reply_text(text)
