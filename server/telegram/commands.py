@@ -31,6 +31,7 @@ HELP_TEXT = (
     "/briefing_pre — 오늘 장전 브리핑 (09:00 이후엔 아침 보관본 재전송)\n"
     "/briefing_pre_force — 09:00 이후에도 LLM 실시간 실행 (서버 다운 등 복구용, ~30s)\n"
     "/briefing_now — 장중 실시간 시장 관찰 — KIS 시세 (~30s)\n"
+    "/accounts — 가상 4계좌 보유현황·평가손익\n"
     "/help — 이 메시지"
 )
 
@@ -165,6 +166,53 @@ async def cmd_briefing_pre_force(
             await update.message.reply_text(f"브리핑 실행 실패: {e.detail}")
         return
     await _send_briefing(update, resp)
+
+
+def render_accounts_text(account_items: list[dict], holdings_by_id: dict[str, dict]) -> str:
+    """가상 4계좌 현황 → 텔레그램 텍스트 (순수, 테스트 용이). 코드 라벨 노출 X."""
+    lines = ["💼 가상 계좌 현황 (페이퍼)"]
+    for a in account_items:
+        h = holdings_by_id.get(a["account_id"], {"holdings": [], "summary": {}})
+        lines.append(
+            f"\n[{a['label']}] 투입 {a['deployed_weight'] * 100:.0f}% · 여력 {a['available_weight'] * 100:.0f}%"
+        )
+        if not h["holdings"]:
+            lines.append("  · 보유 없음")
+        for pos in h["holdings"]:
+            sign = "+" if pos["unrealized_pct"] >= 0 else ""
+            note = "" if pos["priced"] else " (시세 대기)"
+            lines.append(
+                f"  · {pos['ticker']} {pos['shares']:.0f}주 · 평단 {pos['avg_price']:,.0f} · "
+                f"{sign}{pos['unrealized_pct']:.1f}%{note}"
+            )
+        s = h["summary"]
+        if s.get("position_count"):
+            lines.append(
+                f"  평가손익 {s.get('unrealized_pnl_krw', 0):,.0f}원 · 실현 {s.get('realized_pnl_krw', 0):,.0f}원"
+            )
+    return "\n".join(lines)
+
+
+async def cmd_accounts(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """가상 4계좌 보유현황 — webapp 과 동일 accounts API 소비."""
+    if not _authorized(update):
+        return
+    from server.api.accounts import account_holdings, list_accounts
+
+    try:
+        accounts_resp = await list_accounts()
+        holdings_by_id: dict[str, dict] = {}
+        for a in accounts_resp["items"]:
+            holdings_by_id[a["account_id"]] = await account_holdings(a["account_id"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("cmd_accounts_error", error=str(e))
+        if update.message is not None:
+            await update.message.reply_text(f"계좌 조회 실패: {e}")
+        return
+    if update.message is not None:
+        await update.message.reply_text(render_accounts_text(accounts_resp["items"], holdings_by_id))
 
 
 async def cmd_help(

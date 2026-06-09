@@ -10,6 +10,8 @@
 구성:
   1. run_snapshot_macro_refresh() — 기존 4 macro 단계(supply→market_macro→us_macro→market_view, 무변경)
   2. run_news_ingest() — 뉴스 수집·분류·집계 (NEWS-SOURCE-001 일일 cron 합류)
+  3. run_desk_today() — 가상매매 데스크 한 바퀴 (PAPER-TRADING-001 RB-MS2). macro·뉴스 후에 돌려
+     MarketView(entry_posture)·chart_ohlcv 가 최신인 상태로 활성 권고를 가상 체결.
 
 각 서브잡은 독립 try/except 로 격리(한 잡 실패가 다른 잡을 막지 않음). 모든 하위 refresh 가
 ON CONFLICT REPLACE 멱등이라 하루 여러 번 호출해도 안전.
@@ -42,6 +44,7 @@ async def run_daily_refresh() -> dict[str, Any]:
 
     snapshot_result: dict[str, Any] = {}
     news_result: dict[str, Any] = {}
+    desk_result: dict[str, Any] = {}
 
     # 1단계: macro 허브 (supply→market_macro→us_macro→market_view). 자체 내부 격리 보유.
     try:
@@ -57,15 +60,26 @@ async def run_daily_refresh() -> dict[str, Any]:
         log.exception("daily_refresh_news_failed", error=str(e))
         news_result = {"error": str(e)}
 
+    # 3단계: 가상매매 데스크 한 바퀴 (활성 권고 → 지정가 도달 가상 체결, 멱등).
+    try:
+        from core.account.desk import run_desk_today
+
+        desk_result = run_desk_today()
+    except Exception as e:  # noqa: BLE001
+        log.exception("daily_refresh_desk_failed", error=str(e))
+        desk_result = {"error": str(e)}
+
     elapsed = time.monotonic() - started
     log.info(
         "daily_refresh_done",
         elapsed_s=round(elapsed, 2),
         snapshot_ok="error" not in snapshot_result,
         news_ok="error" not in news_result,
+        desk_ok="error" not in desk_result,
     )
     return {
         "snapshot_macro": snapshot_result,
         "news": news_result,
+        "desk": desk_result,
         "elapsed_s": round(elapsed, 2),
     }

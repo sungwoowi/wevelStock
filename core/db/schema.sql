@@ -544,6 +544,31 @@ CREATE TABLE IF NOT EXISTS account_positions (
 );
 CREATE INDEX IF NOT EXISTS idx_account_positions_account ON account_positions(account_id);
 
+-- v14: 가상 체결 기록 (account_fills) — PAPER-TRADING-001 (RB-MS2), paper-fill-v1
+-- ============================================================
+-- 비중 지시(position-sizing) → 지정가 도달 판정 → 가상 체결 1 leg 기록.
+-- 멱등 키 = (recommendation_id, account_id, side, leg). buy: leg=차수(1-3) /
+-- sell: leg=목표단(1-3) 또는 0(손절). ON CONFLICT REPLACE 로 재실행 무해.
+-- 가상(페이퍼) 전용 — 실 KIS 주문 아님. account_positions/account_state 는 본 기록에서 파생.
+CREATE TABLE IF NOT EXISTS account_fills (
+    recommendation_id  TEXT NOT NULL,
+    account_id         TEXT NOT NULL,
+    ticker             TEXT NOT NULL,
+    track              TEXT,                    -- A | B
+    side               TEXT NOT NULL,           -- 'buy' | 'sell'
+    leg                INTEGER NOT NULL,        -- buy: 차수 1-3 / sell: 목표단 1-3·손절 0
+    limit_price        REAL,                    -- 지정가 (도달 판정 기준)
+    fill_price         REAL NOT NULL,           -- 가상 체결가
+    shares             REAL NOT NULL,
+    value_krw          REAL NOT NULL,
+    reason             TEXT,                    -- 'entry' | 'add' | 'target_1' | 'stop' ...
+    realized_pnl_krw   REAL NOT NULL DEFAULT 0, -- sell 만 (매도 실현손익)
+    filled_date        TEXT NOT NULL,           -- YYYY-MM-DD (멱등 판정·보유기간)
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (recommendation_id, account_id, side, leg)
+);
+CREATE INDEX IF NOT EXISTS idx_account_fills_account ON account_fills(account_id, ticker);
+
 -- ============================================================
 -- 스키마 버전 (마이그레이션 용)
 -- ============================================================
@@ -565,3 +590,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (10);
 INSERT OR IGNORE INTO schema_version (version) VALUES (11);
 INSERT OR IGNORE INTO schema_version (version) VALUES (12);
 INSERT OR IGNORE INTO schema_version (version) VALUES (13);
+INSERT OR IGNORE INTO schema_version (version) VALUES (14);

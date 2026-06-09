@@ -16,12 +16,12 @@ generates:
   - server/api/accounts.py                       # GET /api/accounts, /api/accounts/{id}/holdings
 modifies:
   - core/db/schema.sql                           # account_positions / account_fills(신규 v14) / account_state write
-  - core/strategist/run_strategist.py            # C — 권고의 기존 YAML 블록 파싱 → StrategistResponse 에 recommendation 첨부
-  - agents/strategists/track_a/persona.md        # (필요 시) YAML 펜스 파싱 보장 1줄 보강뿐 — 구조는 이미 발행 중
-  - agents/strategists/track_b/persona.md        # (필요 시) 동일
-  - server/api/production_chat.py                # 구조화 권고 영속(persist_output) + (선택) size_position 비중 지시 render
-  - core/inference/run_daily_refresh.py          # 데스크 한 바퀴 합류 (3-surface 단일 호출점)
-  - server/telegram/                             # `/계좌` 보유현황 명령
+  - server/api/production_chat.py                # 구조화 권고 영속(persist_strategist_recommendations) — non-stream·stream 양 경로
+  - server/schedulers/jobs/daily_refresh.py      # 데스크 한 바퀴(run_desk_today) 합류 — 3-surface 단일 호출점 3단계
+  - server/api/__init__ (server/main.py)         # accounts 라우터 등록
+  - server/telegram/{bot,commands}.py            # `/accounts` 보유현황 명령 (Telegram 슬래시 latin 제약)
+  # 미수정(C 이미 충족): core/strategist/run_strategist.py · agents/strategists/track_{a,b}/persona.md
+  #   — persona 가 이미 strategist-recommendation-v1 YAML 블록 발행 중이라 파싱·영속만 신규.
 depends_on:
   - ACCOUNT-MANAGER-001 (비중 지시 = position-sizing-v1 — 가상 체결 입력)
   - RIGHT-BRAIN-COMPLETION-001 (소속 roadmap — 가상 전용·4계좌 경계 상속)
