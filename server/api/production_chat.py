@@ -28,6 +28,7 @@ from core.intent import (
 )
 from core.llm.tiers import model_for_tier
 from core.logging import get_logger
+from core.strategist.recommendation import persist_strategist_recommendations
 
 log = get_logger(__name__)
 
@@ -139,6 +140,14 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
     route_resp = await route_intent(
         classification, messages_dicts, provider=payload.provider
     )
+
+    # 전략가 권고 영속 (RB-MS2 M1) — 데스크가 매일 굴릴 활성 권고 원천. graceful.
+    try:
+        persisted = persist_strategist_recommendations(route_resp.agent_responses)
+        if persisted:
+            log.info("recommendations_persisted", count=len(persisted), ids=persisted)
+    except Exception as e:  # noqa: BLE001 — 영속 실패가 답변을 막지 않음
+        log.warning("recommendation_persist_skipped", error=str(e))
 
     formatted: FormattedAnswer | None = None
     if not payload.skip_formatter:
@@ -285,6 +294,14 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
 
                 line = "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 yield line.encode("utf-8")
+
+            # 전략가 권고 영속 (RB-MS2 M1) — 스트림 종료 후 누적 텍스트로. graceful.
+            try:
+                persist_strategist_recommendations(
+                    [{"kind": "strategist", **v} for v in strategist_buffer.values()]
+                )
+            except Exception as e:  # noqa: BLE001
+                log.warning("recommendation_persist_skipped", error=str(e))
 
             # 모든 agent stream 종료 후 formatter 호출 (SSE 마지막 event 로 추가)
             if not payload.skip_formatter:
