@@ -297,6 +297,23 @@ def render_prefetched_analyst_outputs(prefetched: list[dict[str, Any]]) -> str:
         text = (entry.get("text") or "").strip()
         err = entry.get("error")
         lines.append(f"### {aid}")
+        # 박종훈 frame 게이팅 — wealth_strategist 의 보수적 거시 frame 이 평상시
+        # 트레이딩 verdict 를 누르지 않게, 결정론 변곡점 플래그에 따라 사용 지침을
+        # 자동 부착 (advisory — 점수 collapse 아님, verdict 차단 아님).
+        inflection = entry.get("macro_inflection")
+        if aid == "wealth_strategist" and isinstance(inflection, dict):
+            if inflection.get("flag"):
+                lines.append(
+                    f"**[거시 frame 사용 지침 — 변곡점 감지: {inflection.get('reason', '')}]** "
+                    "아래 frame 을 verdict 에 전면 반영하라 (강등·방어 전환 근거로 승격)."
+                )
+            else:
+                lines.append(
+                    "**[거시 frame 사용 지침 — 평상시]** 아래 자산전략가 frame 은 "
+                    "자산배분(달러/원 비중)·사이클 위치 *맥락*으로만 인용하라. 종목 진입 "
+                    "verdict(buy/wait) 의 직접 근거로 사용 금지 — 이 frame 은 설계상 "
+                    "보수적이며 매매 신호가 아니다."
+                )
         if err:
             lines.append(f"**호출 실패** — {err}. 본 분석가 의견은 미반영.")
             lines.append("")

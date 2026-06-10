@@ -75,7 +75,7 @@ async def _setup_bot_commands(app: Application) -> None:
                 BotCommand("briefing_now", "장중 실시간 시장 관찰 — KIS 시세 (~30s)"),
                 BotCommand("accounts", "가상 4계좌 보유현황·평가손익"),
                 BotCommand("retro", "최근 90일 가이던스 회고 (시장 대비 적중도)"),
-                BotCommand("wealth", "복리 자산 추적 (자산 곡선·목표 진척·MDD)"),
+                BotCommand("wealth", "자산 곡선 추적 (실현 vs 총자산·목표 진척·MDD)"),
                 BotCommand("help", "명령어 목록"),
             ]
         )

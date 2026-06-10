@@ -33,7 +33,7 @@ HELP_TEXT = (
     "/briefing_now — 장중 실시간 시장 관찰 — KIS 시세 (~30s)\n"
     "/accounts — 가상 4계좌 보유현황·평가손익\n"
     "/retro — 최근 90일 가이던스 회고 (시장 대비 적중도)\n"
-    "/wealth — 복리 자산 추적 (자산 곡선·연 18% 목표 진척·MDD)\n"
+    "/wealth — 자산 곡선 추적 (실현 vs 총자산·연 18% 성장 목표 진척·MDD)\n"
     "/help — 이 메시지"
 )
 
@@ -241,7 +241,7 @@ async def cmd_retro(
 async def cmd_wealth(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """복리 자산 추적 — 자산 곡선(실현 vs 총) + 연 18% 목표 진척 + MDD."""
+    """자산 곡선 추적 — 자산 곡선(실현 vs 총) + 연 18% 성장 목표 진척 + MDD."""
     if not _authorized(update):
         return
     from core.account.compounding import (

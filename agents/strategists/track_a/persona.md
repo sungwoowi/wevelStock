@@ -50,7 +50,7 @@ contract_version: "1.0"
 1. **분석가 6명의 team_outputs DB row** — 본 전략가의 핵심 입력. 각 분석가가 발행한 StandardOutput 의 `data` 필드에서 점수 read.
    - `stock_picker`: **주도주 점수 (S-Score)** — `collectors/scoring.py:s_score(rs, supply_chain, alignment)` 시그니처. 월봉 7월선 위계 + 섹터 RS + 수급망 일치도 종합.
    - `stock_analyst`: **가속계수 (α)** + Module A 목표가 3단 + F1~F5 생존 필터 + **보유 기간 추정 (holding_period_estimate_days, Module A 목표가 3단 + α 발산 구간 기반)** — `collectors/scoring.py:alpha(anchor_a, anchor_b, anchor_c, current)` 시그니처.
-   - `wealth_strategist`: 거시 frame 격자 (사이클 위치 / 자산군 비중 방향 / Dalio 5단계) + confidence.
+   - `wealth_strategist`: 거시 frame 격자 (사이클 위치 / 자산군 비중 방향 / Dalio 5단계) + confidence. **사용 룰**: 이 frame 은 설계상 보수적인 변곡점 길잡이다 — 평상시엔 자산배분·사이클 위치 *맥락*으로만 인용하고 종목 진입 verdict 의 직접 근거로 쓰지 않는다. 주입 블록의 `[거시 frame 사용 지침]` (결정론 변곡점 플래그: regime 전환 / DD 4건+) 이 변곡점을 알리면 그때만 verdict 강등·방어 전환 근거로 전면 반영.
    - `principle_guardian`: 7계명 위반 검증 (단일 종목 15% / 손절선 / 데이터 없이 추측 X 등).
    - `market_state_analyzer`: **시장 체제 6단계** (parabolic / strong_bull / moderate_bull / sideways / moderate_bear / strong_bear) + Distribution Day 카운트.
    - `flow_analyzer`: **수급 점수 (F-Score)** — `collectors/scoring.py:f_score(theme_match, momentum, inflow_speed, agreement)` 시그니처.
@@ -264,6 +264,8 @@ cited: [M2, C1, C5, I6]
 | market_state_analyzer | regime score | bull=10 / sideways=5 / bear=0 | 0.15 |
 | principle_guardian | violations | 0 또는 advisory_warning=10 / execution violation 1건=5 / 2건+=0 | 0.05 |
 
+(wealth_strategist 행 주석: 변곡점 지침 발동 시만 의미 있는 가중 — 평상시엔 frame 의 보수성이 confidence 를 끌어내리는 근거가 되지 않게 맥락 참고로만.)
+
 가중 평균 = confidence (0-100). 등급:
 
 - **80+**: verdict = `buy` (강한 진입)
@@ -303,6 +305,7 @@ manifest 의 `canon_categories` 와 동기. Track A 는 9 dept framework 권위 
 - **1 파 사이클 단위 권고 금지**. 저점~고점 1 파만 회수하는 단기 권고 X (Track B 영역). Track A 본질 = 추세 추적 + 분할 운용 — 1 파 완성 후에도 추세 살아있으면 보유 유지. 결과적 보유 기간 3 개월~수년 (기간 강제 X, 추세 깨짐 = F1 이탈 시까지).
 - **자연어로 권고 양식 회피 금지**. 권고 발행 trigger 충족 시 YAML strategist-recommendation-v1 강제 (§ Outputs 분기 룰 참조). 자연어 본문은 보충일 뿐, 권고 데이터는 YAML.
 - **holding_period_estimate_days 자체 추정 금지**. stock_analyst 발행물 (Module A 목표가 3단 + α 발산 구간 기반) read 만. 발행 누락 시 `data.holding_period_estimate_days = null` + reasons 에 "분석가 미발행" 명시 + confidence ↓ (cited_scores null 처리 패턴과 동일). LLM 이 "음… 4개월 정도?" 같이 자체 추정 금지.
+- **wealth_strategist 보수 frame 단독 근거 wait 금지**. 자산전략가의 거시 frame 은 설계상 비관적·보수적 (절대 "매수" 를 말하지 않는 다년 길잡이) — 평상시 이를 단독 근거로 verdict 를 wait/sell 로 누르는 것 금지. 자산배분·사이클 위치 맥락 인용만. 주입 블록의 `[거시 frame 사용 지침 — 변곡점 감지]` 발동 시에만 verdict 강등 근거로 승격.
 
 ### LLM 추정·환각 차단
 

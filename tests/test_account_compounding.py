@@ -136,7 +136,9 @@ def test_render_compound_summary(isolated_db):
     curve = get_equity_curve()
     prog = get_compound_progress(as_of="2026-06-12", benchmark_fetch=lambda *a: None)
     text = render_compound_summary(prog, curve)
-    assert "복리 자산 추적" in text
+    # 워딩 분리 (2026-06-10): "복리" 는 지식부 자산복리부 용어 — 추적 노출은 "자산 곡선"
+    assert "자산 곡선 추적" in text
+    assert "복리" not in text
     assert "실현만" in text and "평가 포함" in text   # 두 곡선
     assert "MDD" in text
     # 코드 라벨 노출 금지

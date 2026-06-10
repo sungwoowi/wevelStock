@@ -1,8 +1,11 @@
-"""Wealth API — 복리 자산 곡선 + 목표 진척 (WEALTH-COMPOUND-TRACKER-001 RB-MS4).
+"""Wealth API — 자산 곡선 + 성장 목표 진척 (WEALTH-COMPOUND-TRACKER-001 RB-MS4).
+
+워딩 주의: "복리" 는 지식부 자산복리부(박종훈 거시 frame) 용어 — 본 API 는 성과 측정이라
+"자산 곡선/자산 성장" 으로 표기한다 (2026-06-10 정체성 분리).
 
 Endpoints:
   GET /api/wealth/curve?account_id=     — 자산 곡선 시계열 (4계좌 통합 또는 계좌별)
-  GET /api/wealth/progress              — 복리 목표(연 18%) 대비 진척 + MDD + 벤치마크
+  GET /api/wealth/progress              — 성장 목표(연 18%) 대비 진척 + MDD + 벤치마크
 
 가상매매 스냅샷 기반. webapp `/자산` · 텔레그램 `/wealth` 동일 소비.
 """
@@ -26,5 +29,5 @@ async def wealth_curve(account_id: str | None = None) -> dict:
 
 @router.get("/wealth/progress")
 async def wealth_progress() -> dict:
-    """복리 목표 진척 (목표곡선 vs 실제 + MDD + 벤치마크 알파)."""
+    """성장 목표 진척 (목표곡선 vs 실제 + MDD + 벤치마크 알파)."""
     return get_compound_progress()

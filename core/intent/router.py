@@ -376,7 +376,7 @@ async def _prefetch_analysts_for_tracks(
         )
 
     results = await asyncio.gather(*tasks, return_exceptions=False)
-    return [
+    entries = [
         {
             "id": r.get("agent_id", aid),
             "text": r.get("text", ""),
@@ -386,6 +386,21 @@ async def _prefetch_analysts_for_tracks(
         }
         for i, (aid, r) in enumerate(zip(ordered, results))
     ]
+
+    # 박종훈 frame 게이팅 — wealth_strategist 출력에 결정론 변곡점 플래그 부착.
+    # 평상시엔 자산배분 맥락 전용, 변곡점(regime 전환/DD 4+)일 때만 verdict 전면 반영
+    # 지침을 renderer 가 붙인다. 판정 실패 시 미부착 graceful (기존 흐름 불변).
+    if any(e["id"] == "wealth_strategist" for e in entries):
+        try:
+            from collectors.market_macro import is_macro_inflection
+
+            flag, reason = await asyncio.to_thread(is_macro_inflection)
+            for e in entries:
+                if e["id"] == "wealth_strategist":
+                    e["macro_inflection"] = {"flag": flag, "reason": reason}
+        except Exception as e:  # noqa: BLE001
+            log.warning("macro_inflection_check_failed", error=str(e))
+    return entries
 
 
 async def _call_refuse_or_guide(

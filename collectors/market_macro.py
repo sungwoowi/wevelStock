@@ -198,6 +198,79 @@ def regime_to_score(regime: Regime | None) -> float:
     return _REGIME_SCORE.get(regime or "", 4.0)
 
 
+# 거시 변곡점 DD 임계 — 박종훈 frame (wealth_strategist) 게이팅 입력.
+# 변곡점 3 케이스 중 결정론 판정 가능한 2개만: regime 전환 / DD 4건+.
+# ("사이클 단계 변화" 는 LLM 영역 — 결정론 제외.)
+_INFLECTION_DD_THRESHOLD = 4
+
+_INFLECTION_ROW_COLUMNS = (
+    "date, position, trend, ma20_slope_pct_5d, breadth_ratio, distribution_count_25d"
+)
+
+
+def is_macro_inflection(
+    *, market: str = "KOSPI", date_str: str | None = None
+) -> tuple[bool, str]:
+    """거시 변곡점 결정론 판정 — 박종훈 frame 사용 게이팅의 입력.
+
+    wealth_strategist 의 거시 frame 은 설계상 보수적이라 평상시 트레이딩 verdict 의
+    직접 근거로 쓰면 매매 마비를 유발한다. 변곡점일 때만 frame 을 전면 반영하도록
+    전략가 주입 블록에 사용 지침을 붙이는데, "지금이 변곡점인가" 가 이 함수다.
+
+    변곡점 = (a) regime 전환 (기준일 스냅샷 regime ≠ 직전 영업일 스냅샷 regime)
+           or (b) Distribution Day 25일 카운트 ≥ 4 (기관 분산 천장 경고).
+
+    Args:
+        market: "KOSPI" | "KOSDAQ".
+        date_str: 기준일 "YYYY-MM-DD". None → 스냅샷 최신 행 (백테스팅 친화 cutoff).
+
+    Returns:
+        (변곡점 여부, 사유 문자열). 스냅샷 부재 → (False, ...) 보수적 평상시.
+        직전 행 부재(첫날) → regime 전환 판정 skip, DD 만 본다.
+    """
+    db = get_db()
+    if date_str is None:
+        cur = db.fetch_one(
+            f"SELECT {_INFLECTION_ROW_COLUMNS} FROM market_macro_snapshot "
+            "WHERE market = ? ORDER BY date DESC LIMIT 1",
+            (market,),
+        )
+    else:
+        cur = db.fetch_one(
+            f"SELECT {_INFLECTION_ROW_COLUMNS} FROM market_macro_snapshot "
+            "WHERE market = ? AND date <= ? ORDER BY date DESC LIMIT 1",
+            (market, date_str),
+        )
+    if cur is None:
+        return False, "macro 스냅샷 없음 — 평상시 간주"
+
+    cur_d = dict(cur)
+    cur_regime = classify_market_regime(cur_d)
+    dd = int(cur_d.get("distribution_count_25d") or 0)
+    reasons: list[str] = []
+
+    prev = db.fetch_one(
+        f"SELECT {_INFLECTION_ROW_COLUMNS} FROM market_macro_snapshot "
+        "WHERE market = ? AND date < ? ORDER BY date DESC LIMIT 1",
+        (market, cur_d["date"]),
+    )
+    if prev is not None:
+        prev_d = dict(prev)
+        prev_regime = classify_market_regime(prev_d)
+        if prev_regime != cur_regime:
+            reasons.append(
+                f"regime 전환 {prev_regime}→{cur_regime} "
+                f"({prev_d['date']}→{cur_d['date']})"
+            )
+    if dd >= _INFLECTION_DD_THRESHOLD:
+        reasons.append(
+            f"Distribution Day {dd}건/25일 (임계 {_INFLECTION_DD_THRESHOLD}+)"
+        )
+    if reasons:
+        return True, " + ".join(reasons)
+    return False, f"평상시 (regime={cur_regime}, DD={dd}건)"
+
+
 def compute_index_hierarchy(daily_df: pd.DataFrame) -> dict[str, Any]:
     """월봉 36·60 MA + 현재가 위계.
 

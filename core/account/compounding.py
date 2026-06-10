@@ -1,10 +1,12 @@
-"""복리 추적 — WEALTH-COMPOUND-TRACKER-001 (RB-MS4, 오른쪽 뇌 마지막).
+"""자산 곡선 추적 — WEALTH-COMPOUND-TRACKER-001 (RB-MS4, 오른쪽 뇌 마지막).
 
-매일 자산 스냅샷(going-forward 마크투마켓) → 4계좌 통합 자산 곡선 + 복리 목표 진척.
+매일 자산 스냅샷(going-forward 마크투마켓) → 4계좌 통합 자산 곡선 + 성장 목표(연 18%) 진척.
 `equity = seed + 누적 실현손익(account_fills) + 미실현(holdings 오늘 종가)`. account_fills/
 holdings 재사용(복사 0). 데스크가 매일 도는 끝에 `snapshot_equity` 한 줄 저장(멱등).
 
-복리 *판단·전략*(언제 비중 늘릴지)은 왼쪽 뇌 wealth_strategist — 본 모듈은 *추적·곡선·목표 대비*.
+워딩 주의: "복리" 는 지식부 자산복리부(박종훈 거시 frame) 용어 — 본 모듈은 성과 측정이라
+사용자 노출 워딩은 "자산 곡선/자산 성장" (2026-06-10 정체성 분리. 함수명·테이블명은 불변).
+판단·전략(언제 비중 늘릴지)은 왼쪽 뇌 wealth_strategist — 본 모듈은 *추적·곡선·목표 대비*.
 SLOT(비쌈): 과거 매일 평가 소급(가격 시계열) / 일·주·월 고정 롤업.
 """
 from __future__ import annotations
@@ -130,8 +132,8 @@ def _won(v: float) -> str:
 
 
 def render_compound_summary(progress: dict[str, Any], curve: dict[str, Any]) -> str:
-    """복리 진척 + 두 곡선(실현 vs 총자산) 최근값 → 사람 친화 텍스트 (`/wealth`)."""
-    lines = ["📈 복리 자산 추적 (가상)"]
+    """성장 목표 진척 + 두 곡선(실현 vs 총자산) 최근값 → 사람 친화 텍스트 (`/wealth`)."""
+    lines = ["📈 자산 곡선 추적 (가상)"]
     pts = curve.get("points") or []
     if not pts:
         lines.append("\n아직 자산 스냅샷이 없습니다. (데스크가 매일 돌며 총자산을 한 점씩 기록합니다)")
@@ -145,7 +147,7 @@ def render_compound_summary(progress: dict[str, Any], curve: dict[str, Any]) -> 
     prog = progress["progress_pct"]
     if prog is not None:
         verdict = "목표 앞섬" if prog >= 100 else "목표 뒤짐"
-        lines.append(f"- 복리 목표(연 18%) 대비: {prog:.0f}% 진척 (목표 수익률 {tgt:+.1f}% — {verdict})")
+        lines.append(f"- 성장 목표(연 18%) 대비: {prog:.0f}% 진척 (목표 수익률 {tgt:+.1f}% — {verdict})")
     mdd = progress["mdd_pct"]
     guard = "⚠️ 가드 초과" if progress.get("mdd_breached") else "가드 내"
     lines.append(f"- 최대낙폭(MDD): -{mdd:.1f}% (목표 -{progress['mdd_guard_pct']:.0f}% 이하 — {guard})")
@@ -162,7 +164,7 @@ def get_compound_progress(
     annual_target: float = DEFAULT_ANNUAL_TARGET,
     benchmark_fetch: FetchCloses | None = None,
 ) -> dict[str, Any]:
-    """복리 목표 진척 — 목표곡선(seed×(1+연target)^경과) vs 실제 + MDD + 벤치마크 알파."""
+    """성장 목표 진척 — 목표곡선(seed×(1+연target)^경과) vs 실제 + MDD + 벤치마크 알파."""
     curve = get_equity_curve(as_of=as_of)
     points = curve["points"]
     total_seed = curve["total_seed_krw"]

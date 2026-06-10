@@ -248,6 +248,68 @@ def test_render_prefetched_empty_text_but_scores_present() -> None:
     assert "미반영" not in md
 
 
+# ---------------------------------------------------------------------------
+# 박종훈 frame 게이팅 — wealth_strategist 블록 변곡점 사용 지침 자동 부착
+# (보수적 거시 frame 이 평상시 트레이딩 verdict 를 누르지 않게. 2026-06-10)
+# ---------------------------------------------------------------------------
+
+
+def _wealth_entry(inflection: dict | None) -> dict:
+    entry = {
+        "id": "wealth_strategist",
+        "text": "거시 frame 격자 본문 ...",
+        "metadata": {},
+        "error": None,
+    }
+    if inflection is not None:
+        entry["macro_inflection"] = inflection
+    return entry
+
+
+def test_render_wealth_steady_state_directive() -> None:
+    """평상시 플래그 → '맥락으로만, verdict 직접 근거 금지' 지침 부착."""
+    md = render_prefetched_analyst_outputs(
+        [_wealth_entry({"flag": False, "reason": "평상시 (regime=strong_bull, DD=1건)"})]
+    )
+    assert "[거시 frame 사용 지침 — 평상시]" in md
+    assert "직접 근거로 사용 금지" in md
+    # raw text 보존
+    assert "거시 frame 격자 본문" in md
+
+
+def test_render_wealth_inflection_directive_with_reason() -> None:
+    """변곡점 플래그 → 사유 포함 전면 반영 지침 부착."""
+    md = render_prefetched_analyst_outputs(
+        [_wealth_entry({"flag": True, "reason": "regime 전환 strong_bull→moderate_bear"})]
+    )
+    assert "변곡점 감지" in md
+    assert "regime 전환 strong_bull→moderate_bear" in md
+    assert "전면 반영" in md
+
+
+def test_render_wealth_no_flag_graceful() -> None:
+    """플래그 부재(판정 실패 graceful) → 지침 미부착, 기존 렌더 불변."""
+    md = render_prefetched_analyst_outputs([_wealth_entry(None)])
+    assert "거시 frame 사용 지침" not in md
+    assert "거시 frame 격자 본문" in md
+
+
+def test_render_other_analysts_never_get_directive() -> None:
+    """지침은 wealth_strategist 전용 — 다른 분석가에 새지 않는다."""
+    md = render_prefetched_analyst_outputs(
+        [
+            {
+                "id": "stock_picker",
+                "text": "본문",
+                "metadata": {},
+                "error": None,
+                "macro_inflection": {"flag": True, "reason": "x"},
+            }
+        ]
+    )
+    assert "거시 frame 사용 지침" not in md
+
+
 def test_render_prefetched_no_scores_no_score_line() -> None:
     """점수 metadata 없는 분석가는 결정론 점수 줄을 만들지 않음."""
     prefetched = [
