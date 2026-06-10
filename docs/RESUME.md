@@ -9,13 +9,18 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **✋ 오른쪽 뇌 RB-MS4 복리 추적 ✅ — 4 자식 코드 전부 완성 (2026-06-09)**. `RIGHT-BRAIN-COMPLETION-001` 넷째(마지막) 자식 `WEALTH-COMPOUND-TRACKER-001` **spec-interview + compounding.py + 13 테스트 + probe**(status implementing). **매일 자산 스냅샷**(사용자 통찰: going-forward 마크투마켓=싸다) → 자산 곡선 **두 시리즈**(실현만 vs 실현+평가) + 연 18% 목표 대비 + MDD + 코스피 알파 → `/wealth`. **오른쪽 뇌 4 자식 전부 코드 완성**(PAPER-TRADING verified · ACCOUNT-MANAGER/GUIDANCE/WEALTH implementing). `PROJECT-NORTH-STAR-001` 1/2(50%) · RIGHT-BRAIN **1/4 verified·진행중 3**. 다음 = 라이브 누적→verified 마감 / PAPER-DESK-UX(화면).
+**현재 위치**: **✋ 자산복리부 정체성 = 변곡점 길잡이 확정 + 박종훈 frame 결정론 게이팅 (2026-06-10)**. 2026-06-09 제기 "복리" 의미 충돌을 ①정체성 명확화(다년 거시 frame·생존·변곡점 길잡이)+③워딩 분리(RB-MS4 노출 "복리"→"자산 곡선")로 해소. 사용자 본질 우려("비관 frame 이 평상시 트레이딩 마비")는 **`is_macro_inflection()` 결정론 게이팅**(regime 전환/DD≥4 → 평상시 verdict 근거 금지·변곡점만 전면 반영 지침 자동 부착)으로 해결. 오른쪽 뇌 상태 불변: 4 자식 코드 완성(PAPER-TRADING verified · ACCOUNT-MANAGER/GUIDANCE/WEALTH implementing), `PROJECT-NORTH-STAR-001` 1/2(50%) · RIGHT-BRAIN 1/4. 다음 = 라이브 누적→verified 마감 / PAPER-DESK-UX(화면).
 
-**본 세션 산출** (WEALTH-COMPOUND-TRACKER-001 RB-MS4 — 오른쪽 뇌 4 자식 코드 완성):
-- `core/account/compounding.py` (신규) — `snapshot_equity`(매일 총자산 한 줄, seed+누적실현+미실현, 멱등) / `get_equity_curve`(**두 시리즈** realized vs total) / `compute_mdd` / `get_compound_progress`(연 18% 목표·MDD 가드·벤치마크 알파) / `render_compound_summary`.
-- schema v15 `account_equity_snapshot` / `server/api/wealth.py`+main / daily_refresh 스냅샷 합류 / telegram `/wealth` / probe / `tests/test_{account_compounding,wealth_api}.py`(13).
+**본 세션 산출** (자산복리부 정체성 + 게이팅 — 지식부 정비 라운드):
+- `collectors/market_macro.py::is_macro_inflection()` (신규) — 변곡점=regime 전환(직전 스냅샷 분류 비교) or DD≥4, cutoff 인자. router prefetch 가 wealth_strategist entry 에 플래그 부착 → `render_prefetched_analyst_outputs` 가 사용 지침 자동 삽입(advisory, 점수 collapse X).
+- persona 정렬(track_a 사용 룰+Anti-pattern+composite 주석 / wealth_strategist Identity "변곡점 길잡이") + canon `wealth_compounding/README.md` 정체성 재서술 + 워딩 분리(telegram·API·compounding 노출 텍스트). 테스트 +11(1121 passed) + 실 Gemini 라이브 probe(`scripts/_macro_gate_probe.py`).
 
-**이번 세션에 굳힌 판단 (2026-06-09 RB-MS4 복리)**:
+**이번 세션에 굳힌 판단 (2026-06-10 정체성+게이팅)**:
+- **자산복리부 = 변곡점 길잡이 (rename X)**: 폴더·analyst ID·SPEC ID 불변(manifest·canon_categories·chroma 연쇄 비용), 정체성 서술+노출 워딩만 교정. ② 복리 전략(켈리·재투자) 자료 보강은 자료가 실제 생길 때 별도 라운드가 정직.
+- **비관 frame 게이팅 = 결정론 플래그 + 페르소나 (페르소나 단독 X)**: "지금이 변곡점인가"는 regime 전환·DD≥4 로 결정론 판정 가능 — LLM 추종력 한계는 코드 분기로(자산전략가 v1→v4 전례). 주입 블록 사용 지침이라 advisory 원칙 유지.
+- **라이브 정합 + 경계 요동**: 실 DB 판정 = 변곡점 True (regime 06-08 moderate_bull→06-09 parabolic→06-10 moderate_bull 요동 + DD 4건). 경계 요동이 플래그 빈발 유발 가능 → regime 히스테리시스 백로그 우선순위 소폭 상승.
+
+**직전 세션 판단 (2026-06-09 RB-MS4 복리)**:
 - **자산 곡선 = 매일 자산 스냅샷 (사용자 통찰)**: ① 오늘 평가(쉬움) ② **오늘부터 매일 한 점 스냅샷(싸다=MVP, going-forward 마크투마켓)** ③ 과거 매일 평가 소급(가격 시계열=비쌈=SLOT). "매일 종가 한 번"은 비싼 게 아니다 — 비싼 건 과거 소급뿐.
 - **두 곡선 (사용자 요청)**: realized_equity(실현만·확정·보수) vs equity(+미실현·마크투마켓). 차이 = 평가뿐인 미실현분.
 - **추적 ≠ 전략**: 복리 *판단*(언제 비중↑)은 왼쪽 뇌 wealth_strategist, 본 SPEC 은 결과 추적·곡선·목표 대비만. equity-snapshot-v1, 집계 view 패턴 일관.
@@ -54,22 +59,7 @@
 **직전 세션 판단 (2026-06-06 거버넌스/답변누수)**:
 - **시스템 = 왼쪽 뇌/오른쪽 뇌**: 왼쪽(수집→분석→답변) 먼저 완성 후 오른쪽(비중→채점→복리). **SPEC 2-tier 거버넌스**(roadmap 점검 ↔ implementation 코딩) + **단계 지도는 SPEC status 파생**(`project_status.py`, 손으로 % 금지). 답변 누수 = formatter echo·축 과적합 봉합(F1/F2/F3).
 
-**직전 세션 판단 (2026-06-04 buy_score A축)**:
-- **A점수 = 최근 연간 EPS YoY breakpoint 매핑 + 3년 raw 노출**: O'Neil 가속·일관성은 brittle 공식 대신 LLM이 원시 시계열로 판단(advisory). universe 누적은 dev 자기치유 X(cron 서버 의존). 입력 배관 6.5→6.5/7축=한계효용, 본질로 전환.
-
-**직전 세션 판단 (2026-06-04 1세션 persona MA-ride 인용)**:
-- **canon 주입 = 분석가별 `canon_categories` 필터**(`core/knowledge/compose.py::load_shared_canon`): stock_picker=`stock_selection/*`, stock_analyst=`stock-analysis/*`. **부서 밖 canon은 cross-ref만, ID 직접 인용 X**.
-
-**직전 세션 판단 (2026-06-02 3세션 extension floor + MA-ride 구현)**:
-- **"천장 포화 = k 약함"은 오진**: ma20-아래 종목은 `10-k·(음수)≥10`→무조건 clamp = **k 무관**. lever는 k가 아니라 **ma20-아래 floor**(C). 계측으로 원인 분리(ma20-위 과열 vs ma20-아래) 후 결정 — 직전 진단 맹신 금지.
-- **MA-ride 위계 = 사용자 추세추종 framework**: 빠른 이평 탈수록 주도 강함(4일선=초강세=삼성·하이닉스 / 7일선=강세 / 월봉7MA=시대적 장기). "타고 오름"=MA 스택 순서(latest 값만, slope 불필요). 과열도(거리)⊥구조(어느 MA).
-- **magnitude는 다일 튜닝**: k_below/deadband(1.0/1.0)·MA-ride 점수 간격은 보수적 기본만 커밋, single-day overfitting 금지([[feedback_backtest_essence]]). universe 백필로 누적 시작 → `--k-below` 스윕으로 확정.
-
-**직전 세션 판단 (2026-06-02 2세션 screening 진단)**:
-- **RS 분포 진단 = 풀 한 번 랭킹**(종목 루프 X): RS는 풀 내 백분위라 `rank_candidates(pool, regime)` 한 호출이 단위. 절대 점수 아님 → 풀 크기·구성이 점수에 직접 영향.
-
-**직전 세션 판단 (2026-06-02 Track B 라우팅)**:
-- **track별 필수 분석가 = `track_required` config 블록**(하드코딩 X): route가 해당 track 포함 시 필수 발행자 append. 시나리오 축약(Track A 기준)이 떨어뜨린 권위를 track 인지로 복구. **trader는 Track B 전용**(T-Score+6트리거, Track A frame 밖). 813 passed.
+(프루닝: 2026-06-02 판단 3블록(extension floor k 오진·MA-ride 위계·RS 풀 랭킹·track_required) + 2026-06-04 2블록(buy_score A축·canon 부서별 필터) — 은 코드·메모리에 박혀 제거. git/c_worked 2026-06-02/04 참조.)
 
 (프루닝: 2026-06-01 판단 3블록 — production 시연=production-chat·cited_scores 누수 해소(render_prefetched 구조 주입)·결정론 점수 느린 지표·supply_chain theme→섹터 RS·새 점수 배선 mirror 3단 — 은 코드에 박혀 제거. git/c_worked 2026-06-01 참조. **점수 배선 패턴은 본 세션 MS-C가 재사용·확립.**)
 
@@ -79,16 +69,16 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-09 (라이브 swing 관찰 — 방어장→전부 wait, 청산은 cron organic 누적 확인)
-**마지막 세션 로그**: [2026-06-09_live-swing-observation-7.md](c_worked/2026-06-09_live-swing-observation-7.md). 직전 = [2026-06-09_wealth-rb-ms4-compounding-6.md](c_worked/2026-06-09_wealth-rb-ms4-compounding-6.md)(RB-MS4 복리).
-**산출**: 라이브 관찰 — `scripts/_swing_batch.py`(여러 종목 실 swing: 배치 헬퍼). 삼성/하이닉스/현대차 실 권고 = **전부 wait**(시장 posture=defensive, 시스템 규율 정상). 데스크 체결 0·회고 청산 0. **코드 변경 없음**(직전 RB-MS4 `0016a8c` 가 본 구현). 청산은 매일 cron 이 organic 누적.
-**Git**: `_swing_batch.py` + wrap-up docs → main 직접 + push.
+**마지막 작업일**: 2026-06-10 (자산복리부 정체성 확정 + 박종훈 frame 변곡점 게이팅)
+**마지막 세션 로그**: [2026-06-10_wealth-identity-inflection-gating.md](c_worked/2026-06-10_wealth-identity-inflection-gating.md). 직전 = [2026-06-09_live-swing-observation-7.md](c_worked/2026-06-09_live-swing-observation-7.md)(라이브 swing 관찰).
+**산출**: `is_macro_inflection()`(regime 전환/DD≥4) + prefetch 플래그 + 렌더 지침 자동 부착 + persona 정렬 2 + canon README 정체성 + 워딩 분리("복리"→"자산 곡선") + 테스트 11 + 실 Gemini probe. **1121 passed**, 라이브 변곡점 감지 정합.
+**Git**: 코드+docs 일괄 → main 직접 + push.
 
 ---
 
 ## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 마감(verified) + 화면
 
-**✋ RB-MS4(WEALTH) 복리 추적 ✅ — 오른쪽 뇌 4 자식 코드 전부 완성**. 매일 자산 스냅샷·두 곡선·연 18% 목표·MDD·`/wealth`. status implementing. `uv run python scripts/project_status.py` 로 단계 지도 확인. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 verified·진행중 3**.
+**✋ 자산복리부 정체성·게이팅 ✅ (2026-06-10)** — 지식부 정비 라운드 완료, 오른쪽 뇌는 라이브 누적 대기. `uv run python scripts/project_status.py` 로 단계 지도 확인. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 verified·진행중 3**.
 
 ### 1. 오른쪽 뇌 verified 마감 + 라이브 청산 누적
 - **왜**: ACCOUNT-MANAGER/GUIDANCE/WEALTH 가 implementing — 코드는 완성, **라이브 데스크 청산·스냅샷 다일 누적**으로 KPI·곡선이 실데이터로 검증돼야 verified. 실 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발).
@@ -100,12 +90,12 @@
 - **범위**: `/spec-interview` → webapp 데스크 대시보드(4계좌 보유·회고 KPI·자산 곡선 두 시리즈) + 텔레그램 메시지 다듬기.
 - **예상 산출**: 데스크 현황·채점·복리 곡선 시각화.
 
-### 3. 자산복리부 정체성 재정의 + 라이브 수치 캘리브레이션 (다일 후)
-- **왜**: KPI·보간 분율·R·밴드는 라이브 데스크 청산이 쌓여야 튜닝 가능(single-day overfitting 회피, [[feedback_backtest_essence]]). 실 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발).
-- **범위**: `config/accounts.yaml` sizing/split_ladder 스윕 + KPI 임계. 라이브 누적 후.
-- **예상 산출**: production 캘리브레이션 + GUIDANCE verified.
+### 3. regime 흔들림 히스테리시스 (우선순위 소폭 상승)
+- **왜**: regime 이 경계에서 3일 연속 요동(moderate_bull↔parabolic) — 새 변곡점 게이팅이 regime 전환을 트리거로 쓰므로 경계 요동 = 플래그 빈발. 기존 백로그였으나 게이팅 도입으로 체감 영향 커짐.
+- **범위**: `collectors/market_macro.py` sticky 밴드(분류 임계에 이력 의존 버퍼). 다일 스냅샷 누적 관찰 후 임계 결정.
+- **예상 산출**: regime 라벨 안정화 → 변곡점 플래그 노이즈 제거.
 
-(이월 백로그: **자산복리부 정체성 재정의**([[project_wealth_dept_identity]]) — "복리"가 지식부(박종훈 거시 frame)와 RB-MS4 추적(실현손익 곡선)에서 의미 충돌. ①거시 길잡이 ②복리 전략 재정의 ③워딩 분리 중 다음에 결정(지식부 정비 라운드) / **`PAPER-DESK-UX-001` 신설 (오른쪽 뇌 UI/UX — "날 잡아서")** — 백엔드·API(`/api/accounts`·`/api/guidance/*`)·텔레그램(`/accounts`·`/retro`)은 동작, 빠진 건 한눈에 보는 화면. webapp 데스크 대시보드(4계좌 보유·평가손익·회고 KPI·자산 곡선) + 텔레그램 메시지 다듬기. 현 콘솔 probe 로만 시연 가능 / ~~gemini transient 503 retry~~ ✅ 해소 / 데스크 종목별 extension 주입(현 중립) / market별 시장맥락 분리(현 KOSPI+us_macro 단일) / 실 LLM 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발) / 뉴스 한국 소스 보강 / regime 흔들림 히스테리시스)
+(이월 백로그: **라이브 수치 캘리브레이션(다일 후)** — `config/accounts.yaml` sizing/split_ladder 스윕 + KPI 임계, 라이브 데스크 청산 누적 전제([[feedback_backtest_essence]]) / **자산복리부 ② 복리 전략 자료 보강** — 켈리·비중 증대·재투자 룰 자료가 실제 생길 때(2026-06-10 결정) / **`PAPER-DESK-UX-001` 신설 (오른쪽 뇌 UI/UX — "날 잡아서")** — 백엔드·API(`/api/accounts`·`/api/guidance/*`)·텔레그램(`/accounts`·`/retro`)은 동작, 빠진 건 한눈에 보는 화면. webapp 데스크 대시보드(4계좌 보유·평가손익·회고 KPI·자산 곡선) + 텔레그램 메시지 다듬기. 현 콘솔 probe 로만 시연 가능 / ~~gemini transient 503 retry~~ ✅ 해소 / 데스크 종목별 extension 주입(현 중립) / market별 시장맥락 분리(현 KOSPI+us_macro 단일) / 실 LLM 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발) / 뉴스 한국 소스 보강 / regime 흔들림 히스테리시스)
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
@@ -149,6 +139,7 @@
 ## 🧩 마지막 세션이 남긴 맥락 (바로 쓸 수 있도록)
 
 ### 완성된 자산
+- **박종훈 frame 변곡점 게이팅 (2026-06-10)** — `collectors/market_macro.py::is_macro_inflection()`(regime 전환 or DD≥4, cutoff 인자) → router prefetch 플래그(`macro_inflection`) → `render_prefetched_analyst_outputs` 사용 지침 자동 부착(평상시=자산배분 맥락만·verdict 근거 금지 / 변곡점=전면 반영). track_a·wealth_strategist persona 동기. wealth_strategist 신규 소비 경로 만들 땐 `is_macro_inflection()` 재사용. 자산복리부 정체성 = 변곡점 길잡이(canon README), RB-MS4 노출 워딩 = "자산 곡선".
 - **오른쪽 뇌 RB-MS1+MS2+MS3+MS4 (계좌관리자·가상매매·채점·복리 — 4 자식 코드 완성)** — `core/account/compounding.py`(매일 자산 스냅샷·두 곡선 realized/total·복리 진척·MDD) + schema v15 account_equity_snapshot + `server/api/wealth.py` + telegram `/wealth` 추가. 이하 RB-MS1~3: `core/account/`: `sizing.py`(두 레버 `size_position`)·`portfolio.py`(4계좌)·`paper_trading.py`(보간 사다리·도달 판정·멱등 매수/매도·손절 우선·실현손익)·`holdings.py`·`desk.py`(`run_desk_once/today`) + `core/strategist/recommendation.py`(전략가 YAML 파싱·team_outputs 영속) + `core/guidance/`: `benchmark.py`(트랙×시장 지수 수익률)·`kpi.py`(`get_kpi_summary` 집계 view: 실현·알파·적중률·R/R·트랙분리)·`retrospective.py`. schema v13(account_state/positions)+v14(account_fills). API: `accounts.py`·`guidance.py` + production_chat 권고 영속 + daily_refresh 3단계 데스크 + telegram `/accounts`·`/retro`. probe 3종. **체결=지정가 도달·분할 보간(물타기 차단)·매도=손절 우선·채점=account_fills 재사용·벤치마크 대비·가상 전용**. 108 테스트(MS1 38+MS2 51+MS3 19). **PAPER-TRADING verified**, ACCOUNT-MANAGER·GUIDANCE implementing. gemini 503 bounded 재시도(`core/llm/client.py`).
 - **NEWS-SOURCE-001 (verified, 9번째 지식부 라이브)** — `collectors/news_source.py`: 어댑터 3종(RSS/Manual/Perplexity stub) + DB 2테이블(`news_source_items` url 멱등 / `news_digest_snapshot` scope|date) + `classify_news_items`(LLM 라벨, anchors mirror·gemini·thinking_budget=0·url 멱등 cache·graceful) + `build_news_digest(date,*,ticker/sector)`(결정론 tone 5단·counts·themes·catalyst_tilt) + `render_news_digest_md`([8]) + `news_digest_metadata`. canon `news/01-classification-doctrine.md`(N1~N5). **소비 배선**: `run_analyst._maybe_build_news_digest_md`(+`reads_news_digest`) → compose `[3c]` → news_curator(C1) / `market_view.synthesize_market_view(news_digest=)` tone·테마 흡수(C2) / `buy_score_inputs._blend_news_catalyst` N축(C3, config `n_axis_blend`). 라이브 probe `scripts/_news_digest_probe.py`. **후속 SLOT: UX/UI·Perplexity MCP·유튜브 자동·뉴스 RAG·일일 cron·브리핑 collect_news 통합**
 - `pipelines/market_briefing_pre/` (← morning_pre) — 8 stages, 실 LLM 실증 완료. notify stage `skip_notify` 존중
