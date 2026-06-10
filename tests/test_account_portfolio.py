@@ -28,7 +28,7 @@ def test_load_accounts_track_and_seed():
     by_id = {a.account_id: a for a in portfolio.load_accounts()}
     assert by_id["kr_long"].track == "A"
     assert by_id["kr_swing"].track == "B"
-    assert by_id["us_long"].seed_krw == 10_000_000
+    assert by_id["us_long"].seed_krw == 100_000_000  # 계좌당 1억 (2026-06-10 상향)
 
 
 def test_get_account_state_bootstraps_when_no_row(isolated_db):

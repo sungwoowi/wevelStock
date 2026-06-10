@@ -1,33 +1,33 @@
-# ACCOUNT-MANAGER-001 (RB-MS1) — 4계좌 정의 + 비중 산정 파라미터.
+﻿# ACCOUNT-MANAGER-001 (RB-MS1) — 4계좌 정의 + 비중 산정 파라미터.
 #
 # 비중 = 종목당 고정 리스크 R(stop 역산) × regime 변조 총 배포 한도 두 레버 + 과열도 분할 + 7계명 게이트.
 # 수치는 **보수적 기본값** — 다일 누적 후 튜닝 SLOT (config 수정은 재시작 없이 반영).
-# 가상(페이퍼) 전용. 계좌당 1000만원 시드.
+# 가상(페이퍼) 전용. 계좌당 1억원 시드 (2026-06-10 사용자 결정 — 고가 종목 몇 개면 1천만이 차서 상향).
 
 accounts:
   - account_id: kr_long     # 국장 중장기 (Track A)
     market: KR
     track: A
     horizon: long
-    seed_krw: 10000000
+    seed_krw: 100000000
     label: 국장 중장기
   - account_id: kr_swing    # 국장 단기 (Track B)
     market: KR
     track: B
     horizon: swing
-    seed_krw: 10000000
+    seed_krw: 100000000
     label: 국장 단기
   - account_id: us_long     # 미장 중장기 (Track A)
     market: US
     track: A
     horizon: long
-    seed_krw: 10000000
+    seed_krw: 100000000
     label: 미장 중장기
   - account_id: us_swing    # 미장 단기 (Track B)
     market: US
     track: B
     horizon: swing
-    seed_krw: 10000000
+    seed_krw: 100000000
     label: 미장 단기
 
 sizing:

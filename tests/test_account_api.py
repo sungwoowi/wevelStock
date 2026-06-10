@@ -27,7 +27,7 @@ async def test_list_accounts_returns_four_with_state(isolated_db):
     kr_long = next(i for i in items if i["account_id"] == "kr_long")
     assert kr_long["deployed_weight"] == pytest.approx(0.0)
     assert kr_long["available_weight"] == pytest.approx(1.0)
-    assert kr_long["seed_krw"] == 10_000_000
+    assert kr_long["seed_krw"] == 100_000_000  # 계좌당 1억 (2026-06-10 상향)
 
 
 @pytest.mark.asyncio

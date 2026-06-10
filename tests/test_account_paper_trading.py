@@ -95,7 +95,7 @@ def test_record_buy_fill_creates_position(isolated_db):
     assert pos is not None
     assert pos["shares"] == pytest.approx(10_000.0)
     assert pos["avg_price"] == pytest.approx(100.0)
-    assert pos["weight"] == pytest.approx(0.1)  # 1M / 10M seed
+    assert pos["weight"] == pytest.approx(0.01)  # 1M / 1억 seed (2026-06-10 상향)
     assert pos["tranche_count"] == 1
 
 
@@ -116,13 +116,13 @@ def test_second_tranche_accumulates_and_averages(isolated_db):
     # 평단 = 총매수금액 / 총주수
     expected_avg = 2_000_000.0 / (10_000.0 + 1_000_000.0 / 96.0)
     assert pos["avg_price"] == pytest.approx(expected_avg)
-    assert pos["weight"] == pytest.approx(0.2)  # 2M 투입 / 10M seed
+    assert pos["weight"] == pytest.approx(0.02)  # 2M 투입 / 1억 seed
 
 
 def test_account_state_deployed_weight_reflects_fills(isolated_db):
-    _buy(value_krw=1_500_000.0)  # 0.15 비중
+    _buy(value_krw=1_500_000.0)  # 1.5M / 1억 = 0.015 비중
     state = portfolio.get_account_state("kr_long")
-    assert state.deployed_weight == pytest.approx(0.15)
+    assert state.deployed_weight == pytest.approx(0.015)
     # Track A 매수는 trading_deployed_weight 에 잡히지 않음
     assert state.trading_deployed_weight == pytest.approx(0.0)
 
@@ -131,8 +131,8 @@ def test_track_b_fill_counts_toward_trading_deployed(isolated_db):
     _buy(account_id="kr_swing", track="B", recommendation_id="REC-20260609-005930-B",
          value_krw=1_000_000.0)
     state = portfolio.get_account_state("kr_swing")
-    assert state.deployed_weight == pytest.approx(0.1)
-    assert state.trading_deployed_weight == pytest.approx(0.1)
+    assert state.deployed_weight == pytest.approx(0.01)
+    assert state.trading_deployed_weight == pytest.approx(0.01)
 
 
 # ---------------------------------------------------------------------------

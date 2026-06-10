@@ -33,5 +33,5 @@ async def test_wealth_curve_endpoint(isolated_db):
 async def test_wealth_progress_endpoint(isolated_db):
     snapshot_equity("2026-06-12", price_lookup=lambda t: 100.0)
     out = await wealth_api.wealth_progress()
-    assert out["total_seed_krw"] == pytest.approx(40_000_000.0)
+    assert out["total_seed_krw"] == pytest.approx(400_000_000.0)  # 계좌당 1억 × 4
     assert "mdd_pct" in out and "progress_pct" in out

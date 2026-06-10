@@ -61,7 +61,7 @@ def test_snapshot_equity_realized_plus_unrealized(isolated_db):
     kr = next(s for s in snaps if s["account_id"] == "kr_swing")
     assert kr["realized_cum_krw"] == pytest.approx(1500.0)
     assert kr["unrealized_krw"] == pytest.approx((120.0 - 100.0) * 50.0)  # 1000
-    assert kr["equity_krw"] == pytest.approx(10_000_000.0 + 1500.0 + 1000.0)
+    assert kr["equity_krw"] == pytest.approx(100_000_000.0 + 1500.0 + 1000.0)
 
 
 def test_snapshot_equity_idempotent(isolated_db):
@@ -96,7 +96,7 @@ def test_get_equity_curve_per_account(isolated_db):
     snapshot_equity("2026-06-12", price_lookup=lambda t: 100.0)
     curve = get_equity_curve(account_id="kr_long")
     assert len(curve["points"]) == 1
-    assert curve["points"][0]["equity_krw"] == pytest.approx(10_000_000.0)
+    assert curve["points"][0]["equity_krw"] == pytest.approx(100_000_000.0)
 
 
 def test_get_equity_curve_two_series_realized_vs_total(isolated_db):
@@ -104,8 +104,8 @@ def test_get_equity_curve_two_series_realized_vs_total(isolated_db):
     _buy(fill=100.0)  # 100주 보유 (미실현 대상)
     snapshot_equity("2026-06-12", price_lookup=lambda t: 120.0)  # +20/주 평가이익
     p = get_equity_curve(account_id="kr_swing")["points"][0]
-    assert p["equity_krw"] == pytest.approx(10_000_000.0 + (120.0 - 100.0) * 100.0)  # 총 = +2000 평가
-    assert p["realized_equity_krw"] == pytest.approx(10_000_000.0)  # 실현만 = seed (아직 안 팜)
+    assert p["equity_krw"] == pytest.approx(100_000_000.0 + (120.0 - 100.0) * 100.0)  # 총 = +2000 평가
+    assert p["realized_equity_krw"] == pytest.approx(100_000_000.0)  # 실현만 = seed (아직 안 팜)
     assert p["equity_krw"] > p["realized_equity_krw"]
 
 
@@ -123,7 +123,7 @@ def test_compound_progress_vs_target(isolated_db):
     )  # 1년 뒤 +10000 실현
     snapshot_equity("2027-06-01", price_lookup=lambda t: None)
     prog = get_compound_progress(as_of="2027-06-01", benchmark_fetch=lambda *a: (100.0, 110.0))
-    assert prog["total_seed_krw"] == pytest.approx(40_000_000.0)   # 4계좌 합
+    assert prog["total_seed_krw"] == pytest.approx(400_000_000.0)   # 4계좌 합 (계좌당 1억)
     assert prog["mdd_pct"] is not None
     # 목표곡선 = seed × 1.18^1 (1년) — target_return ≈ 18%
     assert prog["target_return_pct"] == pytest.approx(18.0, abs=1.0)
