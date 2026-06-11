@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -37,6 +37,20 @@ _MAX_RATE_LIMIT_RETRY = 1  # 호출당 최대 retry 횟수
 
 # 업종지수 코드 (market_breadth 등락 종목수 — 전체 시장)
 _BREADTH_INDEX_CODE = {"KOSPI": "0001", "KOSDAQ": "1001"}
+
+# KIS 가 발급 응답의 `access_token_token_expired` 를 **KST(한국시간)** 으로 내려줌.
+# 이를 UTC 로 오인하면 토큰을 실제보다 9 시간 늦게 만료로 캐싱 → 그 창 동안
+# 로컬은 "유효"라 믿지만 KIS 는 이미 만료시켜 모든 호출이 "기간이 만료된 token"
+# 으로 실패한다 (2026-06-11 chart_refresh 배치 전수 실패의 근본 원인).
+_KST = timezone(timedelta(hours=9))
+
+# 만료 시각보다 이만큼 일찍 선제 재발급 (clock skew + 네트워크 지연 안전 마진).
+_TOKEN_REFRESH_MARGIN = timedelta(minutes=10)
+
+# KIS 토큰 발급 "1분당 1회" 제한 대응: 거부 시 대기 후 재시도.
+# (같은 app_key 를 쓰는 다른 프로세스가 직전 1 분 내 발급한 경우 등.)
+_TOKEN_ISSUE_BACKOFF = 62.0  # seconds — KIS 1 분 창이 확실히 지나도록 약간의 여유
+_MAX_TOKEN_ISSUE_RETRY = 1   # 발급당 최대 재시도 (총 2 회 시도)
 
 
 class KISClient:
@@ -85,32 +99,43 @@ class KISClient:
             await self._client.aclose()
             self._client = None
 
-    async def _ensure_token(self) -> str:
-        """Get or refresh OAuth token. **Process-wide cache** — 모든 인스턴스 공유.
-
-        - 같은 app_key 의 토큰이 살아있으면 즉시 반환
-        - 만료 또는 부재 시 lock 안에서 1번만 발급 (concurrent 호출 burst 안전)
-        """
-        cls = type(self)
+    @classmethod
+    def _token_is_fresh(cls, app_key: str) -> bool:
+        """캐시된 토큰이 같은 app_key 이고 만료 마진 이전이면 True."""
         now = datetime.now(timezone.utc)
-        if (
+        return bool(
             cls._shared_token
             and cls._shared_token_expires
-            and cls._shared_token_key == self._app_key
-            and now < cls._shared_token_expires
-        ):
-            return cls._shared_token
+            and cls._shared_token_key == app_key
+            and now < cls._shared_token_expires - _TOKEN_REFRESH_MARGIN
+        )
+
+    async def _ensure_token(self, *, stale_token: str | None = None) -> str:
+        """Get or refresh OAuth token. **Process-wide cache** — 모든 인스턴스 공유.
+
+        - 같은 app_key 의 토큰이 살아있으면 즉시 반환 (만료 10 분 전까지)
+        - 만료 또는 부재 시 lock 안에서 1번만 발급 (concurrent 호출 burst 안전)
+        - stale_token: KIS 가 "기간이 만료된 token" 을 반환했을 때, 실패한 그 토큰을 넘기면
+          캐시가 여전히 그 토큰을 들고 있을 때만 강제 재발급. (다른 task 가 이미 새 토큰을
+          받았으면 그걸 reuse → 동시 burst 시 재발급 폭주 방지. 만료시각 캐시 오차와 무관하게
+          동작하도록 토큰 문자열 일치로 판정.)
+        """
+        cls = type(self)
+        forced = stale_token is not None
+        if not forced and cls._token_is_fresh(self._app_key):
+            return cls._shared_token  # type: ignore[return-value]
 
         async with cls._get_token_lock():
-            # double-check (다른 task 가 lock 안에서 발급했을 수 있음)
-            now = datetime.now(timezone.utc)
-            if (
-                cls._shared_token
-                and cls._shared_token_expires
-                and cls._shared_token_key == self._app_key
-                and now < cls._shared_token_expires
-            ):
-                return cls._shared_token
+            # double-check (다른 task 가 lock 안에서 발급했을 수 있음).
+            if forced:
+                # 캐시가 더 이상 실패한 토큰이 아니면 (= 누군가 재발급함) 그걸 사용.
+                if cls._shared_token_key == self._app_key and cls._shared_token not in (
+                    None,
+                    stale_token,
+                ):
+                    return cls._shared_token  # type: ignore[return-value]
+            elif cls._token_is_fresh(self._app_key):
+                return cls._shared_token  # type: ignore[return-value]
 
             url = f"{self._base}/oauth2/tokenP"
             body = {
@@ -119,8 +144,28 @@ class KISClient:
                 "appsecret": self._app_secret,
             }
             assert self._client is not None
-            resp = await self._client.post(url, json=body)
-            data = resp.json()
+
+            # KIS 는 접근토큰 발급을 "1분당 1회" 로 제한한다. 직전 1 분 내에 (이 프로세스가
+            # 아니라 같은 app_key 를 쓰는 다른 프로세스가) 토큰을 발급했다면 발급이 거부된다.
+            # 이때 한 번 실패하고 끝내면 배치 전 종목이 줄줄이 실패하므로, 제한 메시지면
+            # 잠깐 기다렸다 재시도한다. (lock 보유 중이라 동시 발급 폭주는 없음.)
+            data: dict = {}
+            for attempt in range(_MAX_TOKEN_ISSUE_RETRY + 1):
+                resp = await self._client.post(url, json=body)
+                data = resp.json()
+                if "access_token" in data:
+                    break
+                err_text = f"{data.get('msg1', '')} {data.get('error_description', '')}"
+                rate_limited = "1분당" in err_text or data.get("error_code") == "EGW00133"
+                if rate_limited and attempt < _MAX_TOKEN_ISSUE_RETRY:
+                    log.warning(
+                        "kis_token_issue_rate_limited",
+                        attempt=attempt + 1,
+                        wait_s=_TOKEN_ISSUE_BACKOFF,
+                    )
+                    await asyncio.sleep(_TOKEN_ISSUE_BACKOFF)
+                    continue
+                break
 
             if "access_token" not in data:
                 raise RuntimeError(
@@ -129,12 +174,17 @@ class KISClient:
 
             cls._shared_token = data["access_token"]
             cls._shared_token_key = self._app_key
-            # Parse expiry: "2026-04-18 08:49:59"
+            # Parse expiry: "2026-04-18 08:49:59" — KIS 는 이 시각을 **KST** 로 내려준다.
+            # KST 로 파싱해야 now(UTC) 와 정합. (UTC 오인 시 9 시간 늦게 만료로 캐싱되어
+            # 그 창 동안 만료된 토큰을 계속 재사용하는 버그 발생.)
             exp_str = data.get("access_token_token_expired", "")
             if exp_str:
                 cls._shared_token_expires = datetime.strptime(
                     exp_str, "%Y-%m-%d %H:%M:%S"
-                ).replace(tzinfo=timezone.utc)
+                ).replace(tzinfo=_KST)
+            else:
+                # 응답에 만료시각이 없으면 보수적으로 6 시간 후 만료로 가정 (KIS 기본 24h 보다 짧게).
+                cls._shared_token_expires = datetime.now(timezone.utc) + timedelta(hours=6)
 
             log.info("kis_token_acquired_shared", expires=exp_str)
             # KIS rate limits count token requests — must wait before first data call
@@ -158,19 +208,21 @@ class KISClient:
         self._last_call = asyncio.get_event_loop().time()
 
     async def _get(self, path: str, tr_id: str, params: dict) -> dict:
-        """Make authenticated GET request. Retries once on rate-limit error."""
-        token = await self._ensure_token()
-        headers = {
-            "authorization": f"Bearer {token}",
-            "appkey": self._app_key,
-            "appsecret": self._app_secret,
-            "tr_id": tr_id,
-            "content-type": "application/json; charset=utf-8",
-        }
+        """Make authenticated GET request. Retries once on rate-limit error,
+        and once on expired-token error (캐시 만료시각 오차 등에 대한 방어)."""
         assert self._client is not None
+        token = await self._ensure_token()
+        token_retried = False
 
         data: dict = {}
         for attempt in range(_MAX_RATE_LIMIT_RETRY + 1):
+            headers = {
+                "authorization": f"Bearer {token}",
+                "appkey": self._app_key,
+                "appsecret": self._app_secret,
+                "tr_id": tr_id,
+                "content-type": "application/json; charset=utf-8",
+            }
             await self._rate_limit()
             resp = await self._client.get(
                 f"{self._base}{path}", headers=headers, params=params
@@ -189,6 +241,13 @@ class KISClient:
                     msg=msg,
                 )
                 await asyncio.sleep(_RATE_LIMIT_BACKOFF)
+                continue
+
+            if "만료된 token" in msg and not token_retried:
+                # 캐시가 만료된 토큰을 들고 있었음 → 강제 재발급 후 1 회 재시도.
+                log.warning("kis_token_expired_refresh", path=path, tr_id=tr_id)
+                token = await self._ensure_token(stale_token=token)
+                token_retried = True
                 continue
 
             log.warning(
