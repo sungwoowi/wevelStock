@@ -17,6 +17,13 @@ npm run dev     # 또는 pnpm dev
 
 `NEXT_PUBLIC_API_BASE` 환경변수로 서버 주소 지정 (기본 http://localhost:8000).
 
+## UI 스택 (2026-06-11 확정)
+- **Tailwind CSS v4** (CSS-first — `tailwind.config.ts` 없음, 테마는 `src/app/globals.css` 의 `@theme inline` 블록)
+- **shadcn/ui 4.x** (Base UI 기반, style=base-nova) — 설정 = `components.json`, 컴포넌트는 레포 내 소스로 복사됨
+- 컴포넌트 추가: `npx shadcn@latest add <name>` (webapp 디렉터리에서) → `src/components/ui/` 에 생성
+- 다크 고정: `layout.tsx` 의 `<html class="dark">`. shadcn 토큰(`bg-background` 등)이 다크 값으로 해석됨
+- postcss = `@tailwindcss/postcss` 단일 플러그인 (autoprefixer 불필요)
+
 ## 규칙
 - **API 호출은 server/api 로만**. 직접 DB 접근 금지.
 - 5초 polling (SWR). WebSocket은 Wave 6 이후 고려.
