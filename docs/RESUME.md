@@ -15,7 +15,11 @@
 - `webapp/uiux-sample-draft.pen` — 01 시황(히스토리·한줄평·지표 12종 4요소 포맷·거래대금·섹터·자산군·수급·브리핑 펼치기) / 02 데스크(자산 곡선 2시리즈+목표선·KPI 누적+승률+건수·4계좌) / 02a 계좌 상세(회차 사다리·매수 대기·이익실현) / 03 채팅 / 04 뉴스 / 05 알림(🔴🟢🔵 6종+필터) / 06 가이드(목표·구조·분석가9·7계명·용어) + 모바일 6종.
 - `config/accounts.yaml` 시드 1억 + 시드 의존 테스트 13건 갱신. prism-insight·investing.com 리서치 반영(지표 4요소·KPI 정직 묶음), 와치리스트 보류.
 
-**이번 세션에 굳힌 판단 (2026-06-11 진단/조사 — Gemini 503 + prism 응답속도)**:
+**이번 세션에 굳힌 판단 (2026-06-11 2세션 — 오른쪽 뇌 verified 게이트 실사)**:
+- **3 SPEC 승격 불가 = 코드 결함 0, 순수 데이터 부족 (시간 영역)**: 라이브 실사(읽기 전용) — 체결·청산 0건(권고 전부 wait, 방어장) + 자산 스냅샷 06-10 하루치(4계좌 × 1억 flat). **게이트 확정 = WEALTH 스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER 라이브 체결 ≥1 / GUIDANCE 청산 ≥3**. 빈 KPI graceful ✅ (closed_count 0, 전 지표 null 일관, 크래시 0). 06-09 스냅샷 부재 = 정상(RB-MS4 코드가 06-09 저녁 커밋 → 그날 18:05 cron 이전).
+- **cron Last Result 130 = 무해**: 06-10 18:05 작업 종료코드 130 이지만 3단계 데이터(매크로·뉴스 digest·자산 스냅샷) 전부 18:06 까지 정상 기록 — `just` 인터럽트 코드(로그온 시 대화형 작업의 콘솔 창 닫힘 추정). cron 연속성 정상(market_macro 매일 2행·us_macro 06-11 장전까지). 단 스케줄러 작업에 stdout 로그 리다이렉트 없음 → 다음 실제 실패 시 진단 불가, 로그 래핑 백로그.
+
+**직전 세션 판단 (2026-06-11 진단/조사 — Gemini 503 + prism 응답속도)**:
 - **Gemini 503 = 조치 불필요**: 유료 tier 는 쿼터(429)만 보장, 503 = 구글 서버 순간 과부하 + 우리 cron 8발 동시 fan-out 이 겹친 것. 전부 attempt=1 재시도 성공, `llm_call_failed` 0건. **실패가 실제 보일 때만 LLM 호출 semaphore(동시 3~4개)** — full sequential·provider 교체는 과잉 대응으로 배제.
 - **prism 텔레그램 20~30초의 정체 (코드 확인)**: 13-agent 는 배치 전용(md 파일 캐시 24h), 사용자 질문 = **Sonnet 단일 1콜**(캐시 보고서 프롬프트 주입 + MCP 도구 왕복). 환각 = 같은 경로에 검증·결정론 점수가 없는 구조적 대가. → **PAPER-DESK-UX 채팅 설계 원칙: 사용자 경로에서 분석가 fan-out 실시간 금지, team_outputs read + 서술 1콜** (우리 DB-first 패턴 그대로). 상세 = `idea_memo/prism-insight-텔레그램-응답속도-분석.md`.
 
@@ -53,12 +57,7 @@
 - **U1 데이터는 이미 있다 → 영속+분류+흡수만**: 미장 6지표 yfinance get_indices 재사용(신규 어댑터 0, FRED SLOT). 새 인프라 SPEC 전에 기존 수집 자산부터 확인(어댑터 중복 회피).
 - **U2 미장→entry_posture = 단계 강등 + 극단 게이트, 비대칭**: risk_off→한 단계 강등 / vix_panic→방어 하드 게이트(DD kill switch mirror) / risk_on 자동 상향 X(보수). raw 는 LLM 주입, 게이트는 극단만([[feedback_score_collapse_advisory]] 일관).
 
-**직전 세션 판단 (2026-06-07 NEWS-SOURCE-001 MS-C/D — LB-MS3)**:
-- **뉴스부 = 재료(digest)만, 소비는 분석부서**: 종목 뉴스→buy_score N catalyst_tilt, 시장 뉴스→market_view tone·테마, 분석가→news_curator [3c] read. digest 단일 산출물 각자 read(import 금지). 라이브 실 RSS+Gemini end-to-end 검증.
-
-**직전 세션 판단 (2026-06-07 NEWS-SOURCE-001 MS-A/SPEC)**:
-- **신규 테이블명 = `news_source_items`(NOT `news_items`)**: 레거시 브리핑 테이블 충돌 → 개명. 어댑터 흡수=동작 불변(fetch_news 래퍼, 브리핑 회귀 0).
-- **뉴스 정밀 점수화는 정직하지 않다 → 거친 tilt + 내러티브**(M4): 상황의존·비선형·희소충격. 개별 뉴스 *판단*=LLM, *집계*만 결정론([[feedback_score_collapse_advisory]] 일관). buy_score N=CAN SLIM "New"(신고가+촉매).
+(프루닝: 2026-06-07 NEWS-SOURCE-001 판단 2블록(뉴스부=재료만·digest 단일소스 / `news_source_items` 개명·거친 tilt+내러티브) — 은 코드·메모리(project_news_source_decision)에 박혀 제거. git/c_worked 2026-06-07 참조.)
 
 (프루닝: 2026-06-06 판단 2블록(시장관 종합=결정론 함수+기존 분석가 해석·순환매 후보⨯LLM 검증·섹터 ticker 매칭 / 왼쪽·오른쪽 뇌+SPEC 2-tier 거버넌스) — 은 코드·메모리(feedback_spec_2tier_governance, project_state)에 박혀 제거. git/c_worked 2026-06-06 참조.)
 
@@ -72,10 +71,10 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-11 (진단/조사 세션: Gemini 503 + prism 텔레그램 응답속도 코드 분석. 단계 이동 없음 — PAPER-DESK-UX 설계 원칙만 보강)
-**마지막 세션 로그**: [2026-06-11_prism-telegram-speed-503-analysis.md](c_worked/2026-06-11_prism-telegram-speed-503-analysis.md). 직전 = [2026-06-10_paper-desk-ux-pen-draft-2.md](c_worked/2026-06-10_paper-desk-ux-pen-draft-2.md)(.pen 드래프트 + 시드 1억).
-**산출**: `.pen` PC 7 + 모바일 6 화면(IA: 시황 홈·데스크·채팅·뉴스·알림 + ❔가이드) + `config/accounts.yaml` 시드 1억 + 테스트 13건 갱신. **1121 passed**. 디자인 정본 = `webapp/uiux-sample-draft.pen`(406KB).
-**Git**: 코드+`.pen`+docs → main 직접 + push.
+**마지막 작업일**: 2026-06-11 2세션 (오른쪽 뇌 verified 게이트 점검: 3 SPEC 승격 불가 판정 = 데이터 부족(시간 영역), 게이트 수치 확정. 코드 변경 없음 — 단계 이동 없음)
+**마지막 세션 로그**: [2026-06-11_right-brain-verified-gate-check-2.md](c_worked/2026-06-11_right-brain-verified-gate-check-2.md). 직전 = [2026-06-11_prism-telegram-speed-503-analysis.md](c_worked/2026-06-11_prism-telegram-speed-503-analysis.md)(503 진단 + prism 속도 분석).
+**산출**: verified 게이트 기준 확정(WEALTH ≥5영업일 / AM 체결 ≥1 / GUIDANCE 청산 ≥3) + 빈 KPI graceful 검증 + cron 130 무해 판정. 디자인 정본 = `webapp/uiux-sample-draft.pen`(406KB) 불변.
+**Git**: wrap-up 문서만 → main 직접 + push.
 
 ---
 
@@ -88,17 +87,17 @@
 - **범위**: SPEC 작성(generates=webapp/src/app/{market,desk,chat,news,alerts}/*) + 차트 라이브러리 선정 + 구현 전제 신규 수집 2건 명시(WTI·브렌트·야간선물 yfinance / 알림 영속 테이블). **채팅 설계 원칙(2026-06-11 prism 코드 검증): 사용자 경로 분석가 fan-out 실시간 금지 — 미리 계산된 team_outputs read + 서술 1콜** (속도 20~30초대 + 환각 축 차단 동시 달성).
 - **예상 산출**: SPEC frozen → Next.js 구현 착수.
 
-### 2. 오른쪽 뇌 verified 마감 + 라이브 청산 누적
-- **왜**: ACCOUNT-MANAGER/GUIDANCE/WEALTH implementing — 코드 완성, 라이브 청산·스냅샷 다일 누적으로 실데이터 검증돼야 verified. 매일 18:05 cron organic(시간 영역).
-- **범위**: 시장 매수 신호 시 체결→청산 관찰 + SPEC status 승격.
-- **예상 산출**: RIGHT-BRAIN verified 2~4/4.
+### 2. 오른쪽 뇌 verified 게이트 모니터링 (organic, 게이트 수치 확정됨)
+- **왜**: 2026-06-11 실사 — 코드 결함 0, 순수 데이터 부족. 체결·청산 0건(방어장 wait) + 스냅샷 06-10 하루치.
+- **범위**: 매일 18:05 cron 누적 관찰. **게이트: WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=라이브 체결 ≥1 / GUIDANCE=청산 ≥3**. wait 지속 시 실 LLM 매수 verdict 유도 관찰(백로그)과 연계.
+- **예상 산출**: 게이트 충족 SPEC 부터 순차 verified 승격 → RIGHT-BRAIN 2~4/4.
 
 ### 3. regime 흔들림 히스테리시스 (우선순위 소폭 상승)
 - **왜**: regime 이 경계에서 3일 연속 요동(moderate_bull↔parabolic) — 새 변곡점 게이팅이 regime 전환을 트리거로 쓰므로 경계 요동 = 플래그 빈발. 기존 백로그였으나 게이팅 도입으로 체감 영향 커짐.
 - **범위**: `collectors/market_macro.py` sticky 밴드(분류 임계에 이력 의존 버퍼). 다일 스냅샷 누적 관찰 후 임계 결정.
 - **예상 산출**: regime 라벨 안정화 → 변곡점 플래그 노이즈 제거.
 
-(이월 백로그: **라이브 수치 캘리브레이션(다일 후)** — `config/accounts.yaml` sizing/split_ladder 스윕 + KPI 임계, 라이브 데스크 청산 누적 전제([[feedback_backtest_essence]]) / **자산복리부 ② 복리 전략 자료 보강** — 켈리·비중 증대·재투자 룰 자료가 실제 생길 때(2026-06-10 결정) / **`PAPER-DESK-UX-001` 신설 (오른쪽 뇌 UI/UX — "날 잡아서")** — 백엔드·API(`/api/accounts`·`/api/guidance/*`)·텔레그램(`/accounts`·`/retro`)은 동작, 빠진 건 한눈에 보는 화면. webapp 데스크 대시보드(4계좌 보유·평가손익·회고 KPI·자산 곡선) + 텔레그램 메시지 다듬기. 현 콘솔 probe 로만 시연 가능 / ~~gemini transient 503 retry~~ ✅ 해소 / 데스크 종목별 extension 주입(현 중립) / market별 시장맥락 분리(현 KOSPI+us_macro 단일) / 실 LLM 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발) / 뉴스 한국 소스 보강 / regime 흔들림 히스테리시스)
+(이월 백로그: **스케줄러 stdout 로그 래핑** — `wevelStock-daily-refresh` 작업에 로그 리다이렉트 없어 실패 시 진단 불가(06-10 exit 130 은 무해 판정이나 재발 대비). `just refresh-daily > data/logs/refresh-YYYY-MM-DD.log` 형태 / **라이브 수치 캘리브레이션(다일 후)** — `config/accounts.yaml` sizing/split_ladder 스윕 + KPI 임계, 라이브 데스크 청산 누적 전제([[feedback_backtest_essence]]) / **자산복리부 ② 복리 전략 자료 보강** — 켈리·비중 증대·재투자 룰 자료가 실제 생길 때(2026-06-10 결정) / **`PAPER-DESK-UX-001` 신설 (오른쪽 뇌 UI/UX — "날 잡아서")** — 백엔드·API(`/api/accounts`·`/api/guidance/*`)·텔레그램(`/accounts`·`/retro`)은 동작, 빠진 건 한눈에 보는 화면. webapp 데스크 대시보드(4계좌 보유·평가손익·회고 KPI·자산 곡선) + 텔레그램 메시지 다듬기. 현 콘솔 probe 로만 시연 가능 / ~~gemini transient 503 retry~~ ✅ 해소 / 데스크 종목별 extension 주입(현 중립) / market별 시장맥락 분리(현 KOSPI+us_macro 단일) / 실 LLM 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발) / 뉴스 한국 소스 보강 / regime 흔들림 히스테리시스)
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
 
@@ -142,6 +141,7 @@
 ## 🧩 마지막 세션이 남긴 맥락 (바로 쓸 수 있도록)
 
 ### 완성된 자산
+- **오른쪽 뇌 verified 게이트 기준 (2026-06-11 2세션)** — 라이브 실사로 확정: WEALTH=`account_equity_snapshot` ≥5영업일(첫 행 06-10, ~06-16 도달) / ACCOUNT-MANAGER=`size_position` 경유 라이브 체결 ≥1건 / GUIDANCE=청산 ≥3건 후 KPI·벤치마크 검산. 빈 KPI graceful 검증 완료(`get_kpi_summary` null 일관). cron exit 130 = 무해(데이터 완결 후 콘솔 닫힘 추정).
 - **prism-insight 응답 경로 분석 메모 (2026-06-11)** — `idea_memo/prism-insight-텔레그램-응답속도-분석.md`: prism 텔레그램 20~30초 = 배치 md 캐시 + Sonnet 단일 1콜 (코드 라인 근거). PAPER-DESK-UX 채팅 설계 원칙(fan-out 실시간 금지) + 503 대응 결정(조치 불필요, 실패 시 semaphore) 영구 기록.
 - **PAPER-DESK-UX `.pen` 디자인 정본 (2026-06-10)** — `webapp/uiux-sample-draft.pen` (406KB): PC 7화면(00 정보구조 / 01 시황 홈 / 02 데스크 / 02a 계좌 상세 / 03 채팅 / 04 뉴스 / 05 알림 / 06 가이드 ❔진입) + 모바일 6화면. 탭 5축 + 헤더(❔가이드·시장 배지). 캔버스 배치 = 탭 순서. **주의: Pencil MCP 는 활성 탭 문서에 쓴다** — 작업 전 get_editor_state 확인.
 - **박종훈 frame 변곡점 게이팅 (2026-06-10)** — `collectors/market_macro.py::is_macro_inflection()`(regime 전환 or DD≥4, cutoff 인자) → router prefetch 플래그(`macro_inflection`) → `render_prefetched_analyst_outputs` 사용 지침 자동 부착(평상시=자산배분 맥락만·verdict 근거 금지 / 변곡점=전면 반영). track_a·wealth_strategist persona 동기. wealth_strategist 신규 소비 경로 만들 땐 `is_macro_inflection()` 재사용. 자산복리부 정체성 = 변곡점 길잡이(canon README), RB-MS4 노출 워딩 = "자산 곡선".
