@@ -9,7 +9,9 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **📐 PAPER-DESK-UX-001 SPEC 신설 (RB-MS5, draft) + 디자인 .pen 리네임 (2026-06-12)**. 오른쪽 뇌 화면 차단점 해소 SPEC 골격 작성 — **무게중심=프론트 빌드**(데스크 API 대부분 기존, 신규 백엔드는 시황 집계 read 1개). MVP=시황+가상매매+계좌상세 3화면 / Recharts / next-themes / R&D→`/dev/*` / 시황="거의 풀" / 신규 수집은 별 INFRA SPEC. **정정 2건**: `uiux-sample-draft.pen`=IA 드래프트(시각 정본 아님), 정본=리네임된 `design-darkmode-spec.pen`/`design-lightmode-spec.pen` 쌍. RIGHT-BRAIN 1/5(20%). 다음 = SPEC draft→구현 착수.
+**현재 위치**: **🛡 INFRA-MARKET-ASSETS-002 SPEC 신설(린 정정) + 재사용 가드 신설 (2026-06-12)**. PAPER-DESK-UX 예약 후속 SPEC(자산군 수집 + 알림 영속)을 `/spec-interview` 로 작성 → 사용자 "무분별 신규 확장 아니냐" 제동 → **신규 테이블 과잉을 확장 전용으로 정정**(`us_macro_snapshot` 이 gold·wti 이미 보유, `generates: []`). 미스 재발 방지로 **개발-타임 재사용 가드 3종** 신설: `docs/DATA-MAP.md`(30테이블 도메인 지도) + CLAUDE.md 절대원칙 #11 + spec-interview 재사용 영향도 게이트. 코드 0, 항상 켜짐. RIGHT-BRAIN 1/6(17%, INFRA-MARKET-ASSETS-002 자식 추가). 다음 = PAPER-DESK-UX 구현 또는 INFRA-MARKET-ASSETS 구현.
+
+**(직전) 현재 위치**: **📐 PAPER-DESK-UX-001 SPEC 신설 (RB-MS5, draft) + 디자인 .pen 리네임 (2026-06-12)**. 오른쪽 뇌 화면 차단점 해소 SPEC 골격 작성 — **무게중심=프론트 빌드**(데스크 API 대부분 기존, 신규 백엔드는 시황 집계 read 1개). MVP=시황+가상매매+계좌상세 3화면 / Recharts / next-themes / R&D→`/dev/*` / 시황="거의 풀". **정정 2건**: `uiux-sample-draft.pen`=IA 드래프트(시각 정본 아님), 정본=`design-darkmode-spec.pen`/`design-lightmode-spec.pen` 쌍.
 
 **(직전) 현재 위치**: **🎨 CTA 액센트 결정 = 테마별 듀얼 액센트 확정 (2026-06-12)**. "통일 안 함" — 라이트 핑크(Rausch #FF385C) / 다크 에메랄드 강조(핑크 로고 + CTA #10B981). 디자인 `.pen` 변경 0.
 
@@ -17,11 +19,15 @@
 
 **(직전) 현재 위치**: **✋ FractalSignal 네이밍 확정 + 다크/라이트 테마 쌍 완성 (2026-06-11 4세션)**. `design-darkmode-spec.pen`(다크) / `design-lightmode-spec.pen`(라이트) = **테마 쌍** (후보 비교 아님 — 토글 수동+시스템). 양쪽 공통: FractalSignal 로고+프랙탈 파동 마크 · "가상매매" 용어 · 기간 5단 토글 · 지수 라인 차트(코스피·나스닥) · 등락 종목 수 UI(KIS 기수집 확인) · 테마 토글 14곳 · 모바일 2×. 다음 = PAPER-DESK-UX-001 SPEC → Next.js 구현(shadcn/ui 4.x+Tailwind v4 `5526fdb`). ✅ CTA 액센트 = 테마별 듀얼 액센트 확정(통일 안 함, 변경 0 — 라이트 핑크 로고+Rausch CTA / 다크 핑크 로고+에메랄드 CTA, 2026-06-12). `webapp/uiux-sample-draft.pen` 에 PC 7화면 + 모바일 6화면 라이브 핑퐁으로 확정: **탭 5축 = 시황(홈)·데스크·채팅·뉴스·알림 / 가이드 = 헤더 ❔ / 브리핑 탭 폐지 → 시황 흡수**(히스토리 선택 = 그 시점 대시보드+브리핑 서술). 계좌 시드 1,000만→**1억** backend 실반영(config 권위, DB 무영향, 1121 passed). 다음 = `/spec-interview` 로 PAPER-DESK-UX-001 SPEC 신설(RIGHT-BRAIN 연결) → Next.js 구현. NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 불변.
 
-**본 세션 산출** (PAPER-DESK-UX .pen 드래프트):
-- `webapp/uiux-sample-draft.pen` — 01 시황(히스토리·한줄평·지표 12종 4요소 포맷·거래대금·섹터·자산군·수급·브리핑 펼치기) / 02 데스크(자산 곡선 2시리즈+목표선·KPI 누적+승률+건수·4계좌) / 02a 계좌 상세(회차 사다리·매수 대기·이익실현) / 03 채팅 / 04 뉴스 / 05 알림(🔴🟢🔵 6종+필터) / 06 가이드(목표·구조·분석가9·7계명·용어) + 모바일 6종.
-- `config/accounts.yaml` 시드 1억 + 시드 의존 테스트 13건 갱신. prism-insight·investing.com 리서치 반영(지표 4요소·KPI 정직 묶음), 와치리스트 보류.
+**이번 세션에 굳힌 판단 (2026-06-12 — 재사용 가드)**:
+- **"안 보이면 새로 만든다"는 AI 기본값 — 가드는 의지 아닌 가시성**: 새 collector/테이블이 튀어나오는 건 의지박약이 아니라 *기존 도메인이 안 보여서*. `commodity_futures_snapshot` 신규를 제안했다가 `us_macro_snapshot` 이 gold(상품선물)·wti 를 이미 담고 같은 yfinance 야간 fetch 를 쓰는 걸 grep 으로 발견 → **컬럼 확장**으로 정정(WTI 는 이미 fetch 되나 컬럼 부재로 버려지던 값). **체크리스트로는 이 기본값을 못 이김** — spec-interview 를 "따랐는데"도 과잉했음. 그래서 가드 = 재사용을 *기계적으로 보이게* 하는 `docs/DATA-MAP.md`(30테이블 지도) + 항상 켜진 CLAUDE.md #11 + spec-interview 재사용 영향도 게이트.
+- **개발-타임 하네스 ≠ 런타임 에이전트**: user_want_spec 의 시스템 피드백/도메인 고도화 Agent(돌아가는 제품 자기감시)와 다른 층 — 이건 *SPEC 쓰는 빌더(Claude Code)를 레일 위에 두는* 프로세스 가드. 혼동하면 "런타임 감시 에이전트 또 만들자"는 과잉으로 샘.
+- **가드 자체의 과잉 경계**: Layer 1+2(맵+원칙+게이트, 코드 0)만. validate.py 자동 WARNING(L3)·reuse-critic 서브에이전트(L4)는 보류 — 가드를 과하게 짓는 게 바로 이 세션이 정정한 실수의 재발.
 
-**이번 세션에 굳힌 판단 (2026-06-12 — KIS 토큰 만료 버그)**:
+**직전 세션 판단 (2026-06-12 — PAPER-DESK-UX .pen 드래프트)**:
+- `webapp/uiux-sample-draft.pen` — 01 시황 / 02 데스크(자산곡선 2시리즈+KPI) / 02a 계좌상세 / 03~06 + 모바일 6종. `config/accounts.yaml` 시드 1억 + 테스트 13건. prism·investing.com 리서치(지표 4요소·KPI 정직 묶음).
+
+**직전 세션 판단 (2026-06-12 — KIS 토큰 만료 버그)**:
 - **한 증상 아래 두 결함 (토큰 타임존 → 키 불일치)**: `기간이 만료된 token` 전수 반복 = KIS 만료시각(KST)을 UTC 로 오인해 토큰을 9시간 늦게 만료로 캐싱 → 18:00 배치가 그 창에 걸려 만료 토큰 재사용. 위층(토큰) 고치자 아래층 `EGW02004`(실전 도메인 ⨯ 모의 앱키) 노출. **타임존 가정은 외부 API 응답마다 명시 확인** + 만료 응답 시 토큰 문자열 일치로 강제 재발급(캐시 오차와 독립). `connectors/kis/client.py` + `tests/test_kis_token.py`(4건), 배치 158/158 복구.
 - **KIS 토큰은 프로세스 단위 캐시 — 1분당 1회 충돌은 다중 프로세스 산물**: 한 프로세스는 토큰 1회 발급·재사용. `just refresh-charts` 를 서버와 동시에 띄우면 각자 발급 → 충돌. 발급 1분 제한 시 ~62초 대기 재시도로 자동 회복하나 정석은 서버 1개 운용. **KIS_IS_PAPER ↔ .env 키 종류는 반드시 짝**(불일치 시 토큰만 나오고 데이터는 EGW02004 전수 실패).
 
@@ -90,33 +96,33 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-12 (**PAPER-DESK-UX-001 SPEC 신설(RB-MS5 draft) + 디자인 .pen 리네임 + 정본 혼동 정정**). 직전 = 2026-06-12 CTA 듀얼 액센트 / 2026-06-12 KIS 토큰 버그 / 2026-06-11 FractalSignal 테마 쌍.
-**마지막 세션 로그**: [2026-06-12_paper-desk-ux-spec-and-pen-rename.md](c_worked/2026-06-12_paper-desk-ux-spec-and-pen-rename.md). 직전 = [2026-06-12_cta-accent-dual-theme-decision.md](c_worked/2026-06-12_cta-accent-dual-theme-decision.md) / [2026-06-12_kis-token-expiry-fix.md](c_worked/2026-06-12_kis-token-expiry-fix.md).
-**산출**: `docs/specs/PAPER-DESK-UX-001-paper-desk-webapp-ui.md`(신규, 5 INTERVIEW-SLOT) + roadmap children 연결 + `.pen` 리네임(darkmode/lightmode) + RESUME·메모리 3종 갱신 + 오저장 아티팩트 정리.
-**Git**: 2커밋(① feat(webapp): SPEC+roadmap+`.pen` 리네임+아티팩트 정리 ② docs: wrap-up) → push.
+**마지막 작업일**: 2026-06-12 (**INFRA-MARKET-ASSETS-002 SPEC 신설(린 정정) + 재사용 가드 3종 신설**). 직전 = 2026-06-12 PAPER-DESK-UX SPEC / CTA 듀얼 액센트 / KIS 토큰 버그.
+**마지막 세션 로그**: [2026-06-12_infra-market-assets-spec-and-reuse-guard.md](c_worked/2026-06-12_infra-market-assets-spec-and-reuse-guard.md). 직전 = [2026-06-12_paper-desk-ux-spec-and-pen-rename.md](c_worked/2026-06-12_paper-desk-ux-spec-and-pen-rename.md).
+**산출**: `docs/specs/INFRA-MARKET-ASSETS-002-*.md`(신규, draft, `generates:[]` 확장 전용) + `docs/DATA-MAP.md`(신규, 30테이블 지도) + CLAUDE.md 절대원칙 #11 + `.claude/commands/spec-interview.md` 재사용 게이트 + RIGHT-BRAIN children 연결.
+**Git**: 2커밋(① docs: SPEC 신설+재사용 가드+roadmap 연결 ② docs: wrap-up) → push.
 
 ---
 
 ## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 마감(verified) + 화면
 
-**✋ PAPER-DESK-UX-001 SPEC 신설 ✅ (2026-06-12, draft)** — `docs/specs/PAPER-DESK-UX-001-paper-desk-webapp-ui.md` (5 INTERVIEW-SLOT). 다음은 구현. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/5(20%) verified·진행중 3 + draft 1**.
+**🛡 INFRA-MARKET-ASSETS-002 SPEC + 재사용 가드 ✅ (2026-06-12)** — SPEC draft(`generates:[]` 확장 전용) + `docs/DATA-MAP.md`·CLAUDE.md #11·spec-interview 게이트. 다음은 구현 2건. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6(17%) verified 1·진행중 3 + draft 2**.
 
 ### 1. PAPER-DESK-UX-001 구현 착수 — Next.js production 화면 (RB-MS5)
 - **왜**: SPEC 골격 frozen(draft). 무게중심=프론트 빌드, 데스크 API 대부분 기존(신규 백엔드=시황 집계 read 1개).
-- **범위**: SPEC draft→implementing. next-themes+recharts 설치 → `globals.css` FractalSignal 팔레트 이식(현 shadcn 그레이스케일 교체·CTA 듀얼 액센트) → `/api/market/snapshot` read 엔드포인트 신규 → **시황·가상매매·계좌상세 3화면(PC+모바일)** + 5탭 셸 + R&D→`/dev/*` 이전. design 정본 쌍 노드 read로 화면별 색·레이아웃 확정.
+- **범위**: SPEC draft→implementing. next-themes+recharts 설치 → `globals.css` FractalSignal 팔레트 이식(CTA 듀얼 액센트) → `/api/market/snapshot` read 엔드포인트 신규 → **시황·가상매매·계좌상세 3화면(PC+모바일)** + 5탭 셸 + R&D→`/dev/*`. design 정본 쌍 노드 read로 화면별 확정.
 - **예상 산출**: MVP 3화면 라이브 + 테마 토글 동작.
 
-### 2. 신규 수집 INFRA SPEC 신설
-- **왜**: PAPER-DESK-UX 시황 자산군 3종(WTI·브렌트·야간선물)·알림 탭 전제. UI SPEC에서 분리한 것.
-- **범위**: WTI·브렌트·야간선물 수집 collector + 알림 영속 테이블 SPEC.
-- **예상 산출**: SPEC frozen → 시황 자산군 풀세트.
+### 2. INFRA-MARKET-ASSETS-002 구현 — 야간자산 컬럼 확장 + 알림 영속 (RB-MS5 지원)
+- **왜**: SPEC draft frozen(확장 전용). PAPER-DESK-UX 시황 자산군 카드·알림 탭 백엔드. 신규 테이블·collector 0.
+- **범위**: `us_macro_snapshot`(+브렌트·NQ·ES)·`market_macro_snapshot`(+KOSPI200 야간 KIS, graceful null) 컬럼 + `notifications_log`(+type·is_read, v16 멱등 ALTER) + `/api/market/snapshot` 자산군 섹션 + `/api/notifications/mark-read`. us_macro 3단계·OVERNIGHT_SYMBOLS 재사용.
+- **예상 산출**: 시황 자산군 풀세트 + 알림 미독 배지 토대.
 
 ### 3. 오른쪽 뇌 verified 게이트 모니터링 (organic)
 - **왜**: 코드 완성, 데이터 누적만 남음 (2026-06-11 실사).
 - **범위**: 매일 18:05 cron. **게이트: WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3**.
 - **예상 산출**: 게이트 충족 SPEC 순차 verified.
 
-(✅ 해소: **PAPER-DESK-UX-001 SPEC** = 신설 draft(2026-06-12) — MVP 시황+가상매매+계좌상세 / Recharts / next-themes / 신규 수집 별 SPEC. `.pen` 리네임(darkmode/lightmode) + uiux-sample-draft "정본" 오라벨 정정. / **CTA 액센트 통일** = 통일 안 함(2026-06-12, 듀얼 액센트). / KIS 토큰 만료 버그 = 2026-06-12 커밋, 배치 158/158.)
+(✅ 해소: **신규 수집 INFRA SPEC** = INFRA-MARKET-ASSETS-002 신설 draft(2026-06-12, 확장 전용 린 버전) + RIGHT-BRAIN 연결. / **재사용 가드** = DATA-MAP·원칙#11·spec-interview 게이트 신설 — 모든 SPEC 작성 시 `## 재사용 영향도` 필수. / 직전: PAPER-DESK-UX-001 SPEC·CTA 듀얼·KIS 토큰 버그.)
 
 (organic 병행: **오른쪽 뇌 verified 게이트 모니터링** — WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3, 매일 18:05 cron 누적 / **regime 히스테리시스**는 백로그 유지)
 
