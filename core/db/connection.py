@@ -73,6 +73,27 @@ class Database:
 
         # v10 (market_view) / v11 (news_source_items + news_digest_snapshot) 는 신규 *테이블* 추가라
         # 별도 ALTER 불필요 — schema.sql 의 CREATE TABLE IF NOT EXISTS 가 새 DB·기존 DB 모두 처리.
+        # v12 (us_macro_snapshot) / v13~v15 (account/paper/wealth) 도 신규 테이블 — schema.sql 처리.
+
+        # v16 — INFRA-MARKET-ASSETS-002: 야간자산 컬럼 확장 + 알림 영속 (멱등 ALTER, v9 패턴).
+        #   us_macro_snapshot: WTI·브렌트·NQ·ES 야간선물 change_pct (gold 와 동일 야간 카테고리).
+        #   market_macro_snapshot: KOSPI200 야간선물 change_pct (KIS best-effort, graceful null).
+        #   notifications_log: notification_type(분류) + is_read(미독 배지) — PAPER-DESK-UX 알림 탭.
+        _v16_columns = (
+            ("us_macro_snapshot", "wti_change_pct", "REAL"),
+            ("us_macro_snapshot", "brent_change_pct", "REAL"),
+            ("us_macro_snapshot", "nq_futures_change_pct", "REAL"),
+            ("us_macro_snapshot", "es_futures_change_pct", "REAL"),
+            ("market_macro_snapshot", "kospi200_night_change_pct", "REAL"),
+            ("notifications_log", "notification_type", "TEXT"),
+            ("notifications_log", "is_read", "INTEGER NOT NULL DEFAULT 0"),
+        )
+        for table, col, ddl in _v16_columns:
+            try:
+                if not _column_exists(conn, table, col):
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+                pass
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

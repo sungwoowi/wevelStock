@@ -48,6 +48,10 @@ async def main() -> None:
     print(f"나스닥 {snap.nasdaq_change_pct}  S&P {snap.sp500_change_pct}  필반 {snap.sox_change_pct}")
     print(f"VIX {snap.vix} ({snap.vix_change_pct}%)  달러 {snap.dxy} ({snap.dxy_change_pct}%)")
     print(f"미10년물 {snap.us_10y}% ({snap.us_10y_change_bp}bp)  금 {snap.gold_change_pct}%")
+    print(
+        f"[야간자산] WTI 원유 {snap.wti_change_pct}%  브렌트유 {snap.brent_change_pct}%  "
+        f"나스닥100 선물 {snap.nq_futures_change_pct}%  S&P500 선물 {snap.es_futures_change_pct}%"
+    )
     print("reasons:")
     for r in snap.reasons:
         print(f"  - {r}")

@@ -132,6 +132,11 @@ def _fake_indices(**overrides):
         "dxy": {"symbol": "DX-Y.NYB", "price": 104.0, "change_pct": 0.1, "change": 0.1},
         "us_10y": {"symbol": "^TNX", "price": 4.5, "change_pct": 0.2, "change": 0.05},
         "gold": {"symbol": "GC=F", "price": 2600.0, "change_pct": 0.3, "change": 8.0},
+        # 야간자산 (INFRA-MARKET-ASSETS-002)
+        "wti": {"symbol": "CL=F", "price": 70.0, "change_pct": -1.2, "change": -0.85},
+        "brent": {"symbol": "BZ=F", "price": 74.0, "change_pct": -0.9, "change": -0.67},
+        "nq_futures": {"symbol": "NQ=F", "price": 21000.0, "change_pct": 0.5, "change": 105.0},
+        "es_futures": {"symbol": "ES=F", "price": 6100.0, "change_pct": 0.4, "change": 24.0},
     }
     base.update(overrides)
     return base
@@ -177,6 +182,77 @@ async def test_compute_fetch_and_classify(isolated_db, monkeypatch):
     again = await compute_us_macro()
     assert again.source == "db"
     assert again.risk_signal == "risk_on"
+
+
+@pytest.mark.asyncio
+async def test_overnight_assets_round_trip(isolated_db, monkeypatch):
+    """야간자산 4종(wti·brent·nq·es) fetch → 영속 → DB 복원 멱등 (INFRA-MARKET-ASSETS-002)."""
+    async def _fake(names=None):
+        return _fake_indices()
+
+    monkeypatch.setattr("connectors.yfinance.client.get_indices", _fake)
+    snap = await compute_us_macro(force_refresh=True)
+    assert snap.wti_change_pct == -1.2
+    assert snap.brent_change_pct == -0.9
+    assert snap.nq_futures_change_pct == 0.5
+    assert snap.es_futures_change_pct == 0.4
+    # 야간자산은 risk classify 에 미반영 — risk_signal 은 주식 모멘텀대로 risk_on 유지
+    assert snap.risk_signal == "risk_on"
+    # DB 복원 멱등
+    again = await compute_us_macro()
+    assert again.source == "db"
+    assert again.wti_change_pct == -1.2
+    assert again.es_futures_change_pct == 0.4
+
+
+def test_overnight_assets_korean_labels_in_render():
+    """render·metadata 가 야간자산을 한글 라벨로 노출 (현물 지수와 구분, '선물' 명시)."""
+    from collectors.us_macro import (
+        overnight_assets_payload,
+        render_us_macro_md,
+        us_macro_metadata,
+    )
+
+    snap = USMacroSnapshot(
+        date="2026-06-12", nasdaq_change_pct=2.54, sp500_change_pct=1.75,
+        sox_change_pct=7.91, vix=18.9, vix_change_pct=-2.5, dxy=99.7, dxy_change_pct=-0.13,
+        us_10y=4.46, us_10y_change_bp=-8.0, gold_change_pct=3.28,
+        risk_signal="risk_on", signal_score=5.0, extreme="none", reasons=[], source="computed",
+        wti_change_pct=-3.64, brent_change_pct=-3.31,
+        nq_futures_change_pct=0.48, es_futures_change_pct=0.54,
+    )
+    md = render_us_macro_md(snap)
+    assert "야간자산" in md
+    assert "WTI 원유 -3.64%" in md
+    assert "브렌트유 -3.31%" in md
+    assert "나스닥100 선물 +0.48%" in md
+    assert "S&P500 선물 +0.54%" in md
+
+    payload = overnight_assets_payload(snap)
+    assert {p["label_kr"] for p in payload} == {
+        "WTI 원유", "브렌트유", "나스닥100 선물", "S&P500 선물"
+    }
+    meta = us_macro_metadata(snap)
+    assert meta["us_macro"]["overnight_assets"][0]["label_kr"] == "WTI 원유"
+
+
+@pytest.mark.asyncio
+async def test_overnight_assets_graceful_null(isolated_db, monkeypatch):
+    """야간자산만 결측(error)이어도 나머지 정상 — 4 필드 None, 분류 영향 0."""
+    async def _fake(names=None):
+        return _fake_indices(
+            wti={"symbol": "CL=F", "error": "no history"},
+            brent={"symbol": "BZ=F", "error": "no history"},
+            nq_futures={"symbol": "NQ=F", "error": "no history"},
+            es_futures={"symbol": "ES=F", "error": "no history"},
+        )
+
+    monkeypatch.setattr("connectors.yfinance.client.get_indices", _fake)
+    snap = await compute_us_macro(force_refresh=True)
+    assert snap.source == "computed"
+    assert snap.wti_change_pct is None
+    assert snap.es_futures_change_pct is None
+    assert snap.risk_signal == "risk_on"  # 주식 모멘텀 정상
 
 
 @pytest.mark.asyncio

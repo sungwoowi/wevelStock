@@ -26,6 +26,35 @@ log = get_logger(__name__)
 
 NotificationLevel = Literal["info", "warning", "critical"]
 
+# 알림 분류 (INFRA-MARKET-ASSETS-002 / notification-persistence-v1).
+# UI 알림 탭 필터·미독 배지 소스. 미구현 트리거(trade_signal·account_safety·risk_alert)는
+# 그 배선 때 명시 전달; 현재 발송 경로(브리핑 파이프라인)는 team_id 휴리스틱으로 태깅.
+NotificationType = Literal[
+    "market_briefing", "trade_signal", "account_safety", "flow_idea", "risk_alert"
+]
+
+
+def _infer_notification_type(team_id: str, explicit: str | None) -> str | None:
+    """notification_type 결정 — 명시값 우선, 미전달 시 team_id(=pipeline_id) 휴리스틱.
+
+    현재 발송은 전부 브리핑 파이프라인(market_briefing_*)이라 market_briefing 으로 태깅.
+    미구현 트리거 3종은 배선 때 explicit 전달. 매칭 실패 시 None(미분류).
+    """
+    if explicit:
+        return explicit
+    tid = team_id.lower()
+    if "briefing" in tid:
+        return "market_briefing"
+    if "risk" in tid or "alert" in tid:
+        return "risk_alert"
+    if "account" in tid:
+        return "account_safety"
+    if "flow" in tid or "idea" in tid:
+        return "flow_idea"
+    if "trade" in tid or "signal" in tid:
+        return "trade_signal"
+    return None
+
 
 async def _send_telegram(message: str) -> bool:
     token = env("TELEGRAM_BOT_TOKEN")
@@ -68,6 +97,7 @@ def _log_to_db(
     delivered: bool,
     related_run_id: str | None,
     related_target: str | None,
+    notification_type: str | None,
 ) -> None:
     db = get_db()
     with db.connect() as conn:
@@ -75,11 +105,11 @@ def _log_to_db(
             """
             INSERT INTO notifications_log
                 (team_id, level, title, body, channel, delivered,
-                 related_run_id, related_target)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 related_run_id, related_target, notification_type, is_read)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
             """,
             (team_id, level, title, body, channel, int(delivered),
-             related_run_id, related_target),
+             related_run_id, related_target, notification_type),
         )
 
 
@@ -102,13 +132,18 @@ async def notify(
     body: str,
     related_run_id: str | None = None,
     related_target: str | None = None,
+    notification_type: str | None = None,
 ) -> dict:
     """Send a notification.
 
     Returns a dict with delivery details. Never raises.
+
+    notification_type: 알림 탭 분류 (market_briefing|trade_signal|account_safety|
+        flow_idea|risk_alert). 미전달 시 team_id 휴리스틱으로 추론 (브리핑→market_briefing).
     """
     cfg = get_config().telegram
     message = _format_message(team_id, title, body)
+    ntype = _infer_notification_type(team_id, notification_type)
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "team_id": team_id,
@@ -117,6 +152,7 @@ async def notify(
         "body": body,
         "related_run_id": related_run_id,
         "related_target": related_target,
+        "notification_type": ntype,
         "message": message,
     }
 
@@ -137,6 +173,7 @@ async def notify(
             delivered=sent_telegram or True,  # file fallback is "delivered"
             related_run_id=related_run_id,
             related_target=related_target,
+            notification_type=ntype,
         )
     except Exception as e:  # noqa: BLE001
         log.warning("notification_db_log_failed", error=str(e))
@@ -148,4 +185,9 @@ async def notify(
         channel=channel,
         file=str(file_path),
     )
-    return {"channel": channel, "telegram_ok": sent_telegram, "file": str(file_path)}
+    return {
+        "channel": channel,
+        "telegram_ok": sent_telegram,
+        "file": str(file_path),
+        "notification_type": ntype,
+    }

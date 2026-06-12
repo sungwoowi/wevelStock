@@ -62,6 +62,15 @@ def render_overnight(data: dict) -> str:
                 f"({_fmt_pct(v.get('change_pct'))})"
             )
 
+    # 미국 야간선물 (현물 지수 마감 후 흐름 — '선물' 명시로 위 현물과 구분).
+    fut_bits: list[str] = []
+    for key, label in [("nq_futures", "나스닥100선물"), ("es_futures", "S&P500선물")]:
+        fv = overnight_us.get(key) or {}
+        if "error" not in fv and fv.get("change_pct") is not None:
+            fut_bits.append(f"{label} {_fmt_pct(fv.get('change_pct'))}")
+    if fut_bits:
+        lines.append("  * 🌃 야간선물 " + " · ".join(fut_bits))
+
     fg = overnight_us.get("fear_greed") or {}
     if fg and "error" not in fg and fg.get("score") is not None:
         pct = fg.get("change_pct")
@@ -80,6 +89,7 @@ def render_overnight(data: dict) -> str:
             ("us_10y", "美10Y (10년 국채금리)"),
             ("gold", "🥇 (국제금시세)"),
             ("wti", "WTI (서부 텍사스산 원유 선물)"),
+            ("brent", "브렌트유 (북해산 원유 선물)"),
         ]:
             v = macro.get(key) or {}
             if "error" not in v:
@@ -90,10 +100,11 @@ def render_overnight(data: dict) -> str:
 
     nf = (night_futures or {}).get("kospi200_cme_night") or {}
     if nf and "error" not in nf:
+        # source_kr 로 실선물/CME/EWY 대용 명시 — EWY 대용을 진짜 야간선물로 오인 방지.
+        src_kr = nf.get("source_kr") or nf.get("source", "?")
         lines.append("")
         lines.append(
-            f"🔮 KOSPI200 야간선물 {_fmt_pct(nf.get('change_pct'))} "
-            f"(source: {nf.get('source', '?')})"
+            f"🔮 KOSPI200 야간선물 {_fmt_pct(nf.get('change_pct'))} ({src_kr})"
         )
 
     return "\n".join(lines)

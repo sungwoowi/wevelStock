@@ -88,6 +88,33 @@ def test_render_overnight_contains_key_sections() -> None:
     assert "KOSPI200 야간선물" in text
 
 
+def test_render_overnight_us_night_futures_and_brent() -> None:
+    """미국 야간선물(NQ/ES) + 브렌트유 노출, 현물과 '선물' 라벨로 구분 (INFRA-MARKET-ASSETS-002)."""
+    data = _overnight_fixture()
+    data["overnight_us"]["nq_futures"] = {"price": 21000.0, "change_pct": 0.16}
+    data["overnight_us"]["es_futures"] = {"price": 6100.0, "change_pct": 0.22}
+    data["macro"]["brent"] = {"price": 74.0, "change_pct": -1.14}
+    text = render_overnight(data)
+    assert "야간선물 나스닥100선물 +0.16% · S&P500선물 +0.22%" in text
+    assert "브렌트유" in text
+
+
+def test_render_overnight_night_futures_source_kr() -> None:
+    """source_kr 가 있으면 실선물/대용 구분 표기 (INFRA-MARKET-ASSETS-002)."""
+    real = _overnight_fixture()
+    real["night_futures"]["kospi200_cme_night"] = {
+        "change_pct": 5.16, "source": "kis", "source_kr": "실선물",
+    }
+    text = render_overnight(real)
+    assert "KOSPI200 야간선물 +5.16% (실선물)" in text
+
+    proxy = _overnight_fixture()
+    proxy["night_futures"]["kospi200_cme_night"] = {
+        "change_pct": 0.4, "source": "EWY", "source_kr": "EWY ETF(대용)",
+    }
+    assert "(EWY ETF(대용))" in render_overnight(proxy)
+
+
 def test_render_overnight_empty_sections_drop() -> None:
     text = render_overnight({})
     assert "간밤 시황" in text

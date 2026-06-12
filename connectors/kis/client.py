@@ -316,6 +316,48 @@ class KISClient:
             "trade_amount": int(o.get("acml_tr_pbmn", 0)),
         }
 
+    async def index_futures_price(self, symbol: str) -> dict[str, Any]:
+        """국내 지수선물 현재가 (INFRA-MARKET-ASSETS-002 — KOSPI200 야간선물 best-effort).
+
+        KIS `inquire-price` (FHMIF10000000, MRKT_DIV='F'). 야간 전용 시세 REST 엔드포인트는
+        KIS 에 없음 — 이 일반 선물 시세가 **야간 세션(18:00~05:00 KST) 중 호출 시 야간가**를
+        반환한다(세션 무구분). 단 (1) 월물 롤오버되는 계약 종목코드(예 "101W09")를 알아야 하고
+        (2) 실계좌 선물옵션 시세 권한이 필요(모의계좌 제한 가능). 그래서 호출부가 env 심볼로
+        게이팅하고, 실패/미설정 시 graceful null 로 강등한다.
+
+        Args:
+            symbol: KOSPI200 선물 종목코드 (예 "101W09" 최근월물). 빈 값이면 호출부가 skip.
+
+        Returns:
+            {symbol, price, change, change_pct, source}. rt_cd != 0 시 {error, symbol}.
+        """
+        data = await self._get(
+            "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+            tr_id="FHMIF10000000",
+            params={"FID_COND_MRKT_DIV_CODE": "F", "FID_INPUT_ISCD": symbol},
+        )
+        if data.get("rt_cd") != "0":
+            return {"error": data.get("msg1", "unknown"), "symbol": symbol}
+        o = data.get("output1") or data.get("output") or {}
+
+        def _f(*keys: str) -> float | None:
+            for k in keys:
+                v = o.get(k)
+                if v not in (None, ""):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        continue
+            return None
+
+        return {
+            "symbol": symbol,
+            "price": _f("futs_prpr", "stck_prpr"),
+            "change": _f("futs_prdy_vrss", "prdy_vrss"),
+            "change_pct": _f("futs_prdy_ctrt", "prdy_ctrt"),
+            "source": "kis_futures",
+        }
+
     async def market_breadth(self, market: str = "KOSPI") -> dict[str, Any]:
         """전체 시장 등락 종목수 (상승/하락/보합/상한/하한). inquire-index-price (FHPUP02100000).
 

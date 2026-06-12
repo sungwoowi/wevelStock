@@ -30,6 +30,11 @@ TRACKED_SYMBOLS = {
     "sp500": "^GSPC",
     "us_10y": "^TNX",
     "vix": "^VIX",
+    # 야간자산 (INFRA-MARKET-ASSETS-002) — gold 와 동일 야간 카테고리.
+    "wti": "CL=F",          # WTI 원유 선물
+    "brent": "BZ=F",        # 브렌트 원유 선물
+    "nq_futures": "NQ=F",   # 나스닥100 야간선물
+    "es_futures": "ES=F",   # S&P500 야간선물
 }
 
 

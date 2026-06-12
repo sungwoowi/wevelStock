@@ -34,6 +34,10 @@ OVERNIGHT_SYMBOLS = {
     "us_10y":  "^TNX",
     "gold":    "GC=F",
     "wti":     "CL=F",
+    # 야간선물·브렌트 (INFRA-MARKET-ASSETS-002) — 간밤시황 노출용.
+    "brent":      "BZ=F",   # 브렌트 원유 선물
+    "nq_futures": "NQ=F",   # 나스닥100 야간선물
+    "es_futures": "ES=F",   # S&P500 야간선물
 }
 
 

@@ -34,7 +34,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 US_MACRO_PATH = REPO_ROOT / "config" / "us_macro.yaml"
 
 # get_indices 결과 키 → USMacroSnapshot 필드 매핑 (connector TRACKED_SYMBOLS 키).
-_FETCH_NAMES = ["nasdaq", "sp500", "philly_semi", "vix", "dxy", "us_10y", "gold"]
+# 야간자산 4종(wti·brent·nq_futures·es_futures)은 INFRA-MARKET-ASSETS-002 에서 추가 —
+# gold 와 동일 야간 fetch 경로(connectors.yfinance get_indices). 컬럼만 영속.
+_FETCH_NAMES = [
+    "nasdaq", "sp500", "philly_semi", "vix", "dxy", "us_10y", "gold",
+    "wti", "brent", "nq_futures", "es_futures",
+]
 
 RiskSignal = str   # "risk_on" | "neutral" | "risk_off"
 Extreme = str      # "none" | "vix_panic"
@@ -43,6 +48,17 @@ _RISK_KR: dict[str, str] = {
     "risk_on": "위험선호",
     "neutral": "중립",
     "risk_off": "위험회피",
+}
+
+# 야간자산 한글 라벨 (INFRA-MARKET-ASSETS-002) — 텔레그램·웹앱 공통 단일 소스.
+# "선물" 명시로 현물 지수(나스닥/S&P 등락률)와 혼동 방지. NQ/ES 는 미국 정규장 외에도
+# 24시간 거래되는 지수선물이라 현물 일일 등락률과 기준이 다름(전일 대비). "야간" 단어는
+# 순수 야간만의 등락이 아니라서 라벨에서 회피.
+OVERNIGHT_ASSET_LABELS_KR: dict[str, str] = {
+    "wti": "WTI 원유",
+    "brent": "브렌트유",
+    "nq_futures": "나스닥100 선물",
+    "es_futures": "S&P500 선물",
 }
 
 _DEFAULT_CONFIG: dict[str, Any] = {
@@ -117,6 +133,11 @@ class USMacroSnapshot:
     extreme: Extreme                   # "none" | "vix_panic"
     reasons: list[str] = field(default_factory=list)
     source: str = "computed"           # "db" | "computed" | "stale" | "unavailable"
+    # 야간자산 (INFRA-MARKET-ASSETS-002) — 결정론 수집·영속만, 분류 미반영.
+    wti_change_pct: float | None = None         # WTI 원유 선물
+    brent_change_pct: float | None = None       # 브렌트 원유 선물
+    nq_futures_change_pct: float | None = None  # 나스닥100 야간선물
+    es_futures_change_pct: float | None = None  # S&P500 야간선물
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -250,6 +271,11 @@ def _snapshot_from_indices(date_str: str, raw: dict[str, Any]) -> USMacroSnapsho
     us10_chg_raw = _idx(raw, "us_10y", "change")   # 수익률 포인트 변화
     us10_bp = round(us10_chg_raw * 100, 1) if us10_chg_raw is not None else None  # 포인트 → bp
     gold = _idx(raw, "gold", "change_pct")
+    # 야간자산 (INFRA-MARKET-ASSETS-002) — 수집·영속만, classify 미반영.
+    wti = _idx(raw, "wti", "change_pct")
+    brent = _idx(raw, "brent", "change_pct")
+    nq_fut = _idx(raw, "nq_futures", "change_pct")
+    es_fut = _idx(raw, "es_futures", "change_pct")
 
     signal, score, extreme, reasons = classify_us_risk(
         nasdaq_change_pct=nasdaq,
@@ -283,6 +309,10 @@ def _snapshot_from_indices(date_str: str, raw: dict[str, Any]) -> USMacroSnapsho
         extreme=extreme,
         reasons=reasons,
         source=source,
+        wti_change_pct=wti,
+        brent_change_pct=brent,
+        nq_futures_change_pct=nq_fut,
+        es_futures_change_pct=es_fut,
     )
 
 
@@ -323,6 +353,10 @@ def _get_today_us_macro(date_str: str) -> USMacroSnapshot | None:
         extreme=row["extreme"] or "none",
         reasons=_json.loads(row["reasons_json"]) if row["reasons_json"] else [],
         source="db",
+        wti_change_pct=_f("wti_change_pct"),
+        brent_change_pct=_f("brent_change_pct"),
+        nq_futures_change_pct=_f("nq_futures_change_pct"),
+        es_futures_change_pct=_f("es_futures_change_pct"),
     )
 
 
@@ -336,8 +370,9 @@ def upsert_us_macro(snap: USMacroSnapshot) -> None:
             "INSERT INTO us_macro_snapshot "
             "(date, nasdaq_change_pct, sp500_change_pct, sox_change_pct, "
             " vix, vix_change_pct, dxy, dxy_change_pct, us_10y, us_10y_change_bp, "
-            " gold_change_pct, risk_signal, signal_score, extreme, reasons_json, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            " gold_change_pct, risk_signal, signal_score, extreme, reasons_json, source, "
+            " wti_change_pct, brent_change_pct, nq_futures_change_pct, es_futures_change_pct) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(date) DO UPDATE SET "
             " nasdaq_change_pct=excluded.nasdaq_change_pct, "
             " sp500_change_pct=excluded.sp500_change_pct, "
@@ -348,7 +383,11 @@ def upsert_us_macro(snap: USMacroSnapshot) -> None:
             " gold_change_pct=excluded.gold_change_pct, "
             " risk_signal=excluded.risk_signal, signal_score=excluded.signal_score, "
             " extreme=excluded.extreme, reasons_json=excluded.reasons_json, "
-            " source=excluded.source",
+            " source=excluded.source, "
+            " wti_change_pct=excluded.wti_change_pct, "
+            " brent_change_pct=excluded.brent_change_pct, "
+            " nq_futures_change_pct=excluded.nq_futures_change_pct, "
+            " es_futures_change_pct=excluded.es_futures_change_pct",
             (
                 snap.date,
                 snap.nasdaq_change_pct,
@@ -366,6 +405,10 @@ def upsert_us_macro(snap: USMacroSnapshot) -> None:
                 snap.extreme,
                 _json.dumps(snap.reasons, ensure_ascii=False),
                 "computed",
+                snap.wti_change_pct,
+                snap.brent_change_pct,
+                snap.nq_futures_change_pct,
+                snap.es_futures_change_pct,
             ),
         )
 
@@ -494,7 +537,32 @@ def render_us_macro_md(snap: USMacroSnapshot) -> str:
         bits.append(f"미10년물 {snap.us_10y_change_bp:+.0f}bp")
     if snap.gold_change_pct is not None:
         bits.append(f"금 {_pct(snap.gold_change_pct)}")
-    return f"{header} " + " · ".join(bits)
+    line = f"{header} " + " · ".join(bits)
+
+    # 야간자산 별도 줄 — 한글 라벨로 현물 지수와 구분 (값 있는 것만, 전부 결측이면 줄 생략).
+    asset_bits: list[str] = []
+    for key, label in OVERNIGHT_ASSET_LABELS_KR.items():
+        val = getattr(snap, f"{key}_change_pct", None)
+        if val is not None:
+            asset_bits.append(f"{label} {_pct(val)}")
+    if asset_bits:
+        line += "\n**야간자산** (전일 대비): " + " · ".join(asset_bits)
+    return line
+
+
+def overnight_assets_payload(snap: USMacroSnapshot) -> list[dict[str, Any]]:
+    """야간자산 화면/알림용 payload — 한글 라벨 + 값 (웹앱·텔레그램 공통 소스).
+
+    현물 지수와 혼동 없도록 label_kr 동봉. 미수집(None)도 포함(화면이 '—' 표시).
+    """
+    return [
+        {
+            "key": key,
+            "label_kr": label,
+            "change_pct": getattr(snap, f"{key}_change_pct", None),
+        }
+        for key, label in OVERNIGHT_ASSET_LABELS_KR.items()
+    ]
 
 
 def us_macro_metadata(snap: USMacroSnapshot) -> dict[str, Any]:
@@ -508,5 +576,6 @@ def us_macro_metadata(snap: USMacroSnapshot) -> dict[str, Any]:
             "sox_change_pct": snap.sox_change_pct,
             "vix": snap.vix,
             "source": snap.source,
+            "overnight_assets": overnight_assets_payload(snap),
         }
     }

@@ -3,7 +3,7 @@ spec_id: INFRA-MARKET-ASSETS-002
 title: 자산군 수집 확장 + 알림 영속 — 야간자산(WTI·브렌트·NQ·ES·KOSPI200야간) 기존 스냅샷 컬럼 확장 + notifications_log read 확장 (PAPER-DESK-UX 시황·알림 백엔드)
 team: shared
 type: feature
-status: draft
+status: implementing
 version: 1
 level: implementation
 parent: RIGHT-BRAIN-COMPLETION-001
@@ -13,14 +13,17 @@ generates: []
 modifies:
   - core/db/schema.sql                               # us_macro_snapshot(+wti·brent·nq_futures·es_futures change_pct) + market_macro_snapshot(+kospi200_night_change_pct) + notifications_log(+notification_type·is_read) + schema_version (16)
   - core/db/connection.py                            # _apply_migrations v16 멱등 ALTER 블록 (v9 distribution_count_25d 가드 패턴 재사용)
-  - collectors/us_markets.py                         # OVERNIGHT_SYMBOLS 에 brent(BZ=F)·nq(NQ=F)·es(ES=F) 추가 (wti=CL=F 이미 있음)
-  - collectors/us_macro.py                           # USMacroSnapshot dataclass + compute/upsert 에 4 야간자산 필드 스레딩 (fetch_overnight 이 이미 fetch)
-  - collectors/market_macro.py                       # KOSPI200 야간선물 KIS 조회 → kospi200_night_change_pct (graceful null)
-  - server/api/market.py                             # market-snapshot-v1 자산군 섹션 WTI·브렌트·야간선물 null → 실값 (PAPER-DESK-UX 생성 파일)
-  - server/api/notifications.py                      # mark-read 엔드포인트 + recent 응답에 notification_type·is_read 노출
-  - core/notification/service.py                     # notify() 발송 시 notification_type 기록 + is_read=0 default
-  - tests/test_us_macro.py                           # 야간자산 컬럼 round-trip 테스트 확장
+  - connectors/yfinance/client.py                    # TRACKED_SYMBOLS 에 wti(CL=F)·brent(BZ=F)·nq_futures(NQ=F)·es_futures(ES=F) 추가 ★실제 fetch 경로 — us_macro 는 get_indices(TRACKED_SYMBOLS) 사용, us_markets.OVERNIGHT_SYMBOLS 아님(SPEC v1 오기 정정). wti 도 영속 경로엔 부재였어 신규 fetch.
+  - collectors/us_macro.py                           # USMacroSnapshot dataclass + _FETCH_NAMES + _snapshot_from_indices/upsert/_get 에 4 야간자산 필드 스레딩
+  - collectors/market_macro.py                       # KOSPI200 야간선물 KIS 조회 → kospi200_night_change_pct (env KIS_KOSPI200_FUTURES_SYMBOL 게이팅, graceful null)
+  - connectors/kis/client.py                         # index_futures_price(symbol) — inquire-price(FHMIF10000000). 야간 전용 시세 REST 부재라 일반 선물 시세로 best-effort
+  - server/api/notifications.py                      # mark-read 엔드포인트 + recent 응답에 notification_type·is_read·unread_count 노출
+  - core/notification/service.py                     # notify() 발송 시 notification_type 기록(+team_id 휴리스틱) + is_read=0 default
+  - tests/test_us_macro.py                           # 야간자산 컬럼 round-trip + graceful null 테스트 확장
+  - tests/test_notifications_persistence.py          # 신규 — 알림 영속·휴리스틱·mark-read 테스트
+  - tests/test_snapshot_extend_db.py                 # market_macro 컬럼 집합 expected 에 kospi200_night_change_pct 추가
   - scripts/_us_macro_probe.py                       # 야간자산 라이브 probe 확장
+  # NOTE: server/api/market.py(자산군 와이어링)는 PAPER-DESK-UX-001 generate 영역 — 그 파일 생성 후 자산군 섹션 채움(후속, 이번 구현 범위 밖).
 depends_on:
   - RIGHT-BRAIN-COMPLETION-001 (소속 roadmap — PAPER-DESK-UX-001 지원 인프라)
   - PAPER-DESK-UX-001 (market-snapshot-v1 자산군 3종·알림 탭 read 자리 예약처 — line 37·102·149)

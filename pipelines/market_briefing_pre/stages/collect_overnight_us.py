@@ -22,9 +22,10 @@ class CollectOvernightUsStage(Stage):
         raw["fear_greed"] = await fetch_fear_greed()
 
         # Separate index-like from macro-like for downstream convenience.
-        indices_keys = {"nasdaq", "sp500", "sox", "vix", "fear_greed"}
+        # 야간선물(nq/es)은 미국 지수 섹션, 브렌트는 거시경제 지표 섹션으로 (INFRA-MARKET-ASSETS-002).
+        indices_keys = {"nasdaq", "sp500", "sox", "vix", "fear_greed", "nq_futures", "es_futures"}
         overnight_us = {k: raw[k] for k in indices_keys if k in raw}
-        macro = {k: raw[k] for k in ("dxy", "usdkrw", "us_10y", "gold", "wti") if k in raw}
+        macro = {k: raw[k] for k in ("dxy", "usdkrw", "us_10y", "gold", "wti", "brent") if k in raw}
 
         errors = [k for k, v in raw.items() if isinstance(v, dict) and "error" in v]
         status = "warning" if errors else "ok"

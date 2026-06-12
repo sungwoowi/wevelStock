@@ -880,6 +880,17 @@ def render_market_view_md(view: MarketView) -> str:
             lines.append(render_us_macro_md(us_snap))
     except Exception:  # noqa: BLE001 — 미장 라인 부재가 시장관 블록을 막지 않음
         pass
+    # KOSPI200 야간선물 라인 — KIS 실선물 (INFRA-MARKET-ASSETS-002). DB-first read, KOSPI 만.
+    try:
+        from collectors.market_macro import _get_today_macro
+
+        if view.market == "KOSPI":
+            macro_row = _get_today_macro(view.date, "KOSPI")
+            night = getattr(macro_row, "kospi200_night_change_pct", None) if macro_row else None
+            if night is not None:
+                lines.append(f"**코스피200 선물** (야간·전일 대비): {night:+.2f}%")
+    except Exception:  # noqa: BLE001 — 야간선물 부재가 블록을 막지 않음
+        pass
     if view.reasons:
         lines.append("")
         lines.append("**근거**:")

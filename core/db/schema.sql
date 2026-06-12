@@ -90,11 +90,15 @@ CREATE TABLE IF NOT EXISTS notifications_log (
     delivered       INTEGER DEFAULT 0,
     related_run_id  TEXT,
     related_target  TEXT,
+    notification_type TEXT,               -- v16: market_briefing|trade_signal|account_safety|flow_idea|risk_alert
+    is_read         INTEGER NOT NULL DEFAULT 0,  -- v16: 0=미독 1=읽음 (UI 종 배지 카운트)
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_log_created
     ON notifications_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read
+    ON notifications_log (is_read);
 
 -- ============================================================
 -- scheduler_runs — 스케줄러 작업 실행 로그 (디버깅용)
@@ -353,6 +357,7 @@ CREATE TABLE IF NOT EXISTS market_macro_snapshot (
     volume_change_pct REAL,
     distribution_count_25d INTEGER,            -- v9: 25일 분산일 카운트 (regime/buy_score M축 입력)
     breadth_source  TEXT,                      -- v9: "krx"|"kis_index"|"kis_volrank_top30"|"unavailable"
+    kospi200_night_change_pct REAL,            -- v16: KOSPI200 야간선물 (KIS best-effort, null 가능)
     PRIMARY KEY (date, market)
 );
 CREATE INDEX IF NOT EXISTS idx_macro_date ON market_macro_snapshot(date);
@@ -511,6 +516,10 @@ CREATE TABLE IF NOT EXISTS us_macro_snapshot (
     extreme           TEXT,                    -- none | vix_panic
     reasons_json      TEXT,
     source            TEXT,                    -- db | computed | stale | unavailable
+    wti_change_pct        REAL,                -- v16: WTI 원유 야간선물 (INFRA-MARKET-ASSETS-002)
+    brent_change_pct      REAL,                -- v16: 브렌트 원유 야간선물
+    nq_futures_change_pct REAL,                -- v16: 나스닥100 야간선물
+    es_futures_change_pct REAL,                -- v16: S&P500 야간선물
     created_at        TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -610,3 +619,4 @@ INSERT OR IGNORE INTO schema_version (version) VALUES (12);
 INSERT OR IGNORE INTO schema_version (version) VALUES (13);
 INSERT OR IGNORE INTO schema_version (version) VALUES (14);
 INSERT OR IGNORE INTO schema_version (version) VALUES (15);
+INSERT OR IGNORE INTO schema_version (version) VALUES (16);

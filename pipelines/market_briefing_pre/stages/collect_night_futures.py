@@ -1,4 +1,8 @@
-"""Stage: collect_night_futures — CME KOSPI200 야간 선물 (EWY 대체)."""
+"""Stage: collect_night_futures — KOSPI200 야간선물 (KIS 실선물 1순위 → CME → EWY 대용).
+
+INFRA-MARKET-ASSETS-002: KIS 실계좌 선물 시세를 1순위로 — 기존 EWY ETF 대용을 진짜
+KOSPI200 야간선물로 교체. fetch_night_futures 가 폴백 체인 처리.
+"""
 from __future__ import annotations
 
 from collectors.kr_futures import fetch_night_futures

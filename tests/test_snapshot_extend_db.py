@@ -59,6 +59,7 @@ def test_new_tables_and_columns(isolated_db: Database) -> None:
         "advancing", "declining", "unchanged", "breadth_ratio",
         "is_distribution_day", "change_pct", "volume_change_pct",
         "distribution_count_25d", "breadth_source",  # v9 macro 캐시 충실도
+        "kospi200_night_change_pct",  # v16 INFRA-MARKET-ASSETS-002 (KOSPI200 야간선물)
     }
     assert macro_names == expected_macro
 
