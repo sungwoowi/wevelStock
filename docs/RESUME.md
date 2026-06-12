@@ -9,7 +9,9 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **🛡 INFRA-MARKET-ASSETS-002 SPEC 신설(린 정정) + 재사용 가드 신설 (2026-06-12)**. PAPER-DESK-UX 예약 후속 SPEC(자산군 수집 + 알림 영속)을 `/spec-interview` 로 작성 → 사용자 "무분별 신규 확장 아니냐" 제동 → **신규 테이블 과잉을 확장 전용으로 정정**(`us_macro_snapshot` 이 gold·wti 이미 보유, `generates: []`). 미스 재발 방지로 **개발-타임 재사용 가드 3종** 신설: `docs/DATA-MAP.md`(30테이블 도메인 지도) + CLAUDE.md 절대원칙 #11 + spec-interview 재사용 영향도 게이트. 코드 0, 항상 켜짐. RIGHT-BRAIN 1/6(17%, INFRA-MARKET-ASSETS-002 자식 추가). 다음 = PAPER-DESK-UX 구현 또는 INFRA-MARKET-ASSETS 구현.
+**현재 위치**: **🌙 INFRA-MARKET-ASSETS-002 구현(draft→implementing) + KOSPI200 야간선물 실선물 + 간밤시황 정정/추가 (2026-06-13)**. 데이터 백본 풀세트 구현 — ① 야간자산 4종(WTI·브렌트·NQ·ES) us_macro 컬럼(v16) + 한글 라벨 ② 알림 영속(notification_type·is_read + mark-read + unread_count) ③ **KOSPI200 야간선물 = 백로그 반전**: "KIS 한계로 불가" 결론을 야간 실측으로 뒤집음 — **KIS 연결선물 `101000`(최근월물 자동)이 실계좌에서 작동, +5.16% 라이브**. 추가로 텔레그램 간밤시황이 KOSPI200 야간선물로 **EWY ETF 대용(+11.48% 이상치)**을 띄우던 버그 발견·교체(KIS 실선물 1순위) + 미국 야간선물(NQ/ES)·브렌트 노출. **전체 1145 passed, 텔레그램 실발송 2회 성공**. RIGHT-BRAIN 1/6(INFRA-MARKET-ASSETS-002 implementing). 다음 = PAPER-DESK-UX 구현(이 백엔드 소비) 또는 중복 fetch 통합.
+
+**(직전) 현재 위치**: **🛡 INFRA-MARKET-ASSETS-002 SPEC 신설(린 정정) + 재사용 가드 신설 (2026-06-12)**. PAPER-DESK-UX 예약 후속 SPEC(자산군 수집 + 알림 영속)을 `/spec-interview` 로 작성 → 사용자 "무분별 신규 확장 아니냐" 제동 → **신규 테이블 과잉을 확장 전용으로 정정**(`us_macro_snapshot` 이 gold·wti 이미 보유, `generates: []`). 미스 재발 방지로 **개발-타임 재사용 가드 3종** 신설: `docs/DATA-MAP.md`(30테이블 도메인 지도) + CLAUDE.md 절대원칙 #11 + spec-interview 재사용 영향도 게이트. 코드 0, 항상 켜짐.
 
 **(직전) 현재 위치**: **📐 PAPER-DESK-UX-001 SPEC 신설 (RB-MS5, draft) + 디자인 .pen 리네임 (2026-06-12)**. 오른쪽 뇌 화면 차단점 해소 SPEC 골격 작성 — **무게중심=프론트 빌드**(데스크 API 대부분 기존, 신규 백엔드는 시황 집계 read 1개). MVP=시황+가상매매+계좌상세 3화면 / Recharts / next-themes / R&D→`/dev/*` / 시황="거의 풀". **정정 2건**: `uiux-sample-draft.pen`=IA 드래프트(시각 정본 아님), 정본=`design-darkmode-spec.pen`/`design-lightmode-spec.pen` 쌍.
 
@@ -19,7 +21,12 @@
 
 **(직전) 현재 위치**: **✋ FractalSignal 네이밍 확정 + 다크/라이트 테마 쌍 완성 (2026-06-11 4세션)**. `design-darkmode-spec.pen`(다크) / `design-lightmode-spec.pen`(라이트) = **테마 쌍** (후보 비교 아님 — 토글 수동+시스템). 양쪽 공통: FractalSignal 로고+프랙탈 파동 마크 · "가상매매" 용어 · 기간 5단 토글 · 지수 라인 차트(코스피·나스닥) · 등락 종목 수 UI(KIS 기수집 확인) · 테마 토글 14곳 · 모바일 2×. 다음 = PAPER-DESK-UX-001 SPEC → Next.js 구현(shadcn/ui 4.x+Tailwind v4 `5526fdb`). ✅ CTA 액센트 = 테마별 듀얼 액센트 확정(통일 안 함, 변경 0 — 라이트 핑크 로고+Rausch CTA / 다크 핑크 로고+에메랄드 CTA, 2026-06-12). `webapp/uiux-sample-draft.pen` 에 PC 7화면 + 모바일 6화면 라이브 핑퐁으로 확정: **탭 5축 = 시황(홈)·데스크·채팅·뉴스·알림 / 가이드 = 헤더 ❔ / 브리핑 탭 폐지 → 시황 흡수**(히스토리 선택 = 그 시점 대시보드+브리핑 서술). 계좌 시드 1,000만→**1억** backend 실반영(config 권위, DB 무영향, 1121 passed). 다음 = `/spec-interview` 로 PAPER-DESK-UX-001 SPEC 신설(RIGHT-BRAIN 연결) → Next.js 구현. NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 불변.
 
-**이번 세션에 굳힌 판단 (2026-06-12 — 재사용 가드)**:
+**이번 세션에 굳힌 판단 (2026-06-13 — 구현 + KOSPI200 야간선물 반전)**:
+- **"불가 결론"은 라이브 실측 전엔 잠정**: KOSPI200 야간선물을 "KIS에 야간 전용 시세 REST 없음 → 백로그 강등"으로 닫았으나, 야간 시간대(18:00~05:00) 실측에서 **일반 선물 시세(inquire-price FHMIF10000000) + 연결선물 `101000`(최근월물 자동 반환)**이 실계좌에서 작동(+5.16%). 교훈 = 외부 API 한계는 *조사 결론*이 아니라 *해당 조건에서 실호출*로 확정. 연결선물 코드는 월물 롤오버 신경 불필요.
+- **"KOSPI200 야간선물"인데 실제론 EWY**: 텔레그램 간밤시황이 EWY ETF(미국 상장 한국 ETF) 대용을 KOSPI200 야간선물로 표기(+11.48% 이상치 = ETF 데이터 갭). **라벨과 데이터 출처가 어긋난 건 값이 튀어야 보인다** — KIS 실선물 1순위로 교체 + source_kr(실선물/CME/EWY 대용) 명시.
+- **두 overnight fetch 경로 = 재사용 가드 위반 자각**: 야간자산을 `us_markets.OVERNIGHT_SYMBOLS`(간밤시황)와 `connectors.yfinance.TRACKED_SYMBOLS`(us_macro)가 중복 fetch. 소비처가 달라 이번엔 양쪽 추가했으나 #11 위반 — 통합 백로그로 박음(자가 발견 부채).
+
+**직전 세션 판단 (2026-06-12 — 재사용 가드)**:
 - **"안 보이면 새로 만든다"는 AI 기본값 — 가드는 의지 아닌 가시성**: 새 collector/테이블이 튀어나오는 건 의지박약이 아니라 *기존 도메인이 안 보여서*. `commodity_futures_snapshot` 신규를 제안했다가 `us_macro_snapshot` 이 gold(상품선물)·wti 를 이미 담고 같은 yfinance 야간 fetch 를 쓰는 걸 grep 으로 발견 → **컬럼 확장**으로 정정(WTI 는 이미 fetch 되나 컬럼 부재로 버려지던 값). **체크리스트로는 이 기본값을 못 이김** — spec-interview 를 "따랐는데"도 과잉했음. 그래서 가드 = 재사용을 *기계적으로 보이게* 하는 `docs/DATA-MAP.md`(30테이블 지도) + 항상 켜진 CLAUDE.md #11 + spec-interview 재사용 영향도 게이트.
 - **개발-타임 하네스 ≠ 런타임 에이전트**: user_want_spec 의 시스템 피드백/도메인 고도화 Agent(돌아가는 제품 자기감시)와 다른 층 — 이건 *SPEC 쓰는 빌더(Claude Code)를 레일 위에 두는* 프로세스 가드. 혼동하면 "런타임 감시 에이전트 또 만들자"는 과잉으로 샘.
 - **가드 자체의 과잉 경계**: Layer 1+2(맵+원칙+게이트, 코드 0)만. validate.py 자동 WARNING(L3)·reuse-critic 서브에이전트(L4)는 보류 — 가드를 과하게 짓는 게 바로 이 세션이 정정한 실수의 재발.
@@ -98,31 +105,31 @@
 
 **마지막 작업일**: 2026-06-12 (**INFRA-MARKET-ASSETS-002 SPEC 신설(린 정정) + 재사용 가드 3종 신설**). 직전 = 2026-06-12 PAPER-DESK-UX SPEC / CTA 듀얼 액센트 / KIS 토큰 버그.
 **마지막 세션 로그**: [2026-06-12_infra-market-assets-spec-and-reuse-guard.md](c_worked/2026-06-12_infra-market-assets-spec-and-reuse-guard.md). 직전 = [2026-06-12_paper-desk-ux-spec-and-pen-rename.md](c_worked/2026-06-12_paper-desk-ux-spec-and-pen-rename.md).
-**산출**: `docs/specs/INFRA-MARKET-ASSETS-002-*.md`(신규, draft, `generates:[]` 확장 전용) + `docs/DATA-MAP.md`(신규, 30테이블 지도) + CLAUDE.md 절대원칙 #11 + `.claude/commands/spec-interview.md` 재사용 게이트 + RIGHT-BRAIN children 연결.
-**Git**: 2커밋(① docs: SPEC 신설+재사용 가드+roadmap 연결 ② docs: wrap-up) → push.
+**산출**: 코드 19파일(야간자산·알림·KOSPI200 야간선물 실선물·간밤시황) + 테스트 5(신규 2) + probe/send 4 + `docs/specs/INFRA-MARKET-ASSETS-002-*.md`(draft→implementing) + `.env` KIS_KOSPI200_FUTURES_SYMBOL(로컬).
+**Git**: 2커밋(① feat: INFRA-MARKET-ASSETS-002 구현+간밤시황 ② docs: wrap-up) → push.
 
 ---
 
 ## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 마감(verified) + 화면
 
-**🛡 INFRA-MARKET-ASSETS-002 SPEC + 재사용 가드 ✅ (2026-06-12)** — SPEC draft(`generates:[]` 확장 전용) + `docs/DATA-MAP.md`·CLAUDE.md #11·spec-interview 게이트. 다음은 구현 2건. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6(17%) verified 1·진행중 3 + draft 2**.
+**🌙 INFRA-MARKET-ASSETS-002 구현 ✅ (2026-06-13)** — 야간자산 4종 + 알림 영속 + **KOSPI200 야간선물 실선물(KIS 연결선물 101000, +5.16% 라이브)** + 간밤시황 EWY→실선물 정정. 1145 passed, 텔레그램 실발송. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6(17%) verified 1·진행중 4(INFRA-MARKET-ASSETS-002 implementing) + draft 1**.
 
 ### 1. PAPER-DESK-UX-001 구현 착수 — Next.js production 화면 (RB-MS5)
-- **왜**: SPEC 골격 frozen(draft). 무게중심=프론트 빌드, 데스크 API 대부분 기존(신규 백엔드=시황 집계 read 1개).
-- **범위**: SPEC draft→implementing. next-themes+recharts 설치 → `globals.css` FractalSignal 팔레트 이식(CTA 듀얼 액센트) → `/api/market/snapshot` read 엔드포인트 신규 → **시황·가상매매·계좌상세 3화면(PC+모바일)** + 5탭 셸 + R&D→`/dev/*`. design 정본 쌍 노드 read로 화면별 확정.
-- **예상 산출**: MVP 3화면 라이브 + 테마 토글 동작.
+- **왜**: 이번 백엔드(야간자산·알림·KOSPI200 야간)를 소비할 화면이 마지막 차단점. 무게중심=프론트 빌드.
+- **범위**: SPEC draft→implementing. next-themes+recharts 설치 → `globals.css` FractalSignal 팔레트(CTA 듀얼 액센트) → **`/api/market/snapshot` read 엔드포인트 generate**(여기서 야간자산 섹션 와이어링) → 시황·가상매매·계좌상세 3화면 + 5탭 셸 + R&D→`/dev/*`.
+- **예상 산출**: MVP 3화면 라이브 + 테마 토글.
 
-### 2. INFRA-MARKET-ASSETS-002 구현 — 야간자산 컬럼 확장 + 알림 영속 (RB-MS5 지원)
-- **왜**: SPEC draft frozen(확장 전용). PAPER-DESK-UX 시황 자산군 카드·알림 탭 백엔드. 신규 테이블·collector 0.
-- **범위**: `us_macro_snapshot`(+브렌트·NQ·ES)·`market_macro_snapshot`(+KOSPI200 야간 KIS, graceful null) 컬럼 + `notifications_log`(+type·is_read, v16 멱등 ALTER) + `/api/market/snapshot` 자산군 섹션 + `/api/notifications/mark-read`. us_macro 3단계·OVERNIGHT_SYMBOLS 재사용.
-- **예상 산출**: 시황 자산군 풀세트 + 알림 미독 배지 토대.
+### 2. 두 overnight fetch 경로 통합 (중복 fetch 부채)
+- **왜**: 야간자산(wti/brent/nq/es)을 `us_markets.OVERNIGHT_SYMBOLS`(간밤시황)와 `connectors.yfinance.TRACKED_SYMBOLS`(us_macro)가 각각 yfinance 호출 — 재사용 가드 #11 위반(이번 세션 자가 발견).
+- **범위**: 단일 소스로 통합(한 fetch → 두 소비처). 소비처 형식 차이(price+change_pct vs change_pct만) 흡수.
+- **예상 산출**: yfinance 야간 호출 1회로 수렴.
 
-### 3. 오른쪽 뇌 verified 게이트 모니터링 (organic)
-- **왜**: 코드 완성, 데이터 누적만 남음 (2026-06-11 실사).
-- **범위**: 매일 18:05 cron. **게이트: WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3**.
-- **예상 산출**: 게이트 충족 SPEC 순차 verified.
+### 3. 서버 재시작 + 오른쪽 뇌 verified 게이트 (organic)
+- **왜**: `.env` KOSPI200 야간 심볼 반영(서버 재시작해야 18:05 cron 적재) + 코드 완성된 3 SPEC 데이터 누적.
+- **범위**: 서버 PID 확인 후 재시작. **게이트: WEALTH=스냅샷 ≥5영업일 / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3**.
+- **예상 산출**: KOSPI200 야간 DB 적재 + 게이트 충족 SPEC 순차 verified.
 
-(✅ 해소: **신규 수집 INFRA SPEC** = INFRA-MARKET-ASSETS-002 신설 draft(2026-06-12, 확장 전용 린 버전) + RIGHT-BRAIN 연결. / **재사용 가드** = DATA-MAP·원칙#11·spec-interview 게이트 신설 — 모든 SPEC 작성 시 `## 재사용 영향도` 필수. / 직전: PAPER-DESK-UX-001 SPEC·CTA 듀얼·KIS 토큰 버그.)
+(✅ 해소: **INFRA-MARKET-ASSETS-002 구현** = 야간자산 v16 컬럼 + 알림 영속(mark-read·unread_count) + KOSPI200 야간선물 KIS 실선물(백로그 반전) + 간밤시황 EWY 대용→실선물 정정 + NQ/ES·브렌트 추가. / 직전: SPEC 신설·재사용 가드·PAPER-DESK-UX SPEC.)
 
 (organic 병행: **오른쪽 뇌 verified 게이트 모니터링** — WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3, 매일 18:05 cron 누적 / **regime 히스테리시스**는 백로그 유지)
 
