@@ -67,6 +67,7 @@ docs/         — 📘 사람용 문서 (규약 + SPEC + 도메인).
 8. **환경변수**: 모든 시크릿은 .env. 하드코딩 금지. python-dotenv로 로드.
 9. **동적 설정**: config/runtime.yaml 수정은 재시작 없이 반영 (watchdog 감지). 하드코딩 금지.
 10. **Telegram 미설정 시 파일 폴백**: `data/notifications/*.jsonl` 에 기록하여 로컬 개발 지원.
+11. **기존 도메인 재사용 우선 (신규 확장 가드)**: 신규 테이블·`collectors/*.py`·`connectors/*.py`·API 라우트를 만들기 **전에** 반드시 [docs/DATA-MAP.md](docs/DATA-MAP.md) 를 읽어 같은 도메인이 이미 있는지 확인. 있으면 **컬럼/필드 확장**(신규 금지). 신규를 택하려면 SPEC 본문 "재사용 영향도" 에 DB→backend→frontend 파급을 통찰하고 **왜 확장이 불가한지** 입증. (근거: AI 개발은 "안 보이면 새로 만든다"가 기본값 — 2026-06-12 `commodity_futures_snapshot` 과잉 신설을 `us_macro_snapshot` 컬럼 확장으로 정정한 전례.)
 
 ## 운영 환경 (Environment)
 - 플랫폼: **Windows**. 패키지 매니저는 `winget` (NOT brew). PowerShell 실행 정책 조정 필요할 수 있음.

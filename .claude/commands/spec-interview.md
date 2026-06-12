@@ -23,6 +23,11 @@ description: 팀 기능의 SPEC을 5라운드 면담으로 작성/발전시킵�
 - "출력은 어떤 형태가 이상적인가요?" (StandardOutput + 추가 파일/알림)
 - "다른 팀이 이 결과를 어떻게 사용하나요?"
 
+> **🛡 재사용 영향도 게이트 (필수 — `generates` 확정 전)**: 신규 테이블·`collectors/*.py`·`connectors/*.py`·API 라우트를 `generates` 에 넣기 **전에** 반드시 [docs/DATA-MAP.md](../../docs/DATA-MAP.md) 를 읽는다. (CLAUDE.md 절대원칙 #11.)
+> - 같은 도메인을 이미 담는 테이블이 있으면 → **컬럼 확장**(신규 테이블 금지). 같은 카테고리 collector 가 이미 그 source 를 fetch 하면 → **필드 확장**(신규 모듈 금지).
+> - DB→backend→frontend 3층 파급을 통찰: 이 데이터를 이미 누가 write/read 하나? 화면 노출 경로(API)가 겹치나?
+> - **신규를 택하려면** SPEC 본문 `## 재사용 영향도` 에 "기존 home 없음 / 확장 불가 이유 / 3층 파급" 을 입증해야 함. (AI 기본값 = "안 보이면 새로 만든다" → 이 게이트가 그 기본값을 차단. 2026-06-12 `commodity_futures_snapshot` 과잉 신설 정정 전례.)
+
 ### 4라운드: 숨은 의도 발굴 (Hidden Intent)
 - "혹시 이 기능을 통해 궁극적으로 하고 싶은 것이 따로 있나요?"
 - "비슷한 상황에서 과거에 실수한 경험이 있다면?"
@@ -36,9 +41,10 @@ description: 팀 기능의 SPEC을 5라운드 면담으로 작성/발전시킵�
 
 ## 면담 후 생성물
 
-1. `teams/<team-id>/specs/<PREFIX>-NNN-<slug>.md` — frontmatter + 본문 (뼈대 단계)
+1. `docs/specs/<PREFIX>-NNN-<slug>.md` — frontmatter + 본문 (뼈대 단계). (현 프로젝트 SPEC 위치 = `docs/specs/`.)
    - `generates`, `modifies`, `depends_on`, `contracts` 명확히 기입
    - 판단 로직/엣지 케이스는 `<!-- SPEC:INTERVIEW-SLOT -->` 마커로 위치만 잡기
+   - **`## 재사용 영향도` 섹션 필수** (재사용 게이트 산출): DATA-MAP 확인 결과 = 기존 도메인 home(있으면 어느 테이블 확장) / 신규면 확장 불가 이유 / DB→backend→frontend 3층 파급. 확장 전용 SPEC 이면 `generates: []` + "신규 0" 명시.
 2. 관련 팀 `CLAUDE.md` 업데이트 제안
 3. 해당 팀 `manifest.yaml` 의 `status: planned → scaffolded` 반영
 4. 다른 팀에 미치는 영향 분석 (DB 스키마 변경 여부 등)
@@ -46,6 +52,7 @@ description: 팀 기능의 SPEC을 5라운드 면담으로 작성/발전시킵�
 ## 중요 규칙
 
 - **기존 SPEC 확장**: 이미 있는 SPEC이면 `INTERVIEW-SLOT` 마커 위치만 수정. 다른 부분은 절대 건드리지 말 것.
+- **재사용 우선 (절대원칙 #11)**: 신규 테이블/모듈/엔드포인트 전 DATA-MAP 확인 필수. "관심사 분리" 명분으로 이미 응집된 테이블을 쪼개는 것은 과잉 — 같은 도메인이면 확장이 정답.
 - **팀 프리픽스 자동 부여**: team=principles 면 PREFIX=PRINCIPLE, team=daily_briefing 면 PREFIX=DAILY_BRIEFING
 - **다음 번호 자동 계산**: `teams/<team>/specs/` 의 기존 NNN 중 최댓값 + 1
 

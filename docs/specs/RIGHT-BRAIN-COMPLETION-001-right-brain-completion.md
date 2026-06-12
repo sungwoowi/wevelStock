@@ -14,6 +14,7 @@ children:               # 의존 사슬 순서. 전부 스켈레톤 draft (2026-
   - GUIDANCE-ACCURACY-TRACKER-001  # RB-MS3 — 코스피/미장 대비 채점 (기존 draft, 본 roadmap 편입)
   - WEALTH-COMPOUND-TRACKER-001  # RB-MS4 — 복리 추적·곡선 (스켈레톤)
   - PAPER-DESK-UX-001            # RB-MS5 — 페이퍼 데스크 webapp UI (시황·가상매매·계좌 상세, 1차). 화면 차단점 해소 (draft 2026-06-12)
+  - INFRA-MARKET-ASSETS-002      # RB-MS5 지원 인프라 — 자산군 수집(WTI·브렌트·야간선물) + 알림 영속(notifications_log type·is_read). 시황 자산군·알림 탭 백엔드 (draft 2026-06-12)
 depends_on:
   - LEFT-BRAIN-COMPLETION-001 (왼쪽 뇌 4/4 완성 — 신뢰성 있는 판단 발행이 전제)
   - STRATEGY-TRACK-001 (전략가 권고 = strategist-recommendation-v1 — 비중 변환 입력)
