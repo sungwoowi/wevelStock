@@ -18,9 +18,9 @@ type Tab = {
 const TABS: Tab[] = [
   { href: "/", label: "시황", icon: LineChart, active: true },
   { href: "/desk", label: "가상매매", icon: Wallet, active: true },
-  { href: "/chat", label: "채팅", icon: MessageSquare, active: false },
-  { href: "/news", label: "뉴스", icon: Newspaper, active: false },
-  { href: "/alerts", label: "알림", icon: Bell, active: false },
+  { href: "/chat", label: "채팅", icon: MessageSquare, active: true },
+  { href: "/news", label: "뉴스", icon: Newspaper, active: true },
+  { href: "/alerts", label: "알림", icon: Bell, active: true },
 ];
 
 function isActivePath(pathname: string, href: string): boolean {

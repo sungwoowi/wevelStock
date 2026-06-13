@@ -35,10 +35,18 @@ export type Notification = {
   level: "info" | "warning" | "critical";
   title: string;
   body: string | null;
-  channel: string;
+  channel: string | null;
   delivered: number;
   related_run_id: string | null;
   related_target: string | null;
+  notification_type:
+    | "market_briefing"
+    | "trade_signal"
+    | "account_safety"
+    | "flow_idea"
+    | "risk_alert"
+    | null;
+  is_read: number;
   created_at: string;
 };
 
@@ -285,3 +293,42 @@ export type FillEntry = {
 
 /** GET /api/desk/feed. */
 export type DeskFeed = { active_recommendations: ActiveRec[]; recent_fills: FillEntry[] };
+
+// --- 뉴스 (NEWS-SOURCE-001 / GET /api/news/*) ---------------------------------
+
+export type NewsTheme = { theme: string; time_axis: string; trigger_titles: string[] };
+
+/** GET /api/news/digest. */
+export type NewsDigest = {
+  date: string;
+  scope: string;
+  tone: "bearish" | "lean_bearish" | "neutral" | "lean_bullish" | "bullish";
+  category_counts: Record<string, { up?: number; neutral?: number; down?: number }>;
+  top_themes: NewsTheme[];
+  catalyst_tilt: { direction?: string; strength?: string };
+  raw_labels: string;
+  source: "db" | "computed" | "empty";
+};
+
+export type NewsItem = {
+  title: string;
+  url: string;
+  source: string;
+  published_at: string | null;
+  body: string | null;
+  category: string | null;
+  time_axis: string | null;
+  direction: "up" | "neutral" | "down" | null;
+  magnitude: number | null;
+  confidence: number | null;
+  affected_scope: string | null;
+  affected_refs: string[];
+  labeled_by: string | null;
+  collected_at: string | null;
+};
+
+/** GET /api/news/items. */
+export type NewsItemsResp = { items: NewsItem[]; count: number };
+
+/** GET /api/notifications/recent. */
+export type NotificationsResp = { notifications: Notification[]; unread_count: number };

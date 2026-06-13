@@ -143,6 +143,7 @@ from server.api import guidance as guidance_route  # noqa: E402
 from server.api import wealth as wealth_route  # noqa: E402
 from server.api import infra as infra_route  # noqa: E402
 from server.api import market as market_route  # noqa: E402
+from server.api import news as news_route  # noqa: E402
 from server.api import notifications as notif_route  # noqa: E402
 from server.api import pipelines as pipelines_route  # noqa: E402
 from server.api import positions as positions_route  # noqa: E402
@@ -168,6 +169,7 @@ app.include_router(guidance_route.router, prefix="/api", tags=["guidance"])
 app.include_router(wealth_route.router, prefix="/api", tags=["wealth"])
 app.include_router(market_route.router, prefix="/api", tags=["market"])
 app.include_router(desk_route.router, prefix="/api", tags=["desk"])
+app.include_router(news_route.router, prefix="/api", tags=["news"])
 
 
 @app.get("/api/health")
