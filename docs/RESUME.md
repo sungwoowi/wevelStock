@@ -9,7 +9,9 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **🔗 두 overnight fetch 경로 통합 — 중복 fetch 부채 상환 (2026-06-13 2세션)**. 야간자산 yfinance fetch 로직이 두 벌(`us_markets._fetch_sync`+`OVERNIGHT_SYMBOLS` / `connectors.yfinance._fetch_sync`+`TRACKED_SYMBOLS`)이던 걸 **connectors/yfinance 단일 소스로 수렴** — `us_markets.fetch_overnight()`은 `get_indices` 위임 래퍼로 축소(`sox`↔`philly_semi` rename, `usdkrw` TRACKED_SYMBOLS 추가). **소비처 수정 0**, 전체 1145 passed, 라이브 위임 검증(12키 error 0). 재사용 가드 #11 정합. RIGHT-BRAIN 1/6 무변. 다음 = PAPER-DESK-UX 구현.
+**현재 위치**: **🖥 PAPER-DESK-UX-001 구현 — 시황 화면 + 시점 히스토리 LNB (RB-MS5, 2026-06-13 3세션)**. 오른쪽 뇌 화면 차단점 착수 — SPEC draft→implementing + Next.js 스캐폴딩(next-themes·recharts·**FractalSignal 팔레트**(.pen 다크 실측)·5탭 AppShell·테마 토글) + **시황(홈) 화면**(🇰🇷국내지수·참고지표 12+2타일(야간선물 2종)·등락 breadth+비례막대·거래대금 상위·강세 섹터·수급, **한국식 색상**) + **시점 히스토리 LNB**(브리핑 런=시점, run_id별 point-in-time 재조립). 신규 백엔드 = `server/api/market.py`(`/snapshot`+`/history`, DB-first·LLM 0·라이브 어댑터 재사용). R&D→`/dev/*`(production-chat은 dev서버 락으로 보류). tsc 0·전체 **1145 passed**·라우트 200. RIGHT-BRAIN 1/6 verified(PAPER-DESK-UX implementing↑). 다음 = `/desk` 본체.
+
+**(직전) 현재 위치**: **🔗 두 overnight fetch 경로 통합 — 중복 fetch 부채 상환 (2026-06-13 2세션)**. 야간자산 yfinance fetch 로직이 두 벌(`us_markets._fetch_sync`+`OVERNIGHT_SYMBOLS` / `connectors.yfinance._fetch_sync`+`TRACKED_SYMBOLS`)이던 걸 **connectors/yfinance 단일 소스로 수렴** — `us_markets.fetch_overnight()`은 `get_indices` 위임 래퍼로 축소(`sox`↔`philly_semi` rename, `usdkrw` TRACKED_SYMBOLS 추가). **소비처 수정 0**, 전체 1145 passed, 라이브 위임 검증(12키 error 0). 재사용 가드 #11 정합. RIGHT-BRAIN 1/6 무변. 다음 = PAPER-DESK-UX 구현.
 
 **(직전) 현재 위치**: **🌙 INFRA-MARKET-ASSETS-002 구현(draft→implementing) + KOSPI200 야간선물 실선물 + 간밤시황 정정/추가 (2026-06-13)**. 데이터 백본 풀세트 — ① 야간자산 4종(WTI·브렌트·NQ·ES) us_macro 컬럼(v16) + 한글 라벨 ② 알림 영속(notification_type·is_read + mark-read + unread_count) ③ **KOSPI200 야간선물 = 백로그 반전**: "KIS 한계로 불가" 결론을 야간 실측으로 뒤집음 — **KIS 연결선물 `101000`(최근월물 자동) 실계좌 작동, +5.16% 라이브**. 텔레그램 간밤시황 EWY 대용(+11.48% 이상치)→KIS 실선물 교체 + NQ/ES·브렌트 노출. 1145 passed, 텔레그램 실발송 2회.
 
@@ -23,7 +25,12 @@
 
 **(직전) 현재 위치**: **✋ FractalSignal 네이밍 확정 + 다크/라이트 테마 쌍 완성 (2026-06-11 4세션)**. `design-darkmode-spec.pen`(다크) / `design-lightmode-spec.pen`(라이트) = **테마 쌍** (후보 비교 아님 — 토글 수동+시스템). 양쪽 공통: FractalSignal 로고+프랙탈 파동 마크 · "가상매매" 용어 · 기간 5단 토글 · 지수 라인 차트(코스피·나스닥) · 등락 종목 수 UI(KIS 기수집 확인) · 테마 토글 14곳 · 모바일 2×. 다음 = PAPER-DESK-UX-001 SPEC → Next.js 구현(shadcn/ui 4.x+Tailwind v4 `5526fdb`). ✅ CTA 액센트 = 테마별 듀얼 액센트 확정(통일 안 함, 변경 0 — 라이트 핑크 로고+Rausch CTA / 다크 핑크 로고+에메랄드 CTA, 2026-06-12). `webapp/uiux-sample-draft.pen` 에 PC 7화면 + 모바일 6화면 라이브 핑퐁으로 확정: **탭 5축 = 시황(홈)·데스크·채팅·뉴스·알림 / 가이드 = 헤더 ❔ / 브리핑 탭 폐지 → 시황 흡수**(히스토리 선택 = 그 시점 대시보드+브리핑 서술). 계좌 시드 1,000만→**1억** backend 실반영(config 권위, DB 무영향, 1121 passed). 다음 = `/spec-interview` 로 PAPER-DESK-UX-001 SPEC 신설(RIGHT-BRAIN 연결) → Next.js 구현. NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 불변.
 
-**이번 세션에 굳힌 판단 (2026-06-13 2세션 — fetch 경로 통합)**:
+**이번 세션에 굳힌 판단 (2026-06-13 3세션 — PAPER-DESK-UX 구현)**:
+- **시황 집계 = 신규 build 아님, DB-first 래핑 + run_id 재조립**: `/api/market/snapshot`은 `build_market_snapshot`(DB-first) 래핑, 과거 시점은 `briefing_parts`를 라이브 어댑터(`_adapt_*`) 그대로 재사용해 point-in-time 재조립(`/market/history`=시점 목록). fetch 0·LLM 0·재사용 가드 정합. KOSPI200 야간선물도 라이브 KIS 호출 없이 브리핑 파트에서 DB-first.
+- **디자인 정본 .pen은 픽셀 단위로 봐야 — 임의 배치 금지**(사용자 정정): 데이터 품질 좋아 시안에 없는 걸 추가할 땐 **협의 먼저**(룰). 시안 충실 = 12타일·등락 breadth·거래대금/섹터 2단. 색상 **한국식(빨강↑/파랑↓) 통일**.
+- **production UI LNB = ② 필+콘텐츠 정렬**(Gmail/노션/ChatGPT/리니어식): ① 센터드 클러스터(메인 정중앙+우측 균형여백)는 메인 폭 빠듯(656px)이라 기각. 대시보드 다열 타일엔 ②(LNB 좌측 sticky·독립스크롤, 메인 남은 폭 ~960px). LNB 폭=288. shell max-w-7xl.
+
+**직전 세션 판단 (2026-06-13 2세션 — fetch 경로 통합)**:
 - **위임 래퍼 = 중복 제거 최소 변경 패턴**: 같은 yfinance fetch 로직이 두 모듈에 복사돼 있을 때, 저수준(connector)을 단일 소스로 두고 고수준이 *얇은 위임 래퍼*로 호출하면 소비처 0 수정으로 부채 상환. 키 차이(sox↔philly_semi)는 래퍼의 name_map rename으로 흡수, 누락 심볼(usdkrw)은 단일 소스에 추가. 키 전면 통일(소비처 전수 변경)은 리스크 대비 실익 적어 회피.
 
 **직전 세션 판단 (2026-06-13 — 구현 + KOSPI200 야간선물 반전)**:
@@ -108,33 +115,33 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-13 (**두 overnight fetch 경로 통합 — 중복 fetch 부채 상환**). 직전 = 2026-06-13 INFRA-MARKET-ASSETS-002 구현·KOSPI200 야간선물 실선물·간밤시황 정정.
-**마지막 세션 로그**: [2026-06-13_overnight-fetch-dedup-2.md](c_worked/2026-06-13_overnight-fetch-dedup-2.md). 직전 = [2026-06-13_infra-market-assets-impl-and-night-futures.md](c_worked/2026-06-13_infra-market-assets-impl-and-night-futures.md).
-**산출**: `connectors/yfinance/client.py`(TRACKED_SYMBOLS += usdkrw) + `collectors/us_markets.py`(_fetch_sync·OVERNIGHT_SYMBOLS 삭제 → get_indices 위임 래퍼). 소비처 0 수정.
-**Git**: 2커밋(① refactor: overnight fetch dedup ② docs: wrap-up) → push.
+**마지막 작업일**: 2026-06-13 (**PAPER-DESK-UX-001 구현 — 시황 화면 + 시점 히스토리 LNB**). 직전 = 2026-06-13 두 overnight fetch 경로 통합.
+**마지막 세션 로그**: [2026-06-13_paper-desk-ux-impl-3.md](c_worked/2026-06-13_paper-desk-ux-impl-3.md). 직전 = [2026-06-13_overnight-fetch-dedup-2.md](c_worked/2026-06-13_overnight-fetch-dedup-2.md).
+**산출**: `server/api/market.py`(신규 `/snapshot`+`/history`) + `server/main.py`(라우터) + webapp 신규(globals.css 팔레트·ThemeProvider/Toggle·AppShell·MarketBoard·HistorySidebar·page.tsx 시황·placeholder 5) + R&D→`/dev/*` + SPEC implementing.
+**Git**: 2커밋(① feat: PAPER-DESK-UX 시황+히스토리 LNB ② docs: wrap-up) → push.
 
 ---
 
 ## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 마감(verified) + 화면
 
-**🔗 overnight fetch 경로 통합 ✅ (2026-06-13 2세션)** — 야간자산 yfinance fetch 두 벌 → connectors/yfinance 단일 소스(위임 래퍼). 1145 passed. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6(17%) verified 1·진행중 4(INFRA-MARKET-ASSETS-002 implementing) + draft 1**.
+**🖥 PAPER-DESK-UX-001 구현 1차 ✅ (2026-06-13 3세션)** — 시황(홈) 화면 + 시점 히스토리 LNB + market API(`/snapshot`·`/history`). tsc 0·1145 passed·라우트 200. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6(17%) verified 1·진행중 5(PAPER-DESK-UX implementing)**. 화면 1/3(시황) 완성, 데스크·계좌상세 본체가 다음.
 
-### 1. PAPER-DESK-UX-001 구현 착수 — Next.js production 화면 (RB-MS5)
-- **왜**: 이번 백엔드(야간자산·알림·KOSPI200 야간)를 소비할 화면이 오른쪽 뇌 마지막 차단점. 무게중심=프론트 빌드.
-- **범위**: SPEC draft→implementing. next-themes+recharts 설치 → `globals.css` FractalSignal 팔레트(CTA 듀얼 액센트) → **`/api/market/snapshot` read 엔드포인트 generate**(여기서 야간자산 섹션 와이어링) → 시황·가상매매·계좌상세 3화면 + 5탭 셸 + R&D→`/dev/*`.
-- **예상 산출**: MVP 3화면 라이브 + 테마 토글.
+### 1. `/desk` 본체 — 가상매매 데스크 (RB-MS5 화면 2/3)
+- **왜**: 시황 다음, 오른쪽 뇌 핵심 산출(4계좌·자산곡선·KPI)을 보는 화면. recharts 설치됨.
+- **범위**: 자산곡선 recharts 2시리즈(realized vs equity)+목표선+기간 토글 / KPI 묶음(누적·승률·청산·alpha) / 4계좌 카드(비중·여력·평가손익). API `/api/wealth/curve`·`/progress`·`/api/accounts`·`/api/guidance/kpi` 다 존재. 디자인 정본 02 프레임(g1EUS) read 로 레이아웃 확정.
+- **예상 산출**: /desk 라이브 + 자산곡선 차트.
 
-### 2. 서버 재시작 + 오른쪽 뇌 verified 게이트 (organic)
-- **왜**: `.env` KOSPI200 야간 심볼 반영(서버 재시작해야 18:05 cron 적재) + 코드 완성된 3 SPEC 데이터 누적.
-- **범위**: 서버 PID 확인 후 재시작. **게이트: WEALTH=스냅샷 ≥5영업일 / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3**.
-- **예상 산출**: KOSPI200 야간 DB 적재 + 게이트 충족 SPEC 순차 verified.
+### 2. `/desk/[accountId]` 본체 — 계좌 상세 (화면 3/3)
+- **왜**: 데스크 드릴다운. 회차 사다리·매수대기·이익실현.
+- **범위**: 보유 종목 회차(평단·차수·수량) `/api/accounts/{id}/holdings` + account_fills 파생(매수대기·청산). 디자인 정본 02a(P88ZI) read.
+- **예상 산출**: 계좌 상세 라이브.
 
-### 3. kr_futures _fetch_sync 통합 (소규모, 여유 시)
-- **왜**: `collectors/kr_futures.py`의 KM=F/EWY 폴백용 `_fetch_sync`가 같은 5d-history 로직 세 번째 복사(야간자산 dedup 후 잔존).
-- **범위**: 폴백도 connectors.yfinance 단일 소스 위임(2심볼).
-- **예상 산출**: yfinance fetch 로직 완전 단일화.
+### 3. 채팅·뉴스·알림 본체 + 마무리 (여유 시)
+- **왜**: 5탭 placeholder 채우기 + 잔여 부채.
+- **범위**: 채팅=`/dev/production-chat` SSE 재사용을 production 화면으로 / 알림=notifications 영속 리스트 / **production-chat 물리 이동**(dev서버 락 풀릴 때 `git mv`) / **라이트 팔레트 `.pen` 정밀 추출** + 다크 화면 design-darkmode-spec.pen 대조.
+- **예상 산출**: 5탭 활성 + R&D 정리.
 
-(✅ 해소: **두 overnight fetch 경로 통합** = us_markets 자체 _fetch_sync·OVERNIGHT_SYMBOLS 삭제 → get_indices 위임 래퍼, usdkrw TRACKED_SYMBOLS 추가, 소비처 0 수정. / 직전: INFRA-MARKET-ASSETS-002 구현·KOSPI200 야간선물 실선물·간밤시황 정정.)
+(✅ 해소: **PAPER-DESK-UX-001 1차** = 시황 화면 + 히스토리 LNB + market API. / 직전: 두 overnight fetch 경로 통합.)
 
 (organic 병행: **오른쪽 뇌 verified 게이트 모니터링** — WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3, 매일 18:05 cron 누적 / **regime 히스테리시스**는 백로그 유지)
 
