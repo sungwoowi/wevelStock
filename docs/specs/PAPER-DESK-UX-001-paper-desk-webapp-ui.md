@@ -3,7 +3,7 @@ spec_id: PAPER-DESK-UX-001
 title: 페이퍼 트레이딩 데스크 webapp UI/UX — 시황·가상매매·계좌 상세 (FractalSignal, 1차)
 team: shared
 type: feature
-status: draft
+status: implementing
 version: 1
 level: implementation
 parent: RIGHT-BRAIN-COMPLETION-001

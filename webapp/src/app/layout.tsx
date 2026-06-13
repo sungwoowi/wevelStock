@@ -1,13 +1,16 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { AppShell } from "@/components/nav/AppShell";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "wevelStock",
-  description: "AI 주식 분석 & 매매가이드 시스템",
+  title: "FractalSignal",
+  description: "AI 멀티에이전트 주식 분석 & 페이퍼 트레이딩 데스크",
 };
 
 export default function RootLayout({
@@ -16,9 +19,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ko" className={cn("dark font-sans", geist.variable)}>
-      <body className="min-h-screen bg-neutral-950 text-neutral-100 antialiased">
-        {children}
+    <html
+      lang="ko"
+      suppressHydrationWarning
+      className={cn("font-sans", geist.variable, geistMono.variable)}
+    >
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );

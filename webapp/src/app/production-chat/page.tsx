@@ -411,8 +411,8 @@ export default function ProductionChatPage() {
   return (
     <main className="mx-auto max-w-[1100px] p-4 md:p-6 space-y-4 min-h-screen flex flex-col">
       <header className="space-y-2">
-        <a href="/" className="text-xs text-neutral-500 hover:underline">
-          ← wevelStock 메인
+        <a href="/dev" className="text-xs text-neutral-500 hover:underline">
+          ← R&D 데모 허브
         </a>
         <div className="flex items-baseline justify-between gap-4 flex-wrap">
           <h1 className="text-2xl font-bold tracking-tight">
