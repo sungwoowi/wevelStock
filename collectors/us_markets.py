@@ -1,85 +1,56 @@
 """US markets overnight data — indices, semis, macro indicators.
 
-Backed by connectors.yfinance.get_indices() and extends it with oil (CL=F).
+**단일 fetch 소스 = `connectors.yfinance.get_indices()`** 에 위임한다 (INFRA-MARKET-ASSETS-002
+중복 fetch 부채 상환, 2026-06-13). 과거엔 이 모듈이 자체 `_fetch_sync` + `OVERNIGHT_SYMBOLS`
+를 따로 둬 yfinance 호출 로직이 두 벌(us_macro 경로와) 중복이었다 — 이제 얇은 위임 래퍼.
 
-Returned shape:
+간밤시황 소비처가 기대하는 로컬 키(`sox`·`usdkrw`)를 TRACKED_SYMBOLS 키(`philly_semi` 등)
+에서 rename해 돌려준다. 반환 형식은 get_indices 와 동일:
 {
-    "nasdaq":      {price, change_pct, previous_close, ...} | {error},
-    "sp500":       {...},
-    "sox":         {...},
-    "vix":         {...},
-    "dxy":         {...},
-    "us_10y":      {...},
-    "gold":        {...},
-    "wti":         {...},
+    "nasdaq": {symbol, price, previous_close, change, change_pct} | {error},
+    "sp500": {...}, "sox": {...}, "vix": {...}, "dxy": {...}, "usdkrw": {...},
+    "us_10y": {...}, "gold": {...}, "wti": {...}, "brent": {...},
+    "nq_futures": {...}, "es_futures": {...},
 }
 """
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from core.logging import get_logger
 
 log = get_logger(__name__)
 
-# Ticker map for yfinance (reused + WTI added).
-OVERNIGHT_SYMBOLS = {
-    "nasdaq":  "^IXIC",
-    "sp500":   "^GSPC",
-    "sox":     "^SOX",
-    "vix":     "^VIX",
-    "dxy":     "DX-Y.NYB",
-    "usdkrw":  "KRW=X",
-    "us_10y":  "^TNX",
-    "gold":    "GC=F",
-    "wti":     "CL=F",
-    # 야간선물·브렌트 (INFRA-MARKET-ASSETS-002) — 간밤시황 노출용.
-    "brent":      "BZ=F",   # 브렌트 원유 선물
-    "nq_futures": "NQ=F",   # 나스닥100 야간선물
-    "es_futures": "ES=F",   # S&P500 야간선물
+# 간밤시황 로컬 키 → connectors.yfinance TRACKED_SYMBOLS 키.
+# 대부분 동일하나 sox=philly_semi(같은 ^SOX) 한 건만 rename.
+_OVERNIGHT_NAME_MAP: dict[str, str] = {
+    "nasdaq": "nasdaq",
+    "sp500": "sp500",
+    "sox": "philly_semi",
+    "vix": "vix",
+    "dxy": "dxy",
+    "usdkrw": "usdkrw",
+    "us_10y": "us_10y",
+    "gold": "gold",
+    "wti": "wti",
+    "brent": "brent",
+    "nq_futures": "nq_futures",
+    "es_futures": "es_futures",
 }
 
 
-def _fetch_sync(symbol: str) -> dict[str, Any]:
-    """Blocking yfinance call — wrapped via asyncio.to_thread."""
-    try:
-        import yfinance as yf
-    except ImportError:
-        return {"symbol": symbol, "error": "yfinance not installed"}
-
-    try:
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="5d", auto_adjust=False)
-        if hist.empty:
-            return {"symbol": symbol, "error": "no history"}
-        closes = hist["Close"].tolist()
-        if len(closes) < 2:
-            return {"symbol": symbol, "error": "insufficient history"}
-        price = float(closes[-1])
-        prev = float(closes[-2])
-        change = price - prev
-        change_pct = (change / prev * 100) if prev else 0.0
-        return {
-            "symbol": symbol,
-            "price": round(price, 2),
-            "previous_close": round(prev, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-        }
-    except Exception as e:  # noqa: BLE001
-        return {"symbol": symbol, "error": str(e)}
-
-
 async def fetch_overnight() -> dict[str, dict[str, Any]]:
-    """Fetch all overnight indices + macro indicators.
+    """간밤 미국 지수·거시·야간선물 — connectors.yfinance.get_indices 위임.
 
-    yfinance's sqlite cache isn't thread-safe, so we run sequentially.
+    단일 fetch 소스 재사용 (중복 _fetch_sync 제거). 로컬 키(sox·usdkrw)로 rename.
     """
-    out: dict[str, dict[str, Any]] = {}
-    for name, symbol in OVERNIGHT_SYMBOLS.items():
-        out[name] = await asyncio.to_thread(_fetch_sync, symbol)
+    from connectors.yfinance.client import get_indices
 
+    raw = await get_indices(names=list(_OVERNIGHT_NAME_MAP.values()))
+    out: dict[str, dict[str, Any]] = {
+        local: raw.get(remote, {"symbol": remote, "error": "missing"})
+        for local, remote in _OVERNIGHT_NAME_MAP.items()
+    }
     success = sum(1 for v in out.values() if "error" not in v)
     log.info("us_overnight_collected", success=success, total=len(out))
     return out

@@ -30,6 +30,7 @@ TRACKED_SYMBOLS = {
     "sp500": "^GSPC",
     "us_10y": "^TNX",
     "vix": "^VIX",
+    "usdkrw": "KRW=X",      # 원달러 환율 (간밤시황 fetch_overnight 위임용)
     # 야간자산 (INFRA-MARKET-ASSETS-002) — gold 와 동일 야간 카테고리.
     "wti": "CL=F",          # WTI 원유 선물
     "brent": "BZ=F",        # 브렌트 원유 선물
