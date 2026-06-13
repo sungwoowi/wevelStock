@@ -123,3 +123,17 @@ def test_kpi_track_split(isolated_db):
     assert all_summary["closed_count"] == 1
     assert all_summary["by_track"]["B"]["closed_count"] == 1
     assert all_summary["by_track"]["A"]["closed_count"] == 0
+
+
+def test_kpi_account_scope(isolated_db):
+    # 계좌별 필터 (PAPER-DESK-UX-001 계좌 상세) — kr_swing 에서 청산
+    _open_and_close_position()
+    mine = get_kpi_summary(account_id="kr_swing", period_days=90, as_of="2026-06-12",
+                           benchmark_fetch=lambda *a: None)
+    assert mine["account_id"] == "kr_swing"
+    assert mine["closed_count"] == 1
+    assert mine["realized_return_avg_pct"] == pytest.approx(30.0)
+    assert mine["records"][0]["account_id"] == "kr_swing"
+    other = get_kpi_summary(account_id="kr_long", period_days=90, as_of="2026-06-12",
+                            benchmark_fetch=lambda *a: None)
+    assert other["closed_count"] == 0

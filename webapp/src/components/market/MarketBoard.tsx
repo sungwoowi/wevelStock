@@ -1,52 +1,11 @@
 "use client";
 
 import type { MarketSnapshot, PricePoint, SectorRsItem } from "@/lib/api";
+import { changeClass, fmtNum, fmtPct, joM, tradeAmt, wonB, wonM } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-// ── 포맷 헬퍼 (백엔드 render 로직 mirror) ──────────────────────────────────
-function fmtNum(v: unknown, decimals = 0): string {
-  if (typeof v !== "number" || Number.isNaN(v)) return "—";
-  return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-}
-function fmtPct(v: unknown): string {
-  if (typeof v !== "number" || Number.isNaN(v)) return "—";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
-}
-/** 백만원 → 억/조 (부호 포함). */
-function wonM(million: unknown): string {
-  if (typeof million !== "number" || Number.isNaN(million)) return "—";
-  const eok = million / 100;
-  const sign = eok >= 0 ? "+" : "";
-  if (Math.abs(eok) >= 10000) return `${sign}${(eok / 10000).toFixed(2)}조`;
-  return `${sign}${eok.toLocaleString("en-US", { maximumFractionDigits: 0 })}억`;
-}
-/** 십억원 → 억/조 (×10, 부호 포함). */
-function wonB(billion: unknown): string {
-  if (typeof billion !== "number" || Number.isNaN(billion)) return "—";
-  const eok = billion * 10;
-  const sign = eok >= 0 ? "+" : "";
-  if (Math.abs(eok) >= 10000) return `${sign}${(eok / 10000).toFixed(2)}조`;
-  return `${sign}${eok.toLocaleString("en-US", { maximumFractionDigits: 0 })}억`;
-}
-/** 거래대금(백만원) → 조/억 (부호 없음, 거래대금 상위 행용). */
-function tradeAmt(million: unknown): string {
-  if (typeof million !== "number" || Number.isNaN(million)) return "";
-  const eok = million / 100;
-  if (eok >= 10000) return `${(eok / 10000).toFixed(1)}조`;
-  return `${Math.round(eok).toLocaleString("en-US")}억`;
-}
-/** 거래대금(백만원) → 조 (소수 2자리, 국내 지수용). */
-function joM(million: unknown): string {
-  if (typeof million !== "number" || Number.isNaN(million)) return "—";
-  return `${(million / 1_000_000).toFixed(2)}조`;
-}
-/** 한국식 등락 색: 상승=빨강 / 하락=파랑 / 보합=회색. */
-function changeClass(v: unknown): string {
-  if (typeof v !== "number" || Number.isNaN(v) || v === 0) return "text-flat";
-  return v > 0 ? "text-up" : "text-down";
-}
 function isPoint(v: unknown): v is PricePoint {
   return typeof v === "object" && v !== null && !("error" in (v as object));
 }

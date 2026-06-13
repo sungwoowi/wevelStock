@@ -40,9 +40,11 @@
   --color-surface: var(--surface);          /* 중첩 타일 */
   --color-body: var(--body);                /* 본문 텍스트 */
   --color-faint: var(--faint);              /* 타임스탬프·muted */
-  --color-up: var(--up);                    /* 상승 = 한국식 빨강 */
-  --color-down: var(--down);                /* 하락 = 한국식 파랑 */
+  --color-up: var(--up);                    /* 상승 = 한국식 빨강 (시황 지수) */
+  --color-down: var(--down);                /* 하락 = 한국식 파랑 (시황 지수) */
   --color-flat: var(--flat);                /* 보합 */
+  --color-profit: var(--profit);            /* 손익 이익 = 초록 (데스크, 의미색) */
+  --color-loss: var(--loss);                /* 손익 손실 = 빨강 (데스크, 의미색) */
   --color-cta: var(--primary);              /* CTA = primary (테마별 듀얼) */
   --color-info: var(--info);                /* 서술 카드 보더 (블루) */
   --color-amber: var(--amber);              /* 시장상태·주의 보더 */
@@ -95,6 +97,8 @@ html, body {
     --up: #e5484d;
     --down: #2563eb;
     --flat: #6b7280;
+    --profit: #059669;
+    --loss: #dc2626;
     --info: #3568be;
     --amber: #b45309;
     --amber-bg: #fef3c7;
@@ -139,6 +143,8 @@ html, body {
     --up: #f87171;
     --down: #6fbaff;
     --flat: #9aa0a8;
+    --profit: #10b981;
+    --loss: #f87171;
     --info: #3568be;
     --amber: #78350f;
     --amber-bg: #27170a;

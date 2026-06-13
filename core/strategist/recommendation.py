@@ -189,6 +189,27 @@ def persist_strategist_recommendations(agent_responses: list[dict[str, Any]]) ->
     return persisted
 
 
+def load_recommendation(recommendation_id: str) -> StrategistRecommendation | None:
+    """recommendation_id(=team_outputs.run_id) 로 권고 1건 조회 (없으면 None).
+
+    데스크 상세(PAPER-DESK-UX-001)가 보유 포지션의 원안(entry/stop/분할)을 재구성할 때 read.
+    """
+    if not recommendation_id:
+        return None
+    row = get_db().fetch_one(
+        "SELECT data_json FROM team_outputs "
+        "WHERE run_id = ? AND team_id IN ('track_a', 'track_b') LIMIT 1",
+        (recommendation_id,),
+    )
+    if row is None:
+        return None
+    try:
+        data = json.loads(row["data_json"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return _from_mapping(data)
+
+
 def load_active_recommendations(*, within_days: int = 30) -> list[StrategistRecommendation]:
     """활성 권고 조회 — track_a/b · 종목 target(global 제외) · 최근 within_days.
 

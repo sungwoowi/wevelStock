@@ -111,3 +111,177 @@ export type MarketSnapshot = {
   failures: string[];
   snapshot_extend_failures: string[];
 };
+
+// --- 가상매매 데스크 (PAPER-DESK-UX-001) -------------------------------------
+
+/** GET /api/wealth/curve — 자산 곡선 시계열. */
+export type WealthCurve = {
+  account_id: string;
+  total_seed_krw: number;
+  points: { date: string; equity_krw: number; realized_equity_krw: number }[];
+};
+
+/** GET /api/wealth/progress — 성장 목표 진척 + MDD + 알파. */
+export type WealthProgress = {
+  total_equity_krw: number;
+  total_seed_krw: number;
+  total_return_pct: number;
+  target_return_pct: number;
+  progress_pct: number | null;
+  mdd_pct: number;
+  mdd_guard_pct: number;
+  mdd_breached: boolean;
+  benchmark_return_pct: number | null;
+  alpha_pct: number | null;
+  elapsed_days: number;
+  points: number;
+};
+
+/** GET /api/accounts — 4계좌 상태. */
+export type AccountItem = {
+  account_id: string;
+  label: string;
+  market: "KR" | "US";
+  track: "A" | "B";
+  horizon: "long" | "swing";
+  seed_krw: number;
+  deployed_weight: number;
+  trading_deployed_weight: number;
+  available_weight: number;
+  deployed_krw: number;
+};
+
+/** GET /api/guidance/kpi — 청산 권고 KPI 집계. */
+export type KpiSummary = {
+  track: string;
+  account_id: string | null;
+  period_days: number;
+  as_of: string;
+  closed_count: number;
+  realized_return_avg_pct: number | null;
+  benchmark_return_avg_pct: number | null;
+  alpha_avg_pct: number | null;
+  win_rate_pct: number | null;
+  rr_realization_avg_pct: number | null;
+  avg_holding_days: number | null;
+  realized_pnl_sum_krw: number;
+  records: KpiRecord[];
+  by_track?: Record<string, unknown>;
+};
+
+export type KpiRecord = {
+  recommendation_id: string;
+  account_id: string;
+  ticker: string;
+  track: string;
+  entry_date: string;
+  exit_date: string;
+  holding_days: number;
+  invested_krw: number;
+  realized_pnl_krw: number;
+  realized_return_pct: number;
+  benchmark_return_pct: number | null;
+  alpha_pct: number | null;
+  direction_hit: boolean;
+  rr_realization_pct: number | null;
+};
+
+/** 회차 1건 (체결 또는 미체결 사다리). */
+export type Tranche = {
+  leg: number;
+  fill_price?: number;
+  shares?: number;
+  value_krw: number;
+  filled_date?: string;
+  reason?: string;
+  limit_price?: number; // pending 만
+  ratio?: number; // pending 만 (배분)
+};
+
+export type Holding = {
+  account_id: string;
+  ticker: string;
+  track: string;
+  shares: number;
+  avg_price: number;
+  weight: number;
+  tranche_count: number;
+  eval_price: number;
+  priced: boolean;
+  unrealized_pnl_krw: number;
+  unrealized_pct: number;
+  realized_pnl_krw: number;
+  opened_at: string | null;
+  holding_days: number;
+  tranches: { ticker: string; recommendation_id: string | null; stop_loss: number | null; filled: Tranche[]; pending: Tranche[] };
+};
+
+export type PendingItem = {
+  ticker: string;
+  display_name: string;
+  leg: number;
+  limit_price: number;
+  value_krw: number;
+  ratio: number;
+};
+
+export type WatchingItem = { ticker: string; display_name: string; verdict: string; reason: string };
+
+export type ClosedFill = {
+  ticker: string;
+  leg: number;
+  fill_price: number;
+  shares: number;
+  value_krw: number;
+  reason: string;
+  realized_pnl_krw: number;
+  filled_date: string;
+};
+
+/** GET /api/accounts/{id}/holdings — enriched. */
+export type HoldingsResp = {
+  account_id: string;
+  holdings: Holding[];
+  pending: { ladder_waiting: PendingItem[]; watching: WatchingItem[] };
+  closed: ClosedFill[];
+  summary: {
+    position_count: number;
+    unrealized_pnl_krw: number;
+    realized_pnl_krw: number;
+    total_pnl_krw: number;
+    any_unpriced: boolean;
+  };
+};
+
+export type ActiveRec = {
+  recommendation_id: string;
+  ticker: string;
+  display_name: string;
+  track: string;
+  verdict: string;
+  entry_price: number | null;
+  stop_loss: number | null;
+  target_prices: number[];
+  risk_reward: number | null;
+  confidence: number;
+  date: string;
+  reason: string;
+};
+
+export type FillEntry = {
+  recommendation_id: string;
+  account_id: string;
+  ticker: string;
+  track: string;
+  side: "buy" | "sell";
+  leg: number;
+  fill_price: number;
+  shares: number;
+  value_krw: number;
+  reason: string;
+  realized_pnl_krw: number;
+  filled_date: string;
+};
+
+/** GET /api/desk/feed. */
+export type DeskFeed = { active_recommendations: ActiveRec[]; recent_fills: FillEntry[] };

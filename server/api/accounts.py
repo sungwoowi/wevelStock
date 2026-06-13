@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from core.account.desk_view import (
+    get_account_closed,
+    get_account_pending,
+    get_position_tranches,
+)
 from core.account.holdings import get_holdings
 from core.account.portfolio import get_account, get_account_state, load_accounts
 from core.logging import get_logger
@@ -42,15 +47,24 @@ async def list_accounts() -> dict:
 
 @router.get("/accounts/{account_id}/holdings")
 async def account_holdings(account_id: str) -> dict:
-    """계좌 보유현황 + 평가/실현손익 요약 (DB-first 시세)."""
-    if get_account(account_id) is None:
+    """계좌 보유현황 + 평가/실현손익 요약 + 회차내역·매수대기·청산 (계좌 상세 화면).
+
+    holdings[*].tranches = 회차별 체결(filled)+미체결 사다리(pending). pending = 매수대기.
+    closed = 이익실현(청산). 전부 기존 테이블 read (PAPER-DESK-UX-001).
+    """
+    account = get_account(account_id)
+    if account is None:
         raise HTTPException(status_code=404, detail=f"account '{account_id}' 없음")
     holdings = get_holdings(account_id)
+    for h in holdings:
+        h["tranches"] = get_position_tranches(account_id, h["ticker"], account=account)
     unrealized = sum(h["unrealized_pnl_krw"] for h in holdings)
     realized = sum(h["realized_pnl_krw"] for h in holdings)
     return {
         "account_id": account_id,
         "holdings": holdings,
+        "pending": get_account_pending(account_id),
+        "closed": get_account_closed(account_id),
         "summary": {
             "position_count": len(holdings),
             "unrealized_pnl_krw": unrealized,

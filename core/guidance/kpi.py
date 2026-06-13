@@ -115,6 +115,7 @@ def _compute_record_kpi(
 
     return {
         "recommendation_id": r["recommendation_id"],
+        "account_id": r["account_id"],
         "ticker": r["ticker"],
         "track": r["track"],
         "entry_date": r["entry_date"],
@@ -155,21 +156,25 @@ def get_kpi_summary(
     track: str | None = None,
     period_days: int = 90,
     *,
+    account_id: str | None = None,
     as_of: str | None = None,
     benchmark_fetch: FetchCloses | None = None,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """청산된 권고 → KPI 집계 (guidance-kpi-v1). track=None → 전체 + by_track 분리.
 
-    as_of 기본 = 오늘(KST). benchmark_fetch 주입 가능(테스트·백테스트).
+    account_id 주입 시 그 계좌만(계좌 상세 화면 — PAPER-DESK-UX-001). as_of 기본 = 오늘(KST).
+    benchmark_fetch 주입 가능(테스트·백테스트).
     """
     as_of = as_of or date.today().isoformat()
     closed = _closed_records(period_days, as_of)
     computed = [_compute_record_kpi(r, benchmark_fetch=benchmark_fetch, config=config) for r in closed]
 
-    selected = [c for c in computed if track is None or c["track"] == track]
+    base = [c for c in computed if account_id is None or c["account_id"] == account_id]
+    selected = [c for c in base if track is None or c["track"] == track]
     summary: dict[str, Any] = {
         "track": track or "all",
+        "account_id": account_id,
         "period_days": period_days,
         "as_of": as_of,
         **_aggregate(selected),
@@ -177,6 +182,6 @@ def get_kpi_summary(
     }
     if track is None:
         summary["by_track"] = {
-            t: _aggregate([c for c in computed if c["track"] == t]) for t in ("A", "B")
+            t: _aggregate([c for c in base if c["track"] == t]) for t in ("A", "B")
         }
     return summary

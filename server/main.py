@@ -138,6 +138,7 @@ from server.api import analyst_chat as analyst_chat_route  # noqa: E402
 from server.api import briefings as briefings_route  # noqa: E402
 from server.api import briefings_on_demand as briefings_on_demand_route  # noqa: E402
 from server.api import config as config_route  # noqa: E402
+from server.api import desk as desk_route  # noqa: E402
 from server.api import guidance as guidance_route  # noqa: E402
 from server.api import wealth as wealth_route  # noqa: E402
 from server.api import infra as infra_route  # noqa: E402
@@ -166,6 +167,7 @@ app.include_router(accounts_route.router, prefix="/api", tags=["accounts"])
 app.include_router(guidance_route.router, prefix="/api", tags=["guidance"])
 app.include_router(wealth_route.router, prefix="/api", tags=["wealth"])
 app.include_router(market_route.router, prefix="/api", tags=["market"])
+app.include_router(desk_route.router, prefix="/api", tags=["desk"])
 
 
 @app.get("/api/health")

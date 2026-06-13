@@ -20,9 +20,14 @@ router = APIRouter()
 
 
 @router.get("/guidance/kpi")
-async def guidance_kpi(track: str | None = None, period_days: int = 90) -> dict:
-    """청산된 권고 KPI 집계 (실현수익률·벤치마크 초과·적중률·R/R·트랙분리)."""
-    return get_kpi_summary(track=track, period_days=period_days)
+async def guidance_kpi(
+    track: str | None = None, period_days: int = 90, account_id: str | None = None
+) -> dict:
+    """청산된 권고 KPI 집계 (실현수익률·벤치마크 초과·적중률·R/R·트랙분리).
+
+    account_id 주입 시 그 계좌만 (계좌 상세 화면).
+    """
+    return get_kpi_summary(track=track, period_days=period_days, account_id=account_id)
 
 
 @router.get("/guidance/retrospective")
