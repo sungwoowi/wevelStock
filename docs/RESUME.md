@@ -141,31 +141,26 @@
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — 오른쪽 뇌 마감(verified) + 화면
+## 🎯 다음에 할 일 (Top 3) — Phase 2 실전화 (4기둥)
 
-**💬 채팅·뉴스·알림 본체 = 5탭 전부 활성 ✅ (2026-06-14)** — 뉴스 라우터 1개 신규(기존 조립) + 채팅(SSE production-clean)·뉴스·알림 화면. tsc 0·1153 passed·라우트 200. **NORTH-STAR 1/2 · RIGHT-BRAIN 1/6 verified 1·진행중 5(PAPER-DESK-UX 5탭 화면 완성, implementing 유지 — 미산출 지표·다크 대조·verified 게이트 잔여)**.
+**📐 Phase 2 roadmap 4기둥 박음 + 자동 권고 공백 팩트 정리 (2026-06-14 세션 후)** — 사용자 4분류(두뇌·몸통·진화·설비)를 `PROJECT-NORTH-STAR-001` 자식으로 SPEC화 → 단계 지도에 표시(NORTH-STAR 1/2→**1/6**, 정직). **핵심 발견: "몸통은 매일 도는데 매수/관망 리포트·알림 0" = 자동 권고 생성 잡 부재**(권고는 채팅 트리거만, 데스크는 소비만). 두뇌↔몸통 빠진 연결 = `AUTO-SIGNAL-GENERATION-001`(draft, 팩트 정리 완료). **사용자 우선순위 고민 중 — 다음 세션에 결정.** 권장 순서 = 몸통 자율화(자동 권고) → 진화 → 두뇌 퀄리티 동반 → 설비.
 
-### 1. 데스크 미산출 지표 백엔드 (다음 SLOT)
-- **왜**: 정본 자산곡선 지수 오버레이·샤프·손익비 ratio 가 현재 graceful 제외.
-- **범위**: 벤치마크 시계열(코스피/나스닥 오버레이 라인)·샤프(일별수익 std)·손익비 ratio. 라이브 청산 누적 시 verified 게이트 동반.
-- **예상 산출**: 정본 5칸 전부 라이브.
+### 1. 자동 권고 생성 — 두뇌↔몸통 빠진 연결 (`AUTO-SIGNAL-GENERATION-001`)
+- **왜**: 북극성 "매일 **스스로** 종목 판단" 의 핵심. 지금은 "물어봐야 판단". 데스크가 빈손으로 돈다.
+- **범위**: 매일 watchlist(거래대금 상위 50 기존) → 분석가→전략가 → 권고 persist → 데스크 소비. 방어장이어도 관망 리포트/알림 생성. SPEC draft 작성됨 → `/spec-interview` 로 6 SLOT(watchlist·시점·LLM 비용·멱등·관망 알림·기존 경로) 채움.
+- **예상 산출**: 사용자 개입 0 매일 권고 스트림 + 관심종목 리포트.
 
-### 2. 다크 모드 `.pen` 정밀 대조 + 잔여 (가벼움)
-- **왜**: 다크 토큰은 실측이나 5화면 다크 육안 대조 미수행. production-chat git mv·뉴스 digest 최신일자 폴백 잔여.
-- **범위**: `design-darkmode-spec.pen` 탭 활성화 → `.dark` 토큰 대조 + 5화면 다크 육안 + `git mv production-chat→/dev` + 뉴스 digest 오늘 empty 시 최신일자 폴백.
-- **예상 산출**: 라이트/다크 정합 + R&D 정리.
+### 2. 진화 착수 — 회고분석가 (`EVOLUTION-001` / `RETROSPECT-ANALYST-001`)
+- **왜**: 차별화 핵심 "스스로 똑똑해진다". 두뇌 퀄리티의 *엔진*(수동 튜닝 대신 회고→개선). 청산 몇 건 쌓이면 착수 가능.
+- **범위**: 도메인 진화(채점 KPI→부서별 PROPOSAL) + 시스템 진화(에러 로그→설비 리포트) **분리**. Layer 5.
+- **예상 산출**: 적중률 기반 개선 제안 루프.
 
-### 3. 오른쪽 뇌 verified 게이트 마감
-- **왜**: RIGHT-BRAIN 4 implementing 자식이 라이브 데이터 누적 대기 중.
-- **범위**: WEALTH 스냅샷 ≥5영업일 / ACCOUNT-MANAGER 체결 ≥1 / GUIDANCE 청산 ≥3 → implementing→verified 승격(매일 18:05 cron 누적).
-- **예상 산출**: RIGHT-BRAIN verified 1→다수.
+### 3. 데스크 폴리시 + 다크 대조 (잔여, 가벼움)
+- **왜**: PAPER-DESK-UX 5탭 완성됐으나 미산출 지표·다크 정밀 미완.
+- **범위**: 미산출 지표(지수오버레이·샤프·손익비 ratio) + `design-darkmode-spec.pen` 다크 5화면 대조 + production-chat git mv + 뉴스 digest 최신일자 폴백.
+- **예상 산출**: 정본 정합 완결.
 
-### 3. 다크 모드 `.pen` 정밀 대조 + 잔여 시각 (가벼움)
-- **왜**: 다크 토큰은 실측이나 화면 대조 미수행(라이트와 동일 가독성 점검 필요). 보조색(보합 바 `#d1d5db`·등락 구분선 `#ebebeb`) 미반영.
-- **범위**: `design-darkmode-spec.pen` 탭 활성화 → `.dark` 토큰 대조 + localhost 다크 육안 + 필요 시 보조색 토큰.
-- **예상 산출**: 라이트/다크 정본 정합 완결.
-
-(✅ 해소: **라이트 팔레트** 정밀+가독성. / 직전: PAPER-DESK-UX 화면 3/3 = /desk + /desk/[id] 본체 + 백엔드 3.)
+(✅ 해소: **채팅·뉴스·알림 = 5탭 완성**. / 직전: 라이트 팔레트 가독성. / **Phase 2 4기둥 roadmap 박음**: BRAIN-QUALITY·BODY-AUTOMATION·EVOLUTION·OPS-CLOUD + AUTO-SIGNAL-GENERATION-001.)
 
 (organic 병행: **오른쪽 뇌 verified 게이트 모니터링** — WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3, 매일 18:05 cron 누적 / **regime 히스테리시스**는 백로그 유지)
 
