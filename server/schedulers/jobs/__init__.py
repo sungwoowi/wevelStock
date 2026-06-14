@@ -7,6 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from core.config import get_config
 from core.logging import get_logger
 
+from server.schedulers.jobs.auto_signal import INTRADAY_CADENCES, run_auto_signal_job
 from server.schedulers.jobs.backup import run_backup
 from server.schedulers.jobs.charts import run_chart_refresh
 from server.schedulers.jobs.daily_refresh import run_daily_refresh
@@ -82,6 +83,7 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
     # 평일 18:05 KST 일일 적재 통합 허브 (고정 cron). macro(snapshot_macro 4단계) + 뉴스 합류.
     # chart_ohlcv refresh(18:00) 뒤라 순차 실행 (KIS rate limit 안전 / 본 job 가 후순위).
     # cron·CLI(`just refresh-daily`)·endpoint(POST /api/infra/refresh-snapshots) 가 동일 호출점 공유.
+    # ※ 자동 권고 생성 postclose cadence 는 run_daily_refresh 내부에서 데스크 *앞에* 호출.
     scheduler.add_job(
         run_daily_refresh,
         CronTrigger(day_of_week="mon-fri", hour=18, minute=5, timezone=tz),
@@ -89,6 +91,20 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         replace_existing=True,
     )
     registered += 1
+
+    # AUTO-SIGNAL-GENERATION-001 M3 — 장중 자동 권고 생성 (09:35/12:35/14:35 KST 평일).
+    #   스냅샷 갱신(market_briefing_now 09:30/12:30/14:30) 직후 = fresh 외인·기관 수급.
+    #   마스터 스위치(config signal_gate.auto_run_enabled) OFF 면 잡 자체가 no-op.
+    for cadence, hour, minute in INTRADAY_CADENCES:
+        scheduler.add_job(
+            run_auto_signal_job,
+            CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=tz),
+            id=f"auto_signal::{cadence}",
+            args=[cadence],
+            replace_existing=True,
+        )
+        registered += 1
+
     log.info("infra_jobs_registered", count=registered)
     return registered
 

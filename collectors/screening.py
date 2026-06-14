@@ -122,6 +122,82 @@ def get_universe_max_tickers() -> int:
         return 200
 
 
+def get_signal_min_score() -> float:
+    """자동 권고 funnel Stage 0 결정론 컷 임계 (AUTO-SIGNAL-GENERATION-001).
+
+    screening_score(0~10) 가 이 값 이상인 종목만 Stage 1(전략가) 대상. 부재 시 5.0(중앙값).
+    """
+    cfg = _load_screening_config().get("signal_gate") or {}
+    try:
+        return float(cfg.get("min_score", 5.0))
+    except (TypeError, ValueError):
+        return 5.0
+
+
+def get_signal_max_candidates() -> int:
+    """Stage 0 통과 종목 상한 (LLM 비용·rate limit 보호). 부재 시 20. 0/음수 = 무제한."""
+    cfg = _load_screening_config().get("signal_gate") or {}
+    try:
+        return int(cfg.get("max_candidates", 20))
+    except (TypeError, ValueError):
+        return 20
+
+
+def get_auto_signal_enabled() -> bool:
+    """자동 권고 생성 cron 마스터 스위치 (AUTO-SIGNAL-GENERATION-001 M3). 부재 시 True.
+
+    False 면 4 cadence 잡이 모두 no-op — 비용 부담 시 코드 변경 없이 전체 OFF (watchdog).
+    """
+    cfg = _load_screening_config().get("signal_gate") or {}
+    return bool(cfg.get("auto_run_enabled", True))
+
+
+def get_signal_concurrency() -> int:
+    """자동 권고 종목 병렬 처리 동시성 (AUTO-SIGNAL M6). 부재 시 3 (저사양 보수값).
+
+    asyncio 코루틴 동시성(스레드·프로세스 X) — CPU·RAM 부하 거의 없음(I/O 대기 겹침).
+    제약은 KIS rate-limit. 8GB·서버 동시 가동 환경 고려 기본 3. 1 = 순차. config 로 조절.
+    """
+    cfg = _load_screening_config().get("signal_gate") or {}
+    try:
+        n = int(cfg.get("concurrency", 3))
+        return n if n >= 1 else 1
+    except (TypeError, ValueError):
+        return 3
+
+
+def get_signal_strategist_retries() -> int:
+    """전략가 호출 transient 실패(503·no_yaml) 재시도 횟수. 부재 시 1 (총 2회 시도)."""
+    cfg = _load_screening_config().get("signal_gate") or {}
+    try:
+        n = int(cfg.get("strategist_retries", 1))
+        return max(0, n)
+    except (TypeError, ValueError):
+        return 1
+
+
+def get_band_gate_enabled() -> bool:
+    """의사결정 밴드 게이트 ON/OFF (자동 권고 비용 제어). 부재 시 True.
+
+    True 면 밴드 지문이 직전 cadence 와 같은 종목은 전략가 재호출 스킵(직전 verdict 유지).
+    """
+    cfg = _load_screening_config().get("signal_gate") or {}
+    return bool(cfg.get("band_gate_enabled", True))
+
+
+def get_band_score_width() -> float:
+    """점수 밴드 폭 (F/T/S/buy 양자화 단위). 부재 시 1.0 (정수 버킷).
+
+    클수록 둔감(재호출 적음·비용↓), 작을수록 민감. 경계 진동은 hysteresis SLOT.
+    """
+    cfg = _load_screening_config().get("signal_gate") or {}
+    try:
+        w = float(cfg.get("band_score_width", 1.0))
+        return w if w > 0 else 1.0
+    except (TypeError, ValueError):
+        return 1.0
+
+
 async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
     """거래대금 상위(leading) 종목 ticker 평탄화 — universe 백필 입력.
 

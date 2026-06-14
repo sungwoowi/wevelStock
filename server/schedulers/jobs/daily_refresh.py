@@ -44,6 +44,7 @@ async def run_daily_refresh() -> dict[str, Any]:
 
     snapshot_result: dict[str, Any] = {}
     news_result: dict[str, Any] = {}
+    signal_result: dict[str, Any] = {}
     desk_result: dict[str, Any] = {}
 
     # 1단계: macro 허브 (supply→market_macro→us_macro→market_view). 자체 내부 격리 보유.
@@ -59,6 +60,17 @@ async def run_daily_refresh() -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         log.exception("daily_refresh_news_failed", error=str(e))
         news_result = {"error": str(e)}
+
+    # 2.5단계: 자동 권고 생성 (postclose cadence) — 데스크 *앞에* 호출해 그날 권고를 체결하게 한다
+    #          (AUTO-SIGNAL-GENERATION-001 M3). chart_ohlcv 종가(18:00) 확정 후라 종가 점수 정확.
+    #          마스터 스위치 OFF 또는 실패 시 graceful — 데스크는 기존 권고로 계속 돈다.
+    try:
+        from server.schedulers.jobs.auto_signal import run_auto_signal_job
+
+        signal_result = await run_auto_signal_job("postclose")
+    except Exception as e:  # noqa: BLE001
+        log.exception("daily_refresh_signal_failed", error=str(e))
+        signal_result = {"error": str(e)}
 
     # 3단계: 가상매매 데스크 한 바퀴 (활성 권고 → 지정가 도달 가상 체결, 멱등) +
     #         자산 스냅샷(RB-MS4: 매일 총자산 한 줄 → 복리 자산 곡선).
@@ -79,11 +91,13 @@ async def run_daily_refresh() -> dict[str, Any]:
         elapsed_s=round(elapsed, 2),
         snapshot_ok="error" not in snapshot_result,
         news_ok="error" not in news_result,
+        signal_ok="error" not in signal_result,
         desk_ok="error" not in desk_result,
     )
     return {
         "snapshot_macro": snapshot_result,
         "news": news_result,
+        "auto_signal": signal_result,
         "desk": desk_result,
         "elapsed_s": round(elapsed, 2),
     }

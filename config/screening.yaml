@@ -58,3 +58,21 @@ regime_thresholds:
   breadth_strong: 0.55         # 상승종목 비율 이 이상 = 강한 폭 (parabolic 조건)
   breadth_weak: 0.40           # 이 미만 = 폭 좁은 상승 → moderate_bull 강등 (쏠림 경고)
   distribution_ceiling: 5      # 25일 분산일 이 이상 = 천장 경고 → parabolic 억제
+
+# 자동 권고 생성 funnel Stage 0 결정론 컷 (AUTO-SIGNAL-GENERATION-001).
+#   매일 watchlist(거래대금 상위 ∪ 보유 ∪ 관심) → rank_candidates(RS+과열도) → 이 컷 통과분만
+#   Stage 1(전략가 직접 호출) 대상. LLM 비용·rate limit 보호. 하드코딩 금지(watchdog).
+#   SLOT — 라이브 누적 후 분포로 튜닝(통과 종목 수가 너무 많/적으면 min_score·max_candidates 조정).
+signal_gate:
+  auto_run_enabled: true  # 자동 권고 cron 마스터 스위치 (false = 4 cadence 잡 전체 no-op)
+  min_score: 5.0          # screening_score(0~10) 이 이상만 전략가 대상 (중앙값 = 위쪽 절반)
+  max_candidates: 20      # Stage 1 상한 (cadence당). 0/음수 = 무제한
+  # 종목 병렬 처리 (asyncio 코루틴 — CPU·RAM 영향 거의 없음, I/O 대기 겹침). 제약=KIS rate-limit.
+  #   8GB·서버 동시 가동 고려 보수 기본 3. 부하 시 1~2 로, 여유 시 ↑. 1 = 순차.
+  concurrency: 3
+  strategist_retries: 1   # 전략가 transient 실패(503·no_yaml) 재시도 횟수 (총 2회 시도)
+  # 의사결정 밴드 게이트 — 장중 다중 cadence 비용 제어. 밴드 지문(regime·점수버킷·kill-switch)이
+  #   직전 cadence 와 같으면 전략가 재호출 스킵(직전 verdict 유지). 비용 ∝ 밴드 넘은 종목 수.
+  #   경계 = 전략가 의사결정 임계(새 magic number X). 경계 진동 hysteresis = SLOT.
+  band_gate_enabled: true
+  band_score_width: 1.0   # 점수 양자화 폭(정수 버킷). 클수록 둔감(비용↓)
