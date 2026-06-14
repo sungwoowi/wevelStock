@@ -9,7 +9,9 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **📐 Phase 2 실전화 4기둥 roadmap 박음 + 자동 권고 생성 공백 진단 (2026-06-14 2세션)**. 5탭 완성 후 사용자 "전체 얼마나 완성?" 점검 → 두 축 평가(지어진 정도 ~85% / 검증된 정도 ~65%) → 사용자가 **남은 일을 4기둥(두뇌·몸통·진화·설비)으로 분류**. 사용자 질문 **"몸통은 도는데 왜 매수/관망 리포트·알림 0?"** 을 코드·DB 팩트 진단 → **자동 권고 생성 잡 부재**(권고는 `production_chat` 채팅 트리거만, 스케줄 잡은 브리핑만, 데스크는 소비만 / 실측 권고 4건 전부 wait·체결 0·매매알림 0) = **두뇌↔몸통 빠진 연결**. 4기둥을 `PROJECT-NORTH-STAR-001` 자식 roadmap SPEC 5개로 박음(`BRAIN-QUALITY`·`BODY-AUTOMATION`·`EVOLUTION`·`OPS-CLOUD` + `AUTO-SIGNAL-GENERATION-001` draft 팩트 SPEC) → 단계 지도 **NORTH-STAR 1/2→1/6(정직)**. RESUME Top 3 = Phase 2 프레임. **사용자 우선순위 고민 중, 다음 세션 결정.** 권장 순서 = 몸통 자율화(자동 권고)→진화→두뇌 퀄리티 동반→설비.
+**현재 위치**: **🤖 자동 권고 생성(AUTO-SIGNAL-GENERATION-001) M1~M6 구현 + 라이브 검증 (2026-06-15)**. /resume 중 두뇌 구조 점검(코드·DB 실측: **분석가=라벨 아닌 5필드·결정론 점수는 LLM 우회 보존 / 전략가 3줄=Flash 압축**) → "두뇌 못 믿는 이유 = 얕아서 아니라 **track record 0**(권고 전부 채팅 산물·wait·Track A 0건)" 확인 → **자동 권고 생성 착수**. funnel = watchlist(거래대금 상위50 ∪ 보유 ∪ 관심, 국장) → **결정론 컷**(rank_candidates) → **밴드 게이트**(regime·점수버킷·kill-switch 지문 동일 시 스킵) → **전략가 직접 호출·분석가 LLM 우회**(점수=코드·분석가=해설자 발견 적용) → persist(source/cadence/track) → **🟢 매수·🔵 일일요약 알림** → [18:05 데스크 체결]. cron 4 cadence(장중 09:35/12:35/14:35 + 18:05) + **병렬화(동시성 3, asyncio·저사양 보수)** + 재시도(503/no_yaml). **M5 라이브 1회(실 Gemini): watchlist 50→컷 20→persist 34건(src=auto·Track A·B)·🔵 텔레그램 발송 성공, 전부 wait(방어장·regime=None)**. 전체 **1224 passed**(회귀 0). AUTO-SIGNAL implementing(자율 cron 첫 발화=내일 18:05, 장중은 서버 상주 필요). **다음 = 두뇌 알파 유연성(regime 극보수 탈피·관망의 체계적 매매계획·선정기준에 파동/주도주/섹터·설명가능성) 심층 인터뷰 = BRAIN-QUALITY 본격 착수.**
+
+**(직전) 현재 위치**: **📐 Phase 2 실전화 4기둥 roadmap 박음 + 자동 권고 생성 공백 진단 (2026-06-14 2세션)**. 5탭 완성 후 사용자 "전체 얼마나 완성?" 점검 → 두 축 평가(지어진 정도 ~85% / 검증된 정도 ~65%) → 사용자가 **남은 일을 4기둥(두뇌·몸통·진화·설비)으로 분류**. 사용자 질문 **"몸통은 도는데 왜 매수/관망 리포트·알림 0?"** 을 코드·DB 팩트 진단 → **자동 권고 생성 잡 부재**(권고는 `production_chat` 채팅 트리거만, 스케줄 잡은 브리핑만, 데스크는 소비만 / 실측 권고 4건 전부 wait·체결 0·매매알림 0) = **두뇌↔몸통 빠진 연결**. 4기둥을 `PROJECT-NORTH-STAR-001` 자식 roadmap SPEC 5개로 박음(`BRAIN-QUALITY`·`BODY-AUTOMATION`·`EVOLUTION`·`OPS-CLOUD` + `AUTO-SIGNAL-GENERATION-001` draft 팩트 SPEC) → 단계 지도 **NORTH-STAR 1/2→1/6(정직)**. RESUME Top 3 = Phase 2 프레임. **사용자 우선순위 고민 중, 다음 세션 결정.** 권장 순서 = 몸통 자율화(자동 권고)→진화→두뇌 퀄리티 동반→설비.
 
 **(직전) 현재 위치**: **💬 채팅·뉴스·알림 본체 = 5탭 전부 활성 (2026-06-14)**. PAPER-DESK-UX 화면 마감 — placeholder 3탭을 정본 `T8fhu`(채팅)·`L45yjk`(뉴스)·`OWnxc`(알림) 픽셀 구현. **백엔드 = 뉴스 라우터 1개만 신규**(`server/api/news.py` `/digest`·`/items`, 기존 build_news_digest·get_news_items·get_news_digest 조립, 신규 테이블 0·가드 #11). 채팅 SSE(`/api/chat/production/stream`)·알림 API는 완비라 백엔드 변경 0. **채팅 = R&D production-chat 비의존 자체 구현(production-clean)**: `useChatStream` 훅(SSE 소비 — formatted 종합답변+근거만, 디버그 크롬 0) + 말풍선 + 시장 한줄 카드 + 입력바. **뉴스** = 톤 배지+단기/장기 2단(top_themes by time_axis)+수집 뉴스 리스트. **알림** = 필터 칩+날짜 그룹(type→🔴위험/🟢매매/🔵시장)+진입 시 mark-read(종 배지 클리어). AppShell 5탭 active. tsc 0·**1153 passed**(+3)·라우트 200. RIGHT-BRAIN 무변(PAPER-DESK-UX implementing — 5탭 화면 완성, 미산출 지표·다크 대조·verified 게이트 잔여). 다음 = 데스크 미산출 지표 / 다크 정밀 대조 / verified 게이트.
 
@@ -33,7 +35,12 @@
 
 **(직전) 현재 위치**: **✋ FractalSignal 네이밍 확정 + 다크/라이트 테마 쌍 완성 (2026-06-11 4세션)**. `design-darkmode-spec.pen`(다크) / `design-lightmode-spec.pen`(라이트) = **테마 쌍** (후보 비교 아님 — 토글 수동+시스템). 양쪽 공통: FractalSignal 로고+프랙탈 파동 마크 · "가상매매" 용어 · 기간 5단 토글 · 지수 라인 차트(코스피·나스닥) · 등락 종목 수 UI(KIS 기수집 확인) · 테마 토글 14곳 · 모바일 2×. 다음 = PAPER-DESK-UX-001 SPEC → Next.js 구현(shadcn/ui 4.x+Tailwind v4 `5526fdb`). ✅ CTA 액센트 = 테마별 듀얼 액센트 확정(통일 안 함, 변경 0 — 라이트 핑크 로고+Rausch CTA / 다크 핑크 로고+에메랄드 CTA, 2026-06-12). `webapp/uiux-sample-draft.pen` 에 PC 7화면 + 모바일 6화면 라이브 핑퐁으로 확정: **탭 5축 = 시황(홈)·데스크·채팅·뉴스·알림 / 가이드 = 헤더 ❔ / 브리핑 탭 폐지 → 시황 흡수**(히스토리 선택 = 그 시점 대시보드+브리핑 서술). 계좌 시드 1,000만→**1억** backend 실반영(config 권위, DB 무영향, 1121 passed). 다음 = `/spec-interview` 로 PAPER-DESK-UX-001 SPEC 신설(RIGHT-BRAIN 연결) → Next.js 구현. NORTH-STAR 1/2 · RIGHT-BRAIN 1/4 불변.
 
-**이번 세션에 굳힌 판단 (2026-06-14 2세션 — Phase 2 4기둥 + 자동 권고 공백)**:
+**이번 세션에 굳힌 판단 (2026-06-15 — 자동 권고 생성 M1~M6)**:
+- **분석가 = 해설자, 점수 = 코드 (배치는 분석가 LLM 우회)**: 코드·DB 실측 — 결정론 점수(F/T/S/buy)는 collectors가 계산해 metadata에 LLM 우회 보존, 분석가 LLM은 *판단 케이스에만* 값을 더함(flow_analyzer 실사례: 시장 F-Score 발행 거부·8.0 점수 오해 지적 = 실값 / stock_picker 구버전 = 도표 재진술). → **배치 routine은 분석가 우회**(funnel Stage 1: 결정론 점수→전략가 직접), 채팅·후보 풀fan-out(Stage 2)만 분석가 풀가동. 분석가 9 삭제 X.
+- **밴드 게이트 = "구간 밴드"(사용자 명명)**: raw 값은 장중 미세변동 → 순수 input-hash 캐시 무용. 해법 = 밴드 경계를 **전략가 의사결정 임계**(regime 카테고리·점수 티어·kill-switch)로 잡아 지문 동일 시 LLM 스킵. 새 magic number 0. 비용 ∝ 밴드 넘은 종목 수.
+- **regime 극보수 = 알파 저해 (사용자 정정, 다음 세션 핵심)**: "전부 관망"은 regime을 binary 보수로 봄. 알파엔 유연 필요 — **약세장이어도 강세섹터·주도주·파동 살아있으면 단기 눌림=타점 / 강세장이면 이미 급등이라 추격 회피 / 대형주 조정 주의 / 섹터별 차등.** verdict가 regime에 blanket 억눌리면 안 됨. = BRAIN-QUALITY 두뇌 알파 유연성의 본질.
+
+**직전 세션 판단 (2026-06-14 2세션 — Phase 2 4기둥 + 자동 권고 공백)**:
 - **"몸통 도는데 산출물 0" = 자동 권고 생성 잡 부재(미구현, 버그 아님)**: 권고를 만드는 `persist_strategist_recommendations`는 `production_chat`(채팅 트리거)에서만 호출. 스케줄 잡은 브리핑만, 데스크는 권고 *소비*만. 실측 권고 4건 전부 wait·체결 0·매매알림 0. **두뇌↔몸통 빠진 연결** = 매일 watchlist→분석가→전략가→권고 발행하는 지휘자 잡(`AUTO-SIGNAL-GENERATION-001`). 재료(거래대금 상위 50·분석가·5점수)는 다 있음. 북극성 "매일 *스스로* 판단"의 빈칸 = 현재는 "물어봐야 판단".
 - **시스템 완성도 = 두 축으로 본다**: 지어진 정도(골격) ~85% vs 검증된 정도(실전 증명) ~65%. 4기둥(두뇌·몸통·진화·설비) 중 **3 진화가 1 두뇌의 *엔진***(수동 튜닝 한계 → 회고→자동 개선). 3은 도메인(매매 결과)↔시스템(에러 로그) **분리**. 권장 순서 = 몸통 자율화→진화→두뇌→설비.
 
@@ -140,39 +147,41 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-06-14 2세션 (**Phase 2 4기둥 roadmap + 자동 권고 공백 진단**). 직전 = 2026-06-14 채팅·뉴스·알림.
-**마지막 세션 로그**: [2026-06-14_phase2-roadmap-and-signal-gap-2.md](c_worked/2026-06-14_phase2-roadmap-and-signal-gap-2.md). 직전 = [2026-06-14_chat-news-alerts-screens.md](c_worked/2026-06-14_chat-news-alerts-screens.md).
-**산출**: `docs/specs/` 5 신설(`BRAIN-QUALITY-001`·`BODY-AUTOMATION-001`·`AUTO-SIGNAL-GENERATION-001`·`EVOLUTION-001`·`OPS-CLOUD-001`) + `PROJECT-NORTH-STAR-001`(children 4기둥) + RESUME Top 3 Phase 2. 코드 변경 0(roadmap·진단 정리).
-**Git**: 직전 2커밋(feat 채팅·뉴스·알림 / docs wrap-up) + 본 세션 `bd3c80b`(Phase 2 roadmap) + wrap-up 커밋 → push.
+**마지막 작업일**: 2026-06-15 (**자동 권고 생성 AUTO-SIGNAL M1~M6 + 라이브 검증**). 직전 = 2026-06-14 Phase 2 roadmap.
+**마지막 세션 로그**: [2026-06-15_auto-signal-generation-m1-m6.md](c_worked/2026-06-15_auto-signal-generation-m1-m6.md). 직전 = [2026-06-14_phase2-roadmap-and-signal-gap-2.md](c_worked/2026-06-14_phase2-roadmap-and-signal-gap-2.md).
+**산출**: `core/signal/`(watchlist·auto_signal 신규) + `server/schedulers/jobs/auto_signal.py` + `collectors/screening.py`·`config/screening.yaml`(signal_gate) + `daily_refresh.py`·`__init__.py`(cron) + `tests/test_auto_signal.py`(69) + `scripts/_auto_signal_probe.py`. AUTO-SIGNAL draft→implementing. 전체 1224 passed.
+**Git**: 세션 코드 미커밋 → wrap-up 이 코드+문서 1커밋 + main FF + push.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — Phase 2 실전화 (4기둥)
+## 🎯 다음에 할 일 (Top 3) — 두뇌 알파 유연성 (BRAIN-QUALITY 착수)
 
-**📐 Phase 2 roadmap 4기둥 박음 + 자동 권고 공백 팩트 정리 (2026-06-14 세션 후)** — 사용자 4분류(두뇌·몸통·진화·설비)를 `PROJECT-NORTH-STAR-001` 자식으로 SPEC화 → 단계 지도에 표시(NORTH-STAR 1/2→**1/6**, 정직). **핵심 발견: "몸통은 매일 도는데 매수/관망 리포트·알림 0" = 자동 권고 생성 잡 부재**(권고는 채팅 트리거만, 데스크는 소비만). 두뇌↔몸통 빠진 연결 = `AUTO-SIGNAL-GENERATION-001`(draft, 팩트 정리 완료). **사용자 우선순위 고민 중 — 다음 세션에 결정.** 권장 순서 = 몸통 자율화(자동 권고) → 진화 → 두뇌 퀄리티 동반 → 설비.
+**🤖 자동 권고 생성 funnel 완성 → 라이브서 "전부 관망" 허무함 = 두뇌 퀄리티 차례 (2026-06-15 세션 후)** — 배관(M1~M6)은 됐고 라이브 34건 생성·발송 성공. 그러나 **전부 wait + 비주류·무파동 종목이 watchlist에 섞임** → 사용자 핵심 정정 3건: ①regime 극보수 = 알파 저해 ②관망에 우선순위·매매계획 없음 ③선정 기준이 거래대금+RS만(파동/주도주/섹터 무시)·왜 선정 설명 0. **= BRAIN-QUALITY 본격 착수 신호.** AUTO-SIGNAL 자율 cron 첫 발화 = 내일 18:05(장중은 서버 상주 필요).
 
-### 1. 자동 권고 생성 — 두뇌↔몸통 빠진 연결 (`AUTO-SIGNAL-GENERATION-001`)
-- **왜**: 북극성 "매일 **스스로** 종목 판단" 의 핵심. 지금은 "물어봐야 판단". 데스크가 빈손으로 돈다.
-- **범위**: 매일 watchlist(거래대금 상위 50 기존) → 분석가→전략가 → 권고 persist → 데스크 소비. 방어장이어도 관망 리포트/알림 생성. SPEC draft 작성됨 → `/spec-interview` 로 6 SLOT(watchlist·시점·LLM 비용·멱등·관망 알림·기존 경로) 채움.
-- **예상 산출**: 사용자 개입 0 매일 권고 스트림 + 관심종목 리포트.
+### 1. 두뇌 알파 유연성 — regime 극보수 탈피 + 종목별 매매계획 (심층 인터뷰, `BRAIN-QUALITY-001` 착수)
+- **왜**: "전부 관망"은 알파를 못 냄. 사용자 정정 — 약세장이어도 강세섹터·주도주·**파동 살아있으면 단기 눌림 = 타점** / 강세장이면 이미 급등이라 추격 회피 / 대형주 조정 주의 / 섹터별 차등. verdict가 regime에 blanket 억눌리면 안 됨.
+- **범위**: ① verdict 유연화(regime × 섹터강도 × 주도주 × 파동 × 눌림 위치) ② 관망에도 **우선순위 랭킹 + 종목별 조건부 진입 트리거 가격**(체계적 매매계획) ③ watchlist **선정 기준에 파동(α)·주도주(S)·섹터(RS) 반영** + 종목별 "왜 선정" **설명가능성**. `/spec-interview`.
+- **예상 산출**: 알파 지향·설명가능한 권고(관망도 "X 오면 매수" 계획 포함).
 
-### 2. 진화 착수 — 회고분석가 (`EVOLUTION-001` / `RETROSPECT-ANALYST-001`)
-- **왜**: 차별화 핵심 "스스로 똑똑해진다". 두뇌 퀄리티의 *엔진*(수동 튜닝 대신 회고→개선). 청산 몇 건 쌓이면 착수 가능.
-- **범위**: 도메인 진화(채점 KPI→부서별 PROPOSAL) + 시스템 진화(에러 로그→설비 리포트) **분리**. Layer 5.
-- **예상 산출**: 적중률 기반 개선 제안 루프.
+### 2. 자동 권고 잔여 폴리시 + 요약 풍부화
+- **왜**: 라이브서 드러난 갭 — 보유종목이 컷에 걸려 탈락(매도관리 빵꾸) / regime=None → 극보수 / 🔵 요약이 "관망 34"만이라 읽을 게 없음.
+- **범위**: 보유·관심 always-eval(컷 bypass) / regime=None 시 직전 영업일 fallback / 🔵 요약을 "상위 후보 N + 진입 대기가" / **차트 DB-first**(technicals 풀히스토리 캐시 충실화 — 34분 병목) / no_yaml 5건 원인(directive 강화).
+- **예상 산출**: 매일 읽을 가치 있는 권고 스트림 + 빠른 cadence.
 
-### 3. 데스크 폴리시 + 다크 대조 (잔여, 가벼움)
-- **왜**: PAPER-DESK-UX 5탭 완성됐으나 미산출 지표·다크 정밀 미완.
-- **범위**: 미산출 지표(지수오버레이·샤프·손익비 ratio) + `design-darkmode-spec.pen` 다크 5화면 대조 + production-chat git mv + 뉴스 digest 최신일자 폴백.
-- **예상 산출**: 정본 정합 완결.
+### 3. 전략가 추론 감사 뷰 (원래 작업 2)
+- **왜**: 3줄 압축이 깊이를 가림 — full 추론(기간·거시·regime·cited) 못 봄. 신뢰·튜닝 위해 감사 필요.
+- **범위**: 데스크/채팅에서 권고 클릭 → full reasons·기간·regime·명제 펼침 + "지켜보는 권고" track·상태(진입/존속/청산) 필터·정렬. team_outputs read 조립(가드 #11).
+- **예상 산출**: 권고 블랙박스 해소.
 
-(✅ 해소: **채팅·뉴스·알림 = 5탭 완성**. / 직전: 라이트 팔레트 가독성. / **Phase 2 4기둥 roadmap 박음**: BRAIN-QUALITY·BODY-AUTOMATION·EVOLUTION·OPS-CLOUD + AUTO-SIGNAL-GENERATION-001.)
+(✅ 해소: **자동 권고 생성 funnel M1~M6 + 라이브 검증** (몸통 자율화 = BODY-AUTOMATION 본체). / 직전: Phase 2 4기둥 roadmap / 채팅·뉴스·알림 5탭.)
 
 (organic 병행: **오른쪽 뇌 verified 게이트 모니터링** — WEALTH=스냅샷 ≥5영업일(~06-16) / ACCOUNT-MANAGER=체결 ≥1 / GUIDANCE=청산 ≥3, 매일 18:05 cron 누적 / **regime 히스테리시스**는 백로그 유지)
 
 (이월 백로그: **스케줄러 stdout 로그 래핑** — `wevelStock-daily-refresh` 작업에 로그 리다이렉트 없어 실패 시 진단 불가(06-10 exit 130 은 무해 판정이나 재발 대비). `just refresh-daily > data/logs/refresh-YYYY-MM-DD.log` 형태 / **라이브 수치 캘리브레이션(다일 후)** — `config/accounts.yaml` sizing/split_ladder 스윕 + KPI 임계, 라이브 데스크 청산 누적 전제([[feedback_backtest_essence]]) / **자산복리부 ② 복리 전략 자료 보강** — 켈리·비중 증대·재투자 룰 자료가 실제 생길 때(2026-06-10 결정) / **`PAPER-DESK-UX-001` 신설 (오른쪽 뇌 UI/UX — "날 잡아서")** — 백엔드·API(`/api/accounts`·`/api/guidance/*`)·텔레그램(`/accounts`·`/retro`)은 동작, 빠진 건 한눈에 보는 화면. webapp 데스크 대시보드(4계좌 보유·평가손익·회고 KPI·자산 곡선) + 텔레그램 메시지 다듬기. 현 콘솔 probe 로만 시연 가능 / ~~gemini transient 503 retry~~ ✅ 해소 / 데스크 종목별 extension 주입(현 중립) / market별 시장맥락 분리(현 KOSPI+us_macro 단일) / 실 LLM 매수 verdict 권고로 데스크 체결 라이브 관찰(평상시 wait 다발) / 뉴스 한국 소스 보강 / regime 흔들림 히스테리시스)
 
 (보조 백로그: regime run간 흔들림 히스테리시스 점검(2026-06-02 진단, 경계서 멂이라 급하지 않음) / `collectors/market_macro.py` sticky 밴드)
+
+(**자동 권고 차트 DB-first 부채 (2026-06-15 M5 라이브서 발견)** — `run_signal_cadence` compute_scorecard 의 `build_technicals`가 **DB-first임에도**(`load_ohlcv_from_db` 먼저) watchlist 20종에 대해 KIS 풀페치(1825봉·`source=kis`·~22초/종목)로 빠짐 → cadence가 종목당 ~60초(차트 22s + 전략가 A·B 각 ~19s)로 느림. 원인 = chart_ohlcv 캐시가 **screening(rank_candidates)엔 충분하나 technicals 풀히스토리 요건엔 부족** → build_chart_data KIS fallback. 게다가 서버 동시 가동 시 KIS rate-limit 경합. **해소 후보**: ① universe chart 일일 캐시 충실화(refresh_all_tickers 가 technicals 요건 만큼 적재) ② compute_scorecard 차트 요건 완화/DB-first 강제 ③ KIS 전역 rate limiter([[project_kis_rate_limit_backlog]]). 비용 아닌 속도·rate-limit 부채 — 권고 정확성엔 무영향(graceful). 다일 누적되면 캐시 차올라 자연 완화 가능.)
 
 (추가 백로그: **SCREEN-RS-EXTENSION-001** (종목 RS+과열도 스크리닝, prism v2.13.0 #289 차용 — SPEC 작성 완료 draft, **트레이딩부/scoring 구현 때 같이**. scoring.py 순수 함수 3개 + config/screening.yaml + collectors/screening.py. SLOT R1~R3 라이브 튜닝) / **WAVE-ALPHA SLOT S1·S2·S3·S4** (target_prices·watchlist·backtest·canon) / **NEWS-SOURCE-001** SPEC 신설 (news_curator SLOT S2 해소) / **PERSONA-REFUSAL-CITED-RULE-001** SPEC 신설 / news_curator persona 슬림화 / Layer 4 계좌관리자 (M5) / Layer 5 회고분석가 (M4, RETROSPECT-ANALYST-001) / GUIDANCE-ACCURACY-TRACKER-001 / INFRA-US-MACRO-SNAPSHOT-001 (yfinance/FRED) / INFRA-RELIABILITY-VALIDATOR-001 (Layer 2.5/3.5) / scoring.py 정식 가중치 (SLOT S7) / streaming 토글 UI + AbortController / streaming response cache 멱등성 / Memory Compression / Quality Eval / MCP 패턴 차용 / 박종훈 Vol 2/3 OCR / png vision / xlsx sheet 분리 / canon 정수 추출 자동화 (KNOWLEDGE-SYNC-001 Phase 3))
 
