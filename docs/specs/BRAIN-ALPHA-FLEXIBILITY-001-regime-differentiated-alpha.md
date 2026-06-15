@@ -107,8 +107,8 @@ watchlist(국장+미장) → 결정론 컷(rank_candidates: +파동/주도주/�
   임계는 config/screening.yaml. magic number 는 다일 누적 후 캘리브레이션(BRAIN-QUALITY 회고 루프).
 -->
 <!-- SPEC:INTERVIEW-SLOT name="conditional-entry-formula"
-  관망 종목의 조건부 진입가 + 승격 트리거 산출식. entry→stop 보간(물타기 차단, RB-MS2 패턴 재사용)·
-  트리거 도달 판정(지정가/돌파). wait 우선순위 랭킹(후보 근접도).
+  ⮕ 이관(2026-06-15): 조건부 진입가(숫자)는 TRADE-PLAN-LIFECYCLE-001 2단계로 확장 이관
+  (눌림/돌파/추세하단 방법 선택 + 다단 레벨). 본 SPEC 은 verdict 후보(buy/wait)까지, 진입가는 거기서.
 -->
 <!-- SPEC:INTERVIEW-SLOT name="deviation-guardrail"
   LLM 이 verdict 후보를 deviation 할 수 있는 경계: buy→wait 강등은 사실근거 필수,

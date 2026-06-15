@@ -8,6 +8,7 @@ status: draft
 generates: []
 children:
   - BRAIN-ALPHA-FLEXIBILITY-001   # 두뇌 알파 유연성 — regime blanket 탈피·섹터/종목 차등 변조 (첫 자식, 2026-06-15)
+  - TRADE-PLAN-LIFECYCLE-001       # 트레이드 플랜 생애주기 — 다단 레벨·시계열 진화·목표 동적·알림 (설계 SPEC, 2026-06-15)
 depends_on:
   - LEFT-BRAIN-COMPLETION-001 (분석가9·전략가·5점수 골격 done — 이 위에 퀄리티를 올림)
   - EVOLUTION-001 (회고 피드백이 퀄리티 향상의 지속 동력 — 1은 3에 의존)
