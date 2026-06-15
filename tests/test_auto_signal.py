@@ -323,16 +323,30 @@ def _sample_scorecard():
     )
 
 
+def _score_ids(entries):
+    """점수 보유 entry (bypass note 아님)."""
+    return {e["id"] for e in entries if not e.get("metadata", {}).get("batch_bypassed")}
+
+
 def test_build_entries_track_a_has_picker_flow_market_state_not_trader():
     entries = build_prefetched_entries(_sample_scorecard(), "A")
-    ids = {e["id"] for e in entries}
-    assert ids == {"stock_picker", "flow_analyzer", "market_state_analyzer"}
+    assert _score_ids(entries) == {"stock_picker", "flow_analyzer", "market_state_analyzer"}
 
 
 def test_build_entries_track_b_includes_trader():
     entries = build_prefetched_entries(_sample_scorecard(), "B")
-    ids = {e["id"] for e in entries}
-    assert ids == {"stock_picker", "trader", "flow_analyzer", "market_state_analyzer"}
+    assert _score_ids(entries) == {"stock_picker", "trader", "flow_analyzer", "market_state_analyzer"}
+
+
+def test_build_entries_injects_bypass_notes_for_omitted_analysts():
+    # 배치 우회 분석가는 "누락" 아니라 "의도적 우회" entry 로 주입 → LLM 이 미발행으로 안 셈
+    # (2026-06-15 라이브: persona text 로는 못 막아 구조로 해결).
+    entries = {e["id"]: e for e in build_prefetched_entries(_sample_scorecard(), "A")}
+    for aid in ("stock_analyst", "wealth_strategist", "principle_guardian"):
+        assert aid in entries
+        assert entries[aid]["metadata"].get("batch_bypassed") is True
+        assert entries[aid]["error"] is None          # 호출 실패 아님
+        assert "우회" in entries[aid]["text"]
 
 
 def test_build_entries_inject_advisory_scores_in_metadata():
@@ -345,11 +359,16 @@ def test_build_entries_inject_advisory_scores_in_metadata():
     assert all(e["error"] is None for e in entries.values())
 
 
-def test_market_state_md_flags_kill_switch_at_4_dd():
-    sc = Scorecard(ticker="005930", regime="parabolic", distribution_day_count=5)
+def test_market_state_md_reports_signals_and_defers_danger_judgment():
+    # 위험 판정(≥N kill)을 여기서 재적용하지 않고 AlphaPosture danger_gate 에 위임.
+    sc = Scorecard(ticker="005930", regime="parabolic", distribution_day_count=5,
+                   index_change_pct=-3.1, breadth_ratio=0.18)
     md = _market_state_md(sc)
     assert "parabolic" in md
-    assert "kill-switch" in md
+    assert "5" in md                       # DD 값은 보고
+    assert "-3.1" in md                    # 당일 급락률 노출
+    assert "kill-switch 임계(≥4)" not in md  # stale 하드코딩 제거
+    assert "위험 게이트" in md              # 판정은 후보 게이트가 소유
 
 
 def test_signal_directive_mentions_ticker_track_cadence_and_wait():

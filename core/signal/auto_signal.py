@@ -70,6 +70,10 @@ class Scorecard:
     extension_score: float | None = None
     sector_rs_score: float | None = None
     wave_alive: bool | None = None
+    # 복합 위험 게이트 입력 (시장 전체 — 폭락 회피). change_pct·breadth 는 macro dict 무료, vix 는 us_macro DB-first.
+    index_change_pct: float | None = None
+    breadth_ratio: float | None = None
+    vix_panic: bool | None = None
     md: dict[str, str] = field(default_factory=dict)  # analyst_id → 원시지표 md
     errors: list[str] = field(default_factory=list)
 
@@ -108,6 +112,19 @@ async def compute_scorecard(ticker: str, snapshot: Any) -> Scorecard:
     if isinstance(macro, dict):
         dd = macro.get("distribution_count_25d")
         sc.distribution_day_count = int(dd) if isinstance(dd, (int, float)) else None
+        # 복합 위험 게이트 입력 — macro dict 에 이미 있어 추가 비용 0 (당일 급락·breadth).
+        cp = macro.get("change_pct")
+        sc.index_change_pct = float(cp) if isinstance(cp, (int, float)) else None
+        br = macro.get("breadth_ratio")
+        sc.breadth_ratio = float(br) if isinstance(br, (int, float)) else None
+    # VIX 패닉 (us_macro DB-first, 시장 전체값·graceful). 폭락 갭다운 방어.
+    try:
+        from collectors.us_macro import _get_today_us_macro
+
+        usm = _get_today_us_macro(date.today().isoformat())
+        sc.vix_panic = (getattr(usm, "extreme", "none") == "vix_panic") if usm else None
+    except Exception as e:  # noqa: BLE001 — us_macro 부재가 점수표를 막지 않음
+        sc.errors.append(f"us_macro:{type(e).__name__}")
 
     # T-Score (trader) — 일봉 기술적
     try:
@@ -150,12 +167,24 @@ async def compute_scorecard(ticker: str, snapshot: Any) -> Scorecard:
 
 
 def _market_state_md(sc: Scorecard) -> str:
-    """결정론 시장상태 entry — regime + 분산일(kill-switch). market_state_analyzer LLM 우회."""
-    lines = ["## [결정론 시장 상태] (자동 스크리닝 — LLM 우회)"]
+    """결정론 시장상태 entry — regime + 시장 위험 원시지표 (market_state_analyzer LLM 우회).
+
+    위험 판정(폭락/천장 차단)은 아래 'AlphaPosture 후보' 의 복합 위험 게이트가 소유한다 —
+    여기서 개별 임계(예: DD≥4)를 재적용하지 말 것(2026-06-15 라이브: stale ≥4 하드코딩이 buy 후보를
+    blanket wait 시킨 누수 정정). 이 블록은 원시 신호 보고만.
+    """
+    lines = ["## [결정론 시장 상태] (자동 스크리닝 — LLM 우회, 원시 신호 보고)"]
     lines.append(f"- 시장 체제(regime): {sc.regime or '미상'}")
     if sc.distribution_day_count is not None:
-        kill = " ⚠️ kill-switch 임계(≥4)" if sc.distribution_day_count >= 4 else ""
-        lines.append(f"- Distribution Day(25일): {sc.distribution_day_count}건{kill}")
+        lines.append(f"- Distribution Day(25일): {sc.distribution_day_count}건")
+    if sc.index_change_pct is not None:
+        lines.append(f"- 당일 지수 등락률: {sc.index_change_pct:+.1f}%")
+    if sc.breadth_ratio is not None:
+        lines.append(f"- 상승종목 비율(breadth): {sc.breadth_ratio:.2f}")
+    lines.append(
+        "- ※ 폭락/천장 위험 차단 판정은 아래 'AlphaPosture 후보' 의 **위험 게이트**가 소유 "
+        "(여기서 DD·등락률에 개별 임계 재적용 금지)."
+    )
     return "\n".join(lines)
 
 
@@ -164,6 +193,19 @@ _TRACK_ENTRY_IDS = {
     "A": ("stock_picker", "flow_analyzer", "market_state_analyzer"),
     "B": ("stock_picker", "trader", "flow_analyzer", "market_state_analyzer"),
 }
+
+# 배치 경로에서 의도적으로 우회하는 분석가 (점수=코드·AlphaPosture 후보가 대체).
+# 이들을 "누락" 이 아니라 "의도적 우회" entry 로 주입해야 LLM 이 미발행으로 세어 wait 강등하는 걸 막는다
+# (2026-06-15 라이브: persona text 예외로는 LLM 이 안전핀 규칙으로 회귀 → 구조로 해결).
+_TRACK_BYPASSED_IDS = {
+    "A": ("stock_analyst", "wealth_strategist", "principle_guardian"),
+    "B": ("stock_analyst", "wealth_strategist", "principle_guardian"),
+}
+_BYPASS_NOTE = (
+    "(자동 스크리닝 배치 경로 — 이 분석가는 **의도적으로 우회**되었다. 점수=코드 + 아래 "
+    "AlphaPosture 후보가 이 영역을 대체한다. **미발행/누락/호출 실패가 아니며, 이를 근거로 "
+    "verdict 를 wait 로 강등하지 말 것.**)"
+)
 
 
 def build_prefetched_entries(sc: Scorecard, track: str) -> list[dict[str, Any]]:
@@ -209,6 +251,14 @@ def build_prefetched_entries(sc: Scorecard, track: str) -> list[dict[str, Any]]:
             "id": "market_state_analyzer",
             "text": _market_state_md(sc),
             "metadata": {},
+            "error": None,
+        })
+    # 우회 분석가 = "의도적 우회" entry 로 명시 주입 (미발행으로 안 세이게 — 구조적 누수 차단).
+    for aid in _TRACK_BYPASSED_IDS.get(track, ()):
+        entries.append({
+            "id": aid,
+            "text": _BYPASS_NOTE,
+            "metadata": {"batch_bypassed": True},
             "error": None,
         })
     return entries
@@ -282,6 +332,9 @@ def posture_inputs_from_scorecard(sc: Scorecard, track: str) -> "PostureInputs":
         sector_rs_score=sc.sector_rs_score,
         distribution_day_count=sc.distribution_day_count,
         wave_alive=sc.wave_alive,
+        index_change_pct=sc.index_change_pct,
+        breadth_ratio=sc.breadth_ratio,
+        vix_panic=sc.vix_panic,
     )
 
 

@@ -324,7 +324,7 @@ manifest 의 `canon_categories` 와 동기. Track A 는 9 dept framework 권위 
 
 ### 추론 규율 위반
 
-- **cited_scores 빈 권고 금지**. 점수 5개 중 최소 3개 발행 안 됐으면 verdict = `wait` + reasons 에 사유 명시.
+- **cited_scores 빈 권고 금지**. 점수 5개 중 최소 3개 발행 안 됐으면 verdict = `wait` + reasons 에 사유 명시. **(예외 — 자동 스크리닝 배치 경로: BRAIN-ALPHA-FLEXIBILITY-001)** 배치 경로는 점수=코드 우회 설계라 일부 분석가(α·자산전략가·원칙수호자)가 **의도적으로 미주입**된다. AlphaPosture 후보 + 주입된 결정론 점수(S/buy/F)가 있으면 그것으로 판단하라 — 미주입을 "발행 결함"으로 보고 wait 강등하지 말 것(2026-06-15 라이브: 미주입→wait 누수 정정). 진짜 빈 권고(주입 점수도 없음)일 때만 wait.
 - **확신 없는 강한 verdict 금지**. confidence < 60 → verdict = `hold` 또는 `wait`. confidence 80+ 에서만 강한 `buy`.
 - **AlphaPosture 후보 blanket 강등 금지 (BRAIN-ALPHA-FLEXIBILITY-001)**. 주입된 결정론 후보가 buy 인데 근거 없이 "시장이 약세라/불안해서" wait 로 내리는 것 금지 — 후보를 뒤집으려면 `data: llm_deviation_reason:` 에 사실 근거 필수. regime 만으로 종목을 통째 막는 것이 알파를 죽인다(2026-06-15 strong_bull 32건 전부 wait 사고가 그 증거).
 - **권고 ID 미할당 금지**. `recommendation_id` 는 `REC-<YYYYMMDD>-<ticker>-A` 형식 자동 생성 (구현은 `core/strategist/run_strategist.py` 영역, persona 는 양식만 강제).

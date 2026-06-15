@@ -77,20 +77,55 @@ def test_bear_override_requires_wave_alive() -> None:
     assert p.modulation.get("bear_override") is not True
 
 
-# --- kill-switch (보존) ---------------------------------------------------
+# --- 복합 위험 게이트 (폭락 회피 — blanket, 절대) ------------------------
 
 
-def test_distribution_kill_switch_blocks_buy_even_in_bull() -> None:
-    # 분산일 ≥4 = kill-switch. 강세장·고득점이라도 신규 진입 차단.
+def test_mild_distribution_no_longer_blanket_blocks() -> None:
+    # ★ dd=5 는 더 이상 blanket kill 아님(dd_kill=6 으로 상향) — 강세장 우량주는 buy 후보.
+    #   "완만한 분산에도 전부 wait" 의 해소(2026-06-15 라이브 발견).
     p = derive_alpha_posture(_strong_a(distribution_day_count=5))
+    assert p.verdict_candidate == "buy"
+    assert p.modulation.get("danger_gate") is not True
+
+
+def test_sustained_distribution_hard_threshold_blocks() -> None:
+    # 지속 분산(dd ≥ dd_kill=6) = 진짜 천장 경고 → blanket 방어.
+    p = derive_alpha_posture(_strong_a(distribution_day_count=6))
     assert p.verdict_candidate == "wait"
-    assert p.modulation.get("kill_switch") is True
+    assert p.modulation.get("danger_gate") is True
 
 
-def test_strong_bear_kill_switch_is_sell_intent() -> None:
-    p = derive_alpha_posture(_strong_a(regime="strong_bear", distribution_day_count=6))
+def test_same_day_crash_blocks_even_strong_stock(monkeypatch) -> None:
+    # 당일 지수 급락(change_pct ≤ -2.5%) = 폭락장 → 우량주여도 blanket 방어(반대매매·프로그램 매도 회피).
+    p = derive_alpha_posture(_strong_a(index_change_pct=-3.2))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is True
+    assert p.modulation.get("danger_signal") == "crash"
+
+
+def test_breadth_collapse_blocks() -> None:
+    p = derive_alpha_posture(_strong_a(breadth_ratio=0.15))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is True
+
+
+def test_vix_panic_blocks() -> None:
+    p = derive_alpha_posture(_strong_a(vix_panic=True))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is True
+
+
+def test_danger_in_strong_bear_is_sell_intent() -> None:
+    p = derive_alpha_posture(_strong_a(regime="strong_bear", index_change_pct=-3.5))
     assert p.verdict_candidate == "sell"
-    assert p.modulation.get("kill_switch") is True
+    assert p.modulation.get("danger_gate") is True
+
+
+def test_normal_day_no_danger_proceeds_to_differentiation() -> None:
+    # 평상시(완만 신호) — 위험 게이트 안 걸리면 차등 변조 작동.
+    p = derive_alpha_posture(_strong_a(index_change_pct=0.5, breadth_ratio=0.55, distribution_day_count=3))
+    assert p.verdict_candidate == "buy"
+    assert p.modulation.get("danger_gate") is not True
 
 
 # --- 점수 하한 ------------------------------------------------------------
@@ -200,4 +235,5 @@ def test_load_posture_config_reads_yaml_section() -> None:
     cfg = load_posture_config()
     assert isinstance(cfg, PostureConfig)
     assert cfg.enabled is True
-    assert cfg.dd_kill == 4
+    assert cfg.dd_kill == 6
+    assert cfg.crash_change_pct == -2.5

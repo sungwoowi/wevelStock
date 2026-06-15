@@ -46,8 +46,12 @@ class PostureConfig:
     leader_rs_score: float = 8.0    # RS 이 이상 = 주도주 (대체 경로)
     pullback_min_health: float = 6.0  # 과열도(건강도) 이 이상 = 눌림목 건강 (이탈/과열 아님)
     chase_min_health: float = 4.0     # 강세장에서 이 미만 = 과열 추격 → buy 강등
-    dd_kill: int = 4                  # 분산일 이 이상 = kill-switch (신규 진입 차단)
     require_wave_for_bear_override: bool = True  # 약세장 override 에 파동 생존 필수
+    # 복합 위험 게이트 (폭락 회피 — blanket 방어, 차등보다 우선). 2026-06-15 라이브 발견:
+    # dd 단독 blanket(4)은 완만한 분산에도 전부 wait + 당일 급락은 못 잡는 최악 조합. 교체.
+    crash_change_pct: float = -2.5    # 당일 지수 등락률 이 이하 = 폭락장(반대매매·프로그램 매도)
+    breadth_collapse: float = 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
+    dd_kill: int = 6                  # 25일 분산일 이 이상 = 지속 천장(오닐 5~6). 4→6 상향(완만 분산 통과)
 
 
 @dataclass
@@ -65,6 +69,10 @@ class PostureInputs:
     sector_rs_score: float | None = None  # 종목 섹터의 섹터 RS (0~10)
     distribution_day_count: int | None = None
     wave_alive: bool | None = None        # 파동 생존 (WAVE-ALPHA α·verdict 매트릭스 → bool)
+    # 복합 위험 게이트 입력 (시장 전체 — market_macro/us_macro). 폭락장 blanket 방어용.
+    index_change_pct: float | None = None  # 당일 지수 등락률 (market_macro.change_pct)
+    breadth_ratio: float | None = None     # 당일 상승종목 비율 (market_macro.breadth_ratio)
+    vix_panic: bool | None = None          # 미장 VIX 패닉 (us_macro.extreme == "vix_panic")
 
 
 @dataclass
@@ -188,17 +196,35 @@ def derive_alpha_posture(
     reasons: list[str] = []
     mod: dict[str, Any] = {"regime": inp.regime, "regime_class": rclass}
 
-    # 1) kill-switch (보존) — 분산일 ≥ 임계면 어떤 regime 이든 신규 진입 차단.
+    # 1) 복합 위험 게이트 (폭락 회피 — blanket 방어, 차등보다 우선).
+    #    빠른 신호(당일 급락·breadth 붕괴·VIX 패닉) + 느린 신호(지속 분산) 결합. 하나라도 = blanket.
+    #    "완만한 분산(dd 4~5)에 전부 wait" 는 풀고, "진짜 위험 당일"은 우량주여도 막는다.
     dd = inp.distribution_day_count or 0
-    if dd >= cfg.dd_kill:
-        mod["kill_switch"] = True
-        reasons.append(f"분산일 {dd}건 — 천장 경고(kill-switch), 신규 진입 차단")
+    danger_signal: str | None = None
+    if inp.index_change_pct is not None and inp.index_change_pct <= cfg.crash_change_pct:
+        danger_signal = "crash"
+    elif inp.breadth_ratio is not None and inp.breadth_ratio <= cfg.breadth_collapse:
+        danger_signal = "breadth_collapse"
+    elif inp.vix_panic is True:
+        danger_signal = "vix_panic"
+    elif dd >= cfg.dd_kill:
+        danger_signal = "distribution"
+    if danger_signal is not None:
+        mod["danger_gate"] = True
+        mod["danger_signal"] = danger_signal
+        _DANGER_KR = {
+            "crash": f"당일 지수 급락({inp.index_change_pct}%) — 폭락장 방어",
+            "breadth_collapse": f"상승종목 폭 붕괴({inp.breadth_ratio}) — 시장 광범위 약세",
+            "vix_panic": "미장 VIX 패닉 — 위험회피 전면 방어",
+            "distribution": f"25일 분산일 {dd}건 — 지속 천장 경고",
+        }
+        reasons.append(f"위험 게이트 발동: {_DANGER_KR[danger_signal]}, 신규 진입 차단")
         verdict = "sell" if inp.regime == "strong_bear" else "wait"
         if verdict == "sell":
-            reasons.append("강한 약세 + 천장 경고 — 보유 시 청산 우선")
+            reasons.append("강한 약세 + 위험 신호 — 보유 시 청산 우선")
         return AlphaPosture(
             verdict, rclass, reasons, mod,
-            _cond_entry("kill_release", "분산일 해소 후 재평가"),
+            _cond_entry("danger_release", "시장 위험 해소 후 재평가"),
         )
 
     # 2) 점수 하한 — 매수 후보 최소 품질. 미달 시 regime 무관 관망.

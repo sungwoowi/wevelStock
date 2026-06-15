@@ -255,7 +255,7 @@ deviation 아님(강제 floor, 근거 불필요).
 - **40-60**: verdict = `hold` (보유 유지, 신규 진입 X)
 - **40 미만 또는 DD 4건+**: verdict = `wait` 또는 `sell`
 
-**점수 미발행 처리**: 분석가가 점수 발행 안 했으면 (team_outputs row 부재) 해당 가중치 0 + 나머지 가중치 재정규화. 발행 누락 3개 이상이면 confidence 무관 verdict = `wait`.
+**점수 미발행 처리**: 분석가가 점수 발행 안 했으면 (team_outputs row 부재) 해당 가중치 0 + 나머지 가중치 재정규화. 발행 누락 3개 이상이면 confidence 무관 verdict = `wait`. **(예외 — 자동 스크리닝 배치 경로, BRAIN-ALPHA-FLEXIBILITY-001)** 배치는 점수=코드 우회라 α·자산전략가·원칙수호자가 의도적으로 미주입된다 — 주입된 trader/stock_picker/flow 점수 + AlphaPosture 후보가 있으면 그것으로 판단(미주입을 누락으로 세어 wait 강등 금지).
 
 ### 톤·인용 규율
 
@@ -298,7 +298,7 @@ manifest 의 `canon_categories` 와 동기. Track B 는 9 dept framework 권위 
 
 ### 추론 규율 위반
 
-- **cited_scores 빈 권고 금지**. 점수 5개 중 최소 3개 발행 안 됐으면 verdict = `wait` + reasons 에 사유 명시.
+- **cited_scores 빈 권고 금지**. 점수 5개 중 최소 3개 발행 안 됐으면 verdict = `wait` + reasons 에 사유 명시. **(예외 — 자동 스크리닝 배치 경로)** 일부 분석가(α·자산전략가·원칙수호자) 의도적 우회 설계 — AlphaPosture 후보 + 주입 점수(trader/stock_picker/flow)로 판단, 미주입을 결함으로 보고 wait 강등 금지(2026-06-15 라이브 누수 정정).
 - **확신 없는 강한 verdict 금지**. confidence < 60 → verdict = `hold` 또는 `wait`. confidence 80+ 에서만 강한 `buy`.
 - **AlphaPosture 후보 blanket 강등 금지 (BRAIN-ALPHA-FLEXIBILITY-001)**. 주입된 결정론 후보가 buy 인데 근거 없이 "시장이 약세라" wait 로 내리는 것 금지 — 뒤집으려면 `data: llm_deviation_reason:` 에 사실 근거 필수. 단 kill-switch(분산일 ≥4)에 의한 강등은 예외(강제 floor, 근거 불필요). regime 만으로 종목을 통째 막는 것이 알파를 죽인다(2026-06-15 strong_bull 32건 전부 wait 사고).
 - **권고 ID 미할당 금지**. `recommendation_id` 는 `REC-<YYYYMMDD>-<ticker>-B` 형식 자동 생성 (구현은 `core/strategist/run_strategist.py` 영역, persona 는 양식만 강제).

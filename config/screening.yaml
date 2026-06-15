@@ -95,5 +95,10 @@ alpha_posture:
   leader_rs_score: 8.0    # RS 이 이상 = 주도주 (대체 경로)
   pullback_min_health: 6.0  # 과열도(건강도) 이 이상 = 눌림목 건강 (이탈/과열 아님)
   chase_min_health: 4.0     # 강세장에서 이 미만 = 과열 추격 → 매수 후보 강등
-  dd_kill: 4                # 분산일 이 이상 = kill-switch (신규 진입 차단)
   require_wave_for_bear_override: true  # 약세장 override 에 파동 생존 필수
+  # 복합 위험 게이트 (폭락 회피 — blanket 방어, 차등보다 우선. 2026-06-15 라이브 발견으로 신설).
+  #   당일 급락 OR breadth 붕괴 OR VIX 패닉 OR 지속 분산 → 우량주여도 신규 진입 차단(반대매매·프로그램 매도 회피).
+  #   dd 4→6 상향: 완만한 분산(4~5)은 차등 통과, 오닐 천장(6+)만 blanket. SLOT — 라이브 캘리브레이션.
+  crash_change_pct: -2.5    # 당일 지수 등락률(%) 이 이하 = 폭락장
+  breadth_collapse: 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
+  dd_kill: 6                # 25일 분산일 이 이상 = 지속 천장 경고
