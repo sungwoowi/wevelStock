@@ -198,6 +198,18 @@ def get_band_score_width() -> float:
         return 1.0
 
 
+def load_posture_config() -> Any:
+    """차등 변조 임계 (config/screening.yaml `alpha_posture`) → PostureConfig.
+
+    BRAIN-ALPHA-FLEXIBILITY-001 M1 — funnel(M3)이 derive_alpha_posture 에 주입.
+    섹션 부재/오타입은 posture_config_from_dict 가 graceful default 처리. watchdog hot reload.
+    """
+    from core.signal.alpha_posture import posture_config_from_dict
+
+    raw = _load_screening_config().get("alpha_posture")
+    return posture_config_from_dict(raw if isinstance(raw, dict) else {})
+
+
 async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
     """거래대금 상위(leading) 종목 ticker 평탄화 — universe 백필 입력.
 

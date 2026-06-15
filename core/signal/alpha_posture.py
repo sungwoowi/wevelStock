@@ -1,0 +1,244 @@
+"""결정론 차등 변조 — regime baseline 위에 섹터RS·주도주·파동이 종목별 override
+(BRAIN-ALPHA-FLEXIBILITY-001 M1).
+
+문제: regime 이 verdict 의 **binary blanket 게이트**라 "약세장이면 다 막고 강세장이면 다 연다".
+오늘 라이브 = strong_bull 인데 32건 전부 wait. 알파는 그 사이의 차이에 있다.
+
+해법: regime 은 **기본값(baseline)** 일 뿐, 섹터RS·주도주 지위·파동 생존·과열도가 종목별로
+verdict 후보를 변조한다.
+  - 약세장이어도 강세섹터 + 주도주 + 파동 생존 + 눌림목 → 매수 후보(눌림목 타점, bear_override).
+  - 강세장이어도 과열 추격 구간 → 매수 회피(bull_chase_demote).
+  - kill-switch(분산일 ≥4)는 보존 — 어떤 regime 이든 신규 진입 차단.
+
+이 모듈은 **순수 함수**다 (I/O·LLM 0, 입력만으로 결정). 가드레일 있는 C 의 결정론 절반 —
+LLM(전략가 persona)은 이 후보를 받아 "반박할 사실 있나?" 검증자로 시작하고, 후보를 뒤집을 땐
+사실 근거를 로그해야 한다(M2). 점수 collapse 아님(feedback_score_collapse_advisory) —
+여러 결정론 지표의 차등 게이트일 뿐, advisory override 여지는 LLM 에 남는다.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+# regime 6단계 → 차등 변조용 3분류 (market_macro.classify_market_regime 출력 기준).
+BULLISH = frozenset({"parabolic", "strong_bull", "moderate_bull"})
+NEUTRAL = frozenset({"sideways"})
+BEARISH = frozenset({"moderate_bear", "strong_bear"})
+
+
+@dataclass
+class PostureConfig:
+    """차등 변조 임계 (config/screening.yaml `alpha_posture` 에서 로드, 기본값 = 여기).
+
+    순수 함수가 파일 I/O 없이 동작하도록 기본값을 코드에 둔다 — funnel(M3)은 load_posture_config()
+    로 yaml override 를 주입. 모든 값은 SLOT(라이브 누적 후 BRAIN-QUALITY 회고 루프로 캘리브레이션).
+    """
+
+    enabled: bool = True
+    # 점수 하한 — 매수 후보 최소 품질 (track별 1차 지표 + buy_score AND).
+    min_s_score_a: float = 6.0     # Track A 1차 = S-Score(주도주)
+    min_buy_score_a: float = 6.0
+    min_t_score_b: float = 6.0     # Track B 1차 = T-Score(트리거)
+    min_buy_score_b: float = 5.0
+    # 차등 변조 임계.
+    strong_sector_rs: float = 7.0   # 섹터 RS 이 이상 = 강세섹터
+    leader_s_score: float = 7.0     # S-Score 이 이상 = 주도주
+    leader_rs_score: float = 8.0    # RS 이 이상 = 주도주 (대체 경로)
+    pullback_min_health: float = 6.0  # 과열도(건강도) 이 이상 = 눌림목 건강 (이탈/과열 아님)
+    chase_min_health: float = 4.0     # 강세장에서 이 미만 = 과열 추격 → buy 강등
+    dd_kill: int = 4                  # 분산일 이 이상 = kill-switch (신규 진입 차단)
+    require_wave_for_bear_override: bool = True  # 약세장 override 에 파동 생존 필수
+
+
+@dataclass
+class PostureInputs:
+    """차등 변조 입력 — Scorecard + 스크리닝 랭킹 행에서 채운다 (전부 결정론 산출값)."""
+
+    track: str                            # "A" | "B"
+    regime: str | None = None
+    s_score: float | None = None
+    t_score: float | None = None
+    f_score: float | None = None
+    buy_score: float | None = None
+    rs_score: float | None = None         # 풀 내 상대강도 (screening rank_candidates)
+    extension_score: float | None = None  # 과열도/건강도 (높을수록 건강, 낮으면 과열·이탈)
+    sector_rs_score: float | None = None  # 종목 섹터의 섹터 RS (0~10)
+    distribution_day_count: int | None = None
+    wave_alive: bool | None = None        # 파동 생존 (WAVE-ALPHA α·verdict 매트릭스 → bool)
+
+
+@dataclass
+class AlphaPosture:
+    """차등 변조 결과 — verdict 후보 + 변조 추적(설명가능성) + 조건부 진입 의도."""
+
+    verdict_candidate: str               # "buy" | "wait" | "sell"
+    regime_class: str                    # "bullish" | "neutral" | "bearish" | "unknown"
+    selection_reason: list[str] = field(default_factory=list)
+    modulation: dict[str, Any] = field(default_factory=dict)
+    conditional_entry: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """team_outputs.data_json 가산 주입용 (M5). JSON 직렬화 가능한 평탄 dict."""
+        return asdict(self)
+
+
+_BOOL_FIELDS = frozenset({"enabled", "require_wave_for_bear_override"})
+_INT_FIELDS = frozenset({"dd_kill"})
+
+
+def posture_config_from_dict(raw: dict[str, Any] | None) -> PostureConfig:
+    """yaml `alpha_posture` 섹션 dict → PostureConfig (graceful — 미지정/오타입 키는 default).
+
+    순수 매퍼 (파일 I/O 없음). 알 수 없는 키 무시, float 변환 실패 시 해당 필드 default 유지 —
+    watchdog hot-reload 중 잘못된 값이 들어와도 크래시 없이 직전/기본 동작 보존.
+    """
+    cfg = PostureConfig()
+    if not isinstance(raw, dict):
+        return cfg
+    for fname in PostureConfig.__dataclass_fields__:
+        if fname not in raw:
+            continue
+        val = raw[fname]
+        try:
+            if fname in _BOOL_FIELDS:
+                setattr(cfg, fname, bool(val))
+            elif fname in _INT_FIELDS:
+                setattr(cfg, fname, int(val))
+            else:
+                setattr(cfg, fname, float(val))
+        except (TypeError, ValueError):
+            continue  # 오타입 → default 유지
+    return cfg
+
+
+def regime_class(regime: str | None) -> str:
+    """regime 6단계 → 3분류. 미정의/None → 'unknown'(보수 처리)."""
+    if regime in BULLISH:
+        return "bullish"
+    if regime in NEUTRAL:
+        return "neutral"
+    if regime in BEARISH:
+        return "bearish"
+    return "unknown"
+
+
+def _passes_score_floor(inp: PostureInputs, cfg: PostureConfig) -> tuple[bool, str]:
+    """매수 후보 최소 품질 통과 여부 + 사유. 결측 1차 지표 = 보수적 불통과."""
+    if inp.track == "A":
+        ok = (
+            inp.s_score is not None and inp.s_score >= cfg.min_s_score_a
+            and inp.buy_score is not None and inp.buy_score >= cfg.min_buy_score_a
+        )
+        return ok, "중장기 점수 하한(주도주·매수강도) 미달" if not ok else ""
+    ok = (
+        inp.t_score is not None and inp.t_score >= cfg.min_t_score_b
+        and inp.buy_score is not None and inp.buy_score >= cfg.min_buy_score_b
+    )
+    return ok, "단기 점수 하한(트리거·매수강도) 미달" if not ok else ""
+
+
+def _cond_entry(trigger: str, note: str, **extra: Any) -> dict[str, Any]:
+    """관망 종목 조건부 진입 의도 (M1 = 심볼릭, 실제 진입가는 M3 가 가격으로 채움)."""
+    return {"trigger": trigger, "note": note, **extra}
+
+
+def derive_alpha_posture(
+    inp: PostureInputs, config: PostureConfig | None = None
+) -> AlphaPosture:
+    """결정론 차등 변조 — regime baseline × 섹터RS × 주도주 × 파동 × 과열도 → verdict 후보.
+
+    순수: 같은 입력 → 같은 출력. 부작용 0. 모든 분기에 selection_reason 을 남긴다(설명가능성).
+    """
+    cfg = config or PostureConfig()
+    rclass = regime_class(inp.regime)
+    reasons: list[str] = []
+    mod: dict[str, Any] = {"regime": inp.regime, "regime_class": rclass}
+
+    # 1) kill-switch (보존) — 분산일 ≥ 임계면 어떤 regime 이든 신규 진입 차단.
+    dd = inp.distribution_day_count or 0
+    if dd >= cfg.dd_kill:
+        mod["kill_switch"] = True
+        reasons.append(f"분산일 {dd}건 — 천장 경고(kill-switch), 신규 진입 차단")
+        verdict = "sell" if inp.regime == "strong_bear" else "wait"
+        if verdict == "sell":
+            reasons.append("강한 약세 + 천장 경고 — 보유 시 청산 우선")
+        return AlphaPosture(
+            verdict, rclass, reasons, mod,
+            _cond_entry("kill_release", "분산일 해소 후 재평가"),
+        )
+
+    # 2) 점수 하한 — 매수 후보 최소 품질. 미달 시 regime 무관 관망.
+    floor_ok, floor_reason = _passes_score_floor(inp, cfg)
+    mod["score_floor_ok"] = floor_ok
+    if not floor_ok:
+        reasons.append(floor_reason)
+        return AlphaPosture(
+            "wait", rclass, reasons, mod,
+            _cond_entry("score_improve", "점수 하한 회복 시 재평가"),
+        )
+
+    # 3) 차등 신호 산출.
+    sector_strong = inp.sector_rs_score is not None and inp.sector_rs_score >= cfg.strong_sector_rs
+    is_leader = (
+        (inp.s_score is not None and inp.s_score >= cfg.leader_s_score)
+        or (inp.rs_score is not None and inp.rs_score >= cfg.leader_rs_score)
+    )
+    wave_ok = inp.wave_alive is True  # None/False → 약세장 override 불가(보수)
+    healthy = inp.extension_score is not None and inp.extension_score >= cfg.pullback_min_health
+    over_extended = inp.extension_score is not None and inp.extension_score < cfg.chase_min_health
+    mod.update({
+        "sector_strong": sector_strong, "is_leader": is_leader,
+        "wave_ok": wave_ok, "healthy": healthy, "over_extended": over_extended,
+    })
+
+    # 4) regime baseline × 차등.
+    if rclass == "bullish":
+        if over_extended:
+            mod["bull_chase_demote"] = True
+            reasons.append("강세장이나 과열 추격 구간 — 신규 진입 회피, 눌림 대기")
+            return AlphaPosture(
+                "wait", rclass, reasons, mod,
+                _cond_entry("pullback", "과열 해소 후 이평선 부근 눌림 재평가", ref="ma20"),
+            )
+        reasons.append("강세장 + 점수 하한 통과 + 과열 아님 — 매수 후보")
+        if sector_strong:
+            reasons.append("강세섹터 동반")
+        return AlphaPosture("buy", rclass, reasons, mod, None)
+
+    if rclass == "neutral":
+        if sector_strong and healthy:
+            reasons.append("횡보장 + 강세섹터 + 건강한 위치 — 선별 매수 후보")
+            return AlphaPosture("buy", rclass, reasons, mod, None)
+        reasons.append("횡보장 — 강세섹터/건강 위치 미충족, 관망")
+        return AlphaPosture(
+            "wait", rclass, reasons, mod,
+            _cond_entry("alignment", "강세섹터·건강 위치 정렬 시 재평가"),
+        )
+
+    if rclass == "bearish":
+        wave_req_ok = wave_ok or not cfg.require_wave_for_bear_override
+        override = sector_strong and is_leader and healthy and wave_req_ok
+        if override:
+            mod["bear_override"] = True
+            reasons.append(
+                "약세장이나 강세섹터 + 주도주 + 파동 생존 + 눌림목 — 차등 매수 후보(눌림목 타점)"
+            )
+            return AlphaPosture("buy", rclass, reasons, mod, None)
+        missing = [
+            label for cond, label in (
+                (sector_strong, "강세섹터"), (is_leader, "주도주"),
+                (healthy, "눌림목(건강 위치)"), (wave_req_ok, "파동 생존"),
+            ) if not cond
+        ]
+        reasons.append("약세장 — 차등 진입 조건 미충족, 관망 (미충족: " + ", ".join(missing) + ")")
+        return AlphaPosture(
+            "wait", rclass, reasons, mod,
+            _cond_entry("bear_alignment", "강세섹터·주도주·파동·눌림목 정렬 시 재평가", missing=missing),
+        )
+
+    # 5) regime 미상 — 보수적 관망.
+    reasons.append("시장 체제 미상 — 보수적 관망")
+    return AlphaPosture(
+        "wait", rclass, reasons, mod,
+        _cond_entry("regime_confirm", "시장 체제 확정 후 재평가"),
+    )
