@@ -358,6 +358,53 @@ def test_signal_directive_mentions_ticker_track_cadence_and_wait():
 
 
 # ---------------------------------------------------------------------------
+# 차등 변조 배선 (BRAIN-ALPHA-FLEXIBILITY-001 M3a) — AlphaPosture 후보 주입·영속
+# ---------------------------------------------------------------------------
+
+
+def test_posture_inputs_from_scorecard_maps_fields():
+    sc = _sample_scorecard()
+    sc.rs_score = 8.0
+    sc.extension_score = 7.0
+    inp = asig.posture_inputs_from_scorecard(sc, "A")
+    assert inp.track == "A"
+    assert inp.regime == "strong_bull"
+    assert inp.s_score == 7.0
+    assert inp.buy_score == 6.5
+    assert inp.rs_score == 8.0
+    assert inp.extension_score == 7.0
+    # sector_rs·wave 는 이번 마일스톤 미배선 → None (graceful)
+    assert inp.sector_rs_score is None
+    assert inp.wave_alive is None
+
+
+async def test_run_signal_for_ticker_injects_posture_md_and_persists_alpha_posture(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    seen: dict = {}
+
+    async def _runner(track_id, messages, **kw):
+        seen["alpha_posture_md"] = kw.get("alpha_posture_md")
+        return SimpleNamespace(text=_REC_WAIT)
+
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-15", scorecard=_sample_scorecard(),
+        strategist_runner=_runner, band_gate=False,
+    )
+    assert r["persisted"] is True
+    # 결정론 후보 md 가 전략가에 주입됨
+    assert seen["alpha_posture_md"] and "결정론 차등 변조 후보" in seen["alpha_posture_md"]
+    # 권고 data_json 에 결정론 후보 영속(설명가능성 — LLM verdict 와 무관하게 항상)
+    ap = captured["rec"].data["alpha_posture"]
+    assert ap["verdict_candidate"] in {"buy", "wait", "sell"}
+    assert "regime_class" in ap and "selection_reason" in ap
+
+
+# ---------------------------------------------------------------------------
 # run_signal_for_ticker — 전략가 직접 호출 → cadence-keyed persist (source=auto)
 # ---------------------------------------------------------------------------
 

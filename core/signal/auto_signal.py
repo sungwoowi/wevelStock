@@ -64,6 +64,12 @@ class Scorecard:
     f_score: float | None = None
     buy_score: float | None = None
     distribution_day_count: int | None = None
+    # 차등 변조 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a). rs/ext 는 screen_watchlist 행에서
+    # 주입(재계산·LLM 0). sector_rs·wave 는 다음 마일스톤(LLM Haiku) — 현재 None(graceful).
+    rs_score: float | None = None
+    extension_score: float | None = None
+    sector_rs_score: float | None = None
+    wave_alive: bool | None = None
     md: dict[str, str] = field(default_factory=dict)  # analyst_id → 원시지표 md
     errors: list[str] = field(default_factory=list)
 
@@ -256,6 +262,29 @@ def _last_band_fingerprint(ticker: str, track: str) -> str | None:
         return None
 
 
+def posture_inputs_from_scorecard(sc: Scorecard, track: str) -> "PostureInputs":
+    """Scorecard → AlphaPosture 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a).
+
+    rs/ext 는 screen_watchlist 행에서 주입된 값(없으면 None — graceful). sector_rs·wave 는
+    이번 마일스톤 미배선이라 None → derive 가 bullish/neutral 은 정상 처리, bear_override 만 보류.
+    """
+    from core.signal.alpha_posture import PostureInputs
+
+    return PostureInputs(
+        track=track,
+        regime=sc.regime,
+        s_score=sc.s_score,
+        t_score=sc.t_score,
+        f_score=sc.f_score,
+        buy_score=sc.buy_score,
+        rs_score=sc.rs_score,
+        extension_score=sc.extension_score,
+        sector_rs_score=sc.sector_rs_score,
+        distribution_day_count=sc.distribution_day_count,
+        wave_alive=sc.wave_alive,
+    )
+
+
 def _signal_directive(sc: Scorecard, track: str, cadence: str) -> str:
     """전략가에게 자동 스크리닝 권고를 요청하는 합성 user 메시지."""
     label = _TRACK_LABEL.get(track, track)
@@ -360,6 +389,19 @@ async def run_signal_for_ticker(
             }
 
     entries = build_prefetched_entries(sc, track)
+    # 결정론 차등 변조 후보 (M3a) — regime baseline × 섹터RS × 주도주 × 파동 × 과열도.
+    # 전략가에 권위 베이스라인으로 주입(가드레일 있는 C) + 권고에 항상 영속(설명가능성).
+    from core.signal.alpha_posture import derive_alpha_posture, render_alpha_posture_md
+
+    try:
+        from collectors.screening import load_posture_config
+
+        posture = derive_alpha_posture(posture_inputs_from_scorecard(sc, track), load_posture_config())
+        posture_md = render_alpha_posture_md(posture)
+    except Exception as e:  # noqa: BLE001 — 변조 실패가 권고 생성을 막지 않음(graceful)
+        log.warning("alpha_posture_failed", ticker=ticker, track=track, error=str(e))
+        posture, posture_md = None, None
+
     runner = strategist_runner or run_strategist
     if retries is None:
         from collectors.screening import get_signal_strategist_retries
@@ -374,6 +416,7 @@ async def run_signal_for_ticker(
             resp = await runner(
                 track_id, messages, target=ticker,
                 prefetched_analyst_outputs=entries,
+                alpha_posture_md=posture_md,
                 provider=provider, mock_fallback_allowed=mock_fallback_allowed,
             )
         except Exception as e:  # noqa: BLE001 — transient 면 재시도, 아니면 그 종목만 skip
@@ -400,6 +443,9 @@ async def run_signal_for_ticker(
         **rec.data, "source": "auto", "cadence": cadence,
         "recommendation_id": new_id, "band_fingerprint": fingerprint,
     }
+    # 결정론 후보 영속 — LLM verdict 와 무관하게 항상(설명가능성·deviation 감사 기준).
+    if posture is not None:
+        rec.data["alpha_posture"] = posture.to_dict()
     ok = persist_recommendation(rec)
     # 🟢 매수/매도 개별 알림 (어느 cadence든 buy/sell 뜨면 즉시 — 출근 중 포착).
     if ok and notify_signals and rec.verdict in ("buy", "sell"):
@@ -443,7 +489,8 @@ async def run_signal_cadence(
 
     sem = asyncio.Semaphore(max(1, get_signal_concurrency()))
 
-    async def _process_ticker(ticker: str) -> list[dict[str, Any]]:
+    async def _process_ticker(row: dict[str, Any]) -> list[dict[str, Any]]:
+        ticker = row["ticker"]
         async with sem:
             try:
                 sc = await compute_scorecard(ticker, snapshot)
@@ -454,6 +501,11 @@ async def run_signal_cadence(
                      "reason": f"scorecard:{type(e).__name__}"}
                     for t in tracks
                 ]
+            # 차등 변조 입력 — screen_watchlist 행의 결정론 RS·과열도 주입(재계산·LLM 0).
+            if sc.rs_score is None:
+                sc.rs_score = row.get("rs_score")
+            if sc.extension_score is None:
+                sc.extension_score = row.get("extension_score")
             out: list[dict[str, Any]] = []
             for track in tracks:  # 트랙은 종목 내 순차 (점수표 공유·Gemini 동시성 절제)
                 try:
@@ -471,7 +523,7 @@ async def run_signal_cadence(
                 out.append(r)
             return out
 
-    nested = await asyncio.gather(*[_process_ticker(row["ticker"]) for row in passers])
+    nested = await asyncio.gather(*[_process_ticker(row) for row in passers])
     results: list[dict[str, Any]] = [r for sub in nested for r in sub]
 
     persisted = [r for r in results if r.get("persisted")]

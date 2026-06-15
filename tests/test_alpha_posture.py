@@ -12,6 +12,7 @@ from core.signal.alpha_posture import (
     PostureInputs,
     derive_alpha_posture,
     posture_config_from_dict,
+    render_alpha_posture_md,
 )
 
 
@@ -166,6 +167,29 @@ def test_posture_config_from_dict_ignores_garbage() -> None:
     # 알 수 없는 키·잘못된 타입은 무시(graceful, watchdog hot-reload 안전).
     cfg = posture_config_from_dict({"bogus": 1, "strong_sector_rs": "nope"})
     assert cfg == PostureConfig()
+
+
+def test_render_alpha_posture_md_buy_candidate() -> None:
+    md = render_alpha_posture_md(derive_alpha_posture(_strong_a()))
+    assert "결정론 차등 변조 후보" in md   # 전략가 주입 섹션 헤더
+    assert "buy" in md                      # verdict 후보
+    assert "bullish" in md                  # regime_class
+    # 선정 사유(설명가능성) 한 줄 이상 노출
+    assert any(reason[:8] in md for reason in derive_alpha_posture(_strong_a()).selection_reason)
+
+
+def test_render_alpha_posture_md_wait_shows_conditional_entry() -> None:
+    # 강세장 과열 → wait + 조건부 진입(pullback) 노출.
+    p = derive_alpha_posture(_strong_a(extension_score=2.0))
+    md = render_alpha_posture_md(p)
+    assert "wait" in md
+    assert "pullback" in md or "조건부" in md
+
+
+def test_render_alpha_posture_md_instructs_deviation_logging() -> None:
+    # 후보를 뒤집으려면 사실 근거 로그 필수라는 지시가 md 에 포함(가드레일 있는 C).
+    md = render_alpha_posture_md(derive_alpha_posture(_strong_a()))
+    assert "llm_deviation_reason" in md
 
 
 def test_load_posture_config_reads_yaml_section() -> None:

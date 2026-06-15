@@ -134,9 +134,11 @@ watchlist(국장+미장) → 결정론 컷(rank_candidates: +파동/주도주/�
 - **3층 파급**: DB(가산 컬럼 없음, data_json 내부) → backend(auto_signal·recommendation·persona) → frontend(설명가능성 필드는 추후 감사 뷰가 read, 본 SPEC 은 데이터 발행까지).
 
 ## 마일스톤
-- **M1 — 결정론 차등 변조**: `core/signal/alpha_posture.py` + 임계 config + 단위 테스트. (regime baseline × 섹터RS × 주도주 × 파동 → 후보·조건부 진입가·사유)
-- **M2 — persona doctrine 전환**: track_a/b = blanket gate 폐기, 후보 소비자 + deviation 사실근거 로그 + 차등.
-- **M3 — funnel 주입**: `auto_signal.py` 가 후보·섹터/주도주/파동을 entries·directive 로 전략가에 전달.
+- **M1 ✅ (2026-06-15) — 결정론 차등 변조**: `core/signal/alpha_posture.py` + 임계 config + 17 테스트. (regime baseline × 섹터RS × 주도주 × 파동 × 과열도 → 후보·조건부 진입 의도·사유)
+- **M2 ✅ (2026-06-15) — persona doctrine 전환**: track_a/b = 범주 게이트 폐기 → AlphaPosture 후보 소비자 + `data: llm_deviation_reason:` 사실근거 로그 + blanket 강등 금지 anti-pattern. Track B kill-switch(DD≥4) 보존(deviation 불가).
+- **M3a ✅ (2026-06-15) — funnel 결정론 배선**: `auto_signal.py` Scorecard(rs/ext 주입·screen 행에서, LLM 0) → `posture_inputs_from_scorecard` → `derive_alpha_posture` → `render_alpha_posture_md` 를 `run_strategist(alpha_posture_md=)` 로 주입 + `rec.data["alpha_posture"]` 영속(설명가능성). 92 테스트 GREEN.
+- **M3b ⏳ — sector_rs·wave 입력**: `compute_scorecard` 에 종목 섹터 RS(theme classify) + 파동 생존(anchors α→bool) 추가(LLM Haiku·30일 캐시·graceful). bear_override·횡보 선별 활성화. (현재 None → bullish/neutral 만 차등)
+- **M3 라이브 검증 ⏳**: 실 Gemini 1회 — strong_bull 종목 buy 후보 ≥1 (오늘 "전부 wait" 탈피) + data_json alpha_posture 확인.
 - **M4 — watchlist 선정 강화**: rank_candidates 가중 + 미장 source. (별 마일스톤 가능 — 변조와 독립)
 - **M5 — 웹 더블체크 + persist 확장**: buy 후보 Gemini grounding + data_json 가산 + 알림.
 - **M6 — 라이브 검증**: 실 Gemini 1회 — 차등 변조로 buy 후보 ≥1 발생(오늘 "전부 wait" 탈피) 확인.

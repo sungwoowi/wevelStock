@@ -359,6 +359,7 @@ async def run_strategist(
     include_memory: bool = True,
     provider: str | None = None,
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
+    alpha_posture_md: str | None = None,
     mock_fallback_allowed: bool = True,
 ) -> StrategistResponse:
     """단일 전략가 호출. 멀티턴 messages 배열 그대로 수용.
@@ -396,6 +397,11 @@ async def run_strategist(
         scores = gather_analyst_scores(spec.reads_analysts, target=target)
         scores_md = render_analyst_scores_block(scores)
         analyst_source = "db_read"
+
+    # 결정론 차등 변조 후보 (BRAIN-ALPHA-FLEXIBILITY-001) — 분석가 블록 뒤에 권위 베이스라인으로
+    # 주입. 자동 권고 funnel 만 전달(채팅 경로는 None → 무변).
+    if alpha_posture_md:
+        scores_md = f"{scores_md}\n\n{alpha_posture_md}" if scores_md else alpha_posture_md
 
     # market snapshot (분석가와 동일)
     snap_started = time.monotonic()

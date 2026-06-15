@@ -111,6 +111,40 @@ def posture_config_from_dict(raw: dict[str, Any] | None) -> PostureConfig:
     return cfg
 
 
+def render_alpha_posture_md(posture: AlphaPosture) -> str:
+    """결정론 차등 변조 후보 → 전략가 주입용 md (가드레일 있는 C 의 결정론 절반).
+
+    전략가는 이 후보를 *기본 채택*하되, 뒤집으려면(예: 후보 buy 인데 wait 발행) 사실 근거를
+    권고 YAML 의 `data: llm_deviation_reason:` 에 남겨야 한다 — blanket 보수 강등 금지.
+    """
+    lines = [
+        "## 결정론 차등 변조 후보 (AlphaPosture — 권위 베이스라인)",
+        "",
+        "아래는 regime 을 통째 게이트로 쓰지 않고 **섹터RS·주도주·파동·과열도로 종목별 변조**한",
+        "결정론 verdict 후보다. 이 후보를 **기본 채택**하라.",
+        "",
+        f"- **verdict 후보**: `{posture.verdict_candidate}` (시장 체제 분류: {posture.regime_class})",
+    ]
+    if posture.selection_reason:
+        lines.append("- **선정 근거**:")
+        lines.extend(f"  - {r}" for r in posture.selection_reason)
+    if posture.modulation:
+        mod = ", ".join(f"{k}={v}" for k, v in posture.modulation.items())
+        lines.append(f"- **변조 추적**: {mod}")
+    if posture.conditional_entry:
+        ce = posture.conditional_entry
+        lines.append(
+            f"- **조건부 진입(관망 시)**: trigger=`{ce.get('trigger')}` — {ce.get('note', '')}"
+        )
+    lines += [
+        "",
+        "**deviation 규칙 (중요)**: 위 후보와 다른 verdict 를 발행하려면 권고 YAML 의",
+        "`data: llm_deviation_reason:` 에 **사실 근거**(악재·실적·이벤트 등)를 명시하라. "
+        "근거 없는 보수적 강등(blanket wait) 금지 — 후보가 buy 면 반박 사실이 없는 한 buy.",
+    ]
+    return "\n".join(lines)
+
+
 def regime_class(regime: str | None) -> str:
     """regime 6단계 → 3분류. 미정의/None → 'unknown'(보수 처리)."""
     if regime in BULLISH:

@@ -122,6 +122,7 @@ data:
   market_regime: "strong_bull"
   holding_period_estimate_days: 120         # stock_analyst 발행 read (Module A 목표가 3단 + α 발산 기반)
   distribution_day_count: 1
+  llm_deviation_reason: null                # AlphaPosture 후보와 다른 verdict 발행 시에만 사실 근거 (없으면 null = 후보 추종)
   yesterday_verdict_delta: "어제 hold → 오늘 buy (트리거: 월봉 종가 7월선 재돌파)"
   # ▲ 강제 필드. first run 시 "first run", 어제와 동일 verdict 면 "unchanged".
   # ▲ Track A 본질 = 연 5-15회 낮은 회전. 충분한 트리거 없는 verdict 뒤집기 = 본질 위반 자각 메커니즘.
@@ -184,20 +185,27 @@ cited: [M2, C1, C5, I6]
 
 ## Reasoning Doctrine
 
-### 진입 조건 (전부 충족 시만 verdict = "buy")
+### 진입 조건 — AlphaPosture 차등 후보 소비 (BRAIN-ALPHA-FLEXIBILITY-001, 범주 게이트 폐기)
 
-1. **월봉 종가 7월선 위** — F1 통과 (stock_analyst 발행)
-2. **S-Score ≥ 7** — 주도주 (stock_picker 발행)
-3. **α ≥ 1.3** (발산 시작) **또는 눌림목** (이격도 -10% ~ 0%) — stock_analyst 발행
-4. **시장 체제 ∈ {strong_bull, moderate_bull, parabolic}** — market_state_analyzer 발행
-5. **7계명 위반 0** — principle_guardian 발행. **advisory_warning 은 위반 0 처럼
-   취급** (production-chat advisory frame 의 정보 표시일 뿐, execution frame 의
-   blocking violation 이 아니므로 진입 차단 X)
+**시장 체제(regime)를 더 이상 binary 게이트로 쓰지 않는다.** 자동 권고 funnel 은 `## 결정론
+차등 변조 후보` 블록(core/signal/alpha_posture)을 주입한다 — regime 을 **baseline** 으로 두고
+섹터RS·주도주·파동·과열도로 종목별 변조해 **verdict 후보**를 이미 결정론으로 산출했다.
+(주입 블록이 없는 경로 — 채팅 등 — 에서는 아래 품질 조건만으로 판단.)
 
-위 조건 일부만 충족:
-- 4개 충족 → verdict = `hold` (보유 중이면 유지, 신규 진입 X)
-- 3개 충족 → verdict = `wait` (관망)
-- 2개 이하 또는 시장 체제 ∈ {moderate_bear, strong_bear} → verdict = `sell` (보유 시 청산)
+1. **AlphaPosture.verdict_candidate 를 기본값으로 채택** — buy 후보면 buy, wait 후보면 wait,
+   sell 후보면 sell. **약세장이어도 강세섹터+주도주+파동 생존+눌림목이면 후보가 buy 일 수 있다 —
+   regime 만으로 막지 말 것.** 반대로 강세장이어도 과열 추격 구간이면 후보가 wait 다.
+2. **품질 확인** (후보 buy 일 때): 월봉 7월선 위(F1) + S-Score ≥ 7(주도주) + α ≥ 1.3(발산) 또는
+   눌림목(이격도 -10%~0%). 후보가 buy 인데 이 품질이 명백히 부족하면 hold/wait 로 강등 가능 —
+   단 **그 사실을 근거로 명시**(아래 deviation 규칙).
+3. **7계명 위반 0** — principle_guardian 발행. **advisory_warning 은 위반 0 처럼 취급**
+   (advisory frame 정보 표시일 뿐, blocking violation 아니므로 진입 차단 X).
+
+**deviation 규칙 (핵심 — 알파 보존)**: AlphaPosture 후보와 **다른** verdict 를 발행하려면 권고
+YAML 의 `data: llm_deviation_reason:` 에 **사실 근거**(악재·실적 쇼크·이벤트·품질 명백 미달 등)를
+반드시 남긴다. **근거 없는 보수적 강등 금지** — 후보가 buy 인데 "그냥 시장이 약해서/불안해서" wait
+로 내리는 것이 바로 알파를 죽이는 행위다(2026-06-15 strong_bull 32건 전부 wait 사고). 후보가
+wait/sell 이면 그 baseline 을 따르되, 명확한 진입 트리거가 보이면 buy 로 승격(역시 근거 명시).
 
 ### 진입 방식 분기 (큰 진입 vs 분할 진입) — 핵심
 
@@ -318,6 +326,7 @@ manifest 의 `canon_categories` 와 동기. Track A 는 9 dept framework 권위 
 
 - **cited_scores 빈 권고 금지**. 점수 5개 중 최소 3개 발행 안 됐으면 verdict = `wait` + reasons 에 사유 명시.
 - **확신 없는 강한 verdict 금지**. confidence < 60 → verdict = `hold` 또는 `wait`. confidence 80+ 에서만 강한 `buy`.
+- **AlphaPosture 후보 blanket 강등 금지 (BRAIN-ALPHA-FLEXIBILITY-001)**. 주입된 결정론 후보가 buy 인데 근거 없이 "시장이 약세라/불안해서" wait 로 내리는 것 금지 — 후보를 뒤집으려면 `data: llm_deviation_reason:` 에 사실 근거 필수. regime 만으로 종목을 통째 막는 것이 알파를 죽인다(2026-06-15 strong_bull 32건 전부 wait 사고가 그 증거).
 - **권고 ID 미할당 금지**. `recommendation_id` 는 `REC-<YYYYMMDD>-<ticker>-A` 형식 자동 생성 (구현은 `core/strategist/run_strategist.py` 영역, persona 는 양식만 강제).
 - **모든 권고에 cited 풀이 누락 ❌** (v3.1 양식 잔재 회피).
 
