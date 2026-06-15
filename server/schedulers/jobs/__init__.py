@@ -7,7 +7,11 @@ from apscheduler.triggers.cron import CronTrigger
 from core.config import get_config
 from core.logging import get_logger
 
-from server.schedulers.jobs.auto_signal import INTRADAY_CADENCES, run_auto_signal_job
+from server.schedulers.jobs.auto_signal import (
+    INTRADAY_CADENCES,
+    MISFIRE_GRACE_SEC,
+    run_auto_signal_job,
+)
 from server.schedulers.jobs.backup import run_backup
 from server.schedulers.jobs.charts import run_chart_refresh
 from server.schedulers.jobs.daily_refresh import run_daily_refresh
@@ -89,6 +93,10 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         CronTrigger(day_of_week="mon-fri", hour=18, minute=5, timezone=tz),
         id="infra::daily_refresh",
         replace_existing=True,
+        # 절전/단절로 18:05 을 놓쳐도 1h 안에 깨어나면 따라잡음 (postclose 권고 cadence 포함).
+        misfire_grace_time=MISFIRE_GRACE_SEC,
+        coalesce=True,
+        max_instances=1,
     )
     registered += 1
 
@@ -102,6 +110,10 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
             id=f"auto_signal::{cadence}",
             args=[cadence],
             replace_existing=True,
+            # 절전/단절로 cadence 시각을 놓쳐도 1h 안에 깨어나면 따라잡음 (2026-06-15 사고 보강).
+            misfire_grace_time=MISFIRE_GRACE_SEC,
+            coalesce=True,
+            max_instances=1,
         )
         registered += 1
 

@@ -625,6 +625,35 @@ async def test_job_graceful_on_cadence_failure(monkeypatch):
     assert "error" in out and "snapshot down" in out["error"]
 
 
+def test_cadence_jobs_registered_with_misfire_tolerance():
+    """절전/단절로 cron 을 놓쳐도 깨어나면 따라잡도록 misfire 내성 등록 (2026-06-15 사고 보강).
+
+    기본 misfire_grace_time=1초라 짧은 절전에도 영구 스킵되던 것을 보강. 장중 3 cadence +
+    postclose(18:05 daily_refresh) 모두 grace=MISFIRE_GRACE_SEC·coalesce·max_instances=1.
+    """
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    from server.schedulers.jobs import register_infra_jobs
+    from server.schedulers.jobs.auto_signal import MISFIRE_GRACE_SEC
+
+    sched = AsyncIOScheduler(timezone="Asia/Seoul")
+    register_infra_jobs(sched)
+
+    for cadence, _h, _m in INTRADAY_CADENCES:
+        job = sched.get_job(f"auto_signal::{cadence}")
+        assert job is not None, f"{cadence} 미등록"
+        assert job.misfire_grace_time == MISFIRE_GRACE_SEC
+        assert job.coalesce is True
+        assert job.max_instances == 1
+
+    # postclose 권고 cadence 를 품은 18:05 daily_refresh 도 동일 내성
+    drj = sched.get_job("infra::daily_refresh")
+    assert drj is not None
+    assert drj.misfire_grace_time == MISFIRE_GRACE_SEC
+    assert drj.coalesce is True
+    assert drj.max_instances == 1
+
+
 # ===========================================================================
 # M4 — 알림 (🟢 매수/매도 개별 · 🔵 일일 요약)
 # ===========================================================================

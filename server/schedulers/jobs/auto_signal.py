@@ -26,6 +26,13 @@ INTRADAY_CADENCES: list[tuple[str, int, int]] = [
     ("intraday3", 14, 35),
 ]
 
+# 미스파이어 내성 — 절전/네트워크 단절로 cron 시각을 놓쳐도, 유예시간(초) 안에 깨어나면
+#   APScheduler 가 놓친 회차를 따라잡는다(coalesce=True → 여러 회 밀려도 1회만 실행).
+#   스케줄러 기본 misfire_grace_time=1초라 짧은 절전에도 영구 스킵되던 것을 보강(2026-06-15 사고:
+#   노트북 덮개 절전 → 09:35 회차 33분 밀려 스킵). 1h = 빠른 wake-up 은 잡고, 1h 초과 장기
+#   절전은 다음 cadence 로 자연 이월(stale 회피). run_signal_cadence 는 항상 최신 스냅샷을 읽음.
+MISFIRE_GRACE_SEC: int = 3600
+
 
 async def run_auto_signal_job(cadence: str = "postclose") -> dict[str, Any]:
     """한 cadence 자동 권고 생성 (cron/daily_refresh 공용 entrypoint). 격리·graceful.
