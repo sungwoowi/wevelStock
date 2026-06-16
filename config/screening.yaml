@@ -102,3 +102,21 @@ alpha_posture:
   crash_change_pct: -2.5    # 당일 지수 등락률(%) 이 이하 = 폭락장
   breadth_collapse: 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
   dd_kill: 6                # 25일 분산일 이 이상 = 지속 천장 경고
+
+# 결정론 가격대 메뉴 (TRADE-PLAN-LIFECYCLE-001 B-MS1, core/signal/trade_plan_menu.py).
+#   결정론 = 객관 가격대 *계산기*(후보 메뉴), 결정자 아님. LLM 이 이 중에서 선택·조합(숫자 환각 차단).
+#   소수의 절대 가드레일(오닐 −7%·종가기준)만 결정론 강제. 임계 = SLOT (라이브 캘리브레이션, watchdog).
+trade_plan:
+  enabled: true
+  oneill_max_loss_pct: 0.07  # 오닐 −7% 절대 손실 한도 (손절 floor — 위반 시 clamp)
+  atr_period: 14
+  atr_k_floor: 1.5           # 손절 ATR 밴드 tight (compute_rr 정합 — 잔파동 털림 방지)
+  atr_k_cap: 3.0             # 손절 ATR 밴드 wide (수직급등주 손절폭발 방지)
+  n_buy_tranches: 3          # 분할매수 차수
+  n_sell_tranches: 3         # 분할매도 차수
+  ladder_fractions: [0.4, 0.7]  # 2·3차 entry→stop 보간 분율 (paper_trading 정합·물타기 차단)
+  sell_ratios: [0.4, 0.3, 0.3]  # 분할매도 기본 비중 (앞단 많이)
+  menu_bound_tol_pct: 0.03   # LLM 가격이 메뉴 후보와 이 % 이내면 menu-bound(환각 아님)
+  max_levels: 4              # 다단 지지/저항/목표 최대 단수
+  max_swing_stop_pct: 0.25   # 스윙저점이 진입 대비 이 % 초과로 멀면 stale 제외(수년전 저점 노이즈 차단)
+  level_dedup_pct: 0.005     # 두 가격대가 이 % 이내면 동일 레벨로 dedup(스윙고점==52주고가 중복 제거)

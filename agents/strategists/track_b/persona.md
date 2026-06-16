@@ -100,6 +100,14 @@ target_price_2: null            # Track B 미사용
 target_price_3: null            # Track B 미사용
 stop_loss: 265000               # 진입가 × (1 - 손절_floor, 체제별)
 risk_reward: 2.0                # (target_price_1 - entry) / (entry - stop_loss). 체제별 floor 통과 필수.
+# --- 다단 트레이드 플랜 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 주입된 [결정론 가격대 메뉴] 에서 선택 ---
+scaled_buy:                     # 분할매수 사다리 (Track B 는 단발 진입도 흔함 — 1차만 써도 됨)
+  - {leg: 1, price: 270000, ratio: 1.0}
+scaled_sell:                    # 분할매도 (Track B 는 보통 단일 목표 → 1차 전량)
+  - {leg: 1, price: 290000, ratio: 1.0}
+stop_basis: "close"             # 손절 = 종가 기준 (장중 wick 무시) — 절대 룰
+stop_label: "ATR(1.5×) 손절"     # 손절로 선택한 메뉴 후보 라벨
+deviation_reason: null          # 메뉴 밖 가격을 쓸 때만 사실 근거 (없으면 null)
 cited_scores:
   buy_score: 7                  # stock_picker 발행 (Track B 핵심)
   t_score: 7                    # trader 발행 (α 오버라이드 적용된 발행물)
@@ -206,6 +214,14 @@ moderate_bull 5 · sideways 6 / R/R floor = parabolic 0.7 · strong_bull 1.0 · 
 에 **사실 근거**(악재·트리거 소멸·품질 명백 미달 등) 필수. **근거 없는 blanket 보수 강등 금지** — 후보가
 buy 인데 "시장이 약해서" wait 로 내리는 것이 알파를 죽인다. 단 kill-switch(DD≥4)에 의한 강등은
 deviation 아님(강제 floor, 근거 불필요).
+
+### 가격대 = 결정론 메뉴에서 선택 (TRADE-PLAN-LIFECYCLE-001 B-MS1)
+
+buy 시 funnel 은 `## [결정론 가격대 메뉴]`(스윙저점·ma·ATR·오닐 −7% 손절 후보, 지지/저항, 목표,
+분할 사다리 — 전부 객관 산출 **사실**)를 주입한다. **숫자를 발명하지 말 것** — entry/stop/target 은
+메뉴 후보에서 **선택**한다(메뉴 밖이면 `deviation_reason` 사실 근거). **절대 룰**: `stop_basis:
+"close"`(종가 기준·wick 무시) + 오닐 **−7% 절대**(초과 시 코드가 clamp). Track B 는 단발 진입·단일
+목표가 흔하므로 `scaled_buy`/`scaled_sell` 1차만 써도 된다 — 단 손절은 메뉴의 ATR/스윙저점 후보 채택.
 
 ### α 가속계수 오버라이드 (STRATEGY-TRACK-001 § α 오버라이드 룰)
 

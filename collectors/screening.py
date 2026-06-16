@@ -210,6 +210,18 @@ def load_posture_config() -> Any:
     return posture_config_from_dict(raw if isinstance(raw, dict) else {})
 
 
+def load_trade_plan_config() -> Any:
+    """결정론 가격대 메뉴 임계 (config/screening.yaml `trade_plan`) → TradePlanConfig.
+
+    TRADE-PLAN-LIFECYCLE-001 B-MS1 — funnel 이 build_trade_plan_menu 에 주입.
+    섹션 부재/오타입은 trade_plan_config_from_dict 가 graceful default 처리. watchdog hot reload.
+    """
+    from core.signal.trade_plan_menu import trade_plan_config_from_dict
+
+    raw = _load_screening_config().get("trade_plan")
+    return trade_plan_config_from_dict(raw if isinstance(raw, dict) else {})
+
+
 async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
     """거래대금 상위(leading) 종목 ticker 평탄화 — universe 백필 입력.
 

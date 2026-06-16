@@ -423,6 +423,67 @@ async def test_run_signal_for_ticker_injects_posture_md_and_persists_alpha_postu
     assert "regime_class" in ap and "selection_reason" in ap
 
 
+# TRADE-PLAN-LIFECYCLE-001 B-MS1 — 결정론 가격대 메뉴 주입 + 영속 + 절대 가드레일
+_REC_BUY_CLAMP = """매수.
+```yaml
+recommendation_id: REC-X
+date: 2026-06-16
+ticker: "005930"
+track: A
+verdict: "buy"
+entry_price: 10000
+target_price_1: 12000
+stop_loss: 9000
+contract_version: "1.0"
+```
+"""
+
+
+def _synthetic_ohlcv():
+    import pandas as pd
+
+    idx = pd.date_range("2024-01-01", periods=300, freq="B")
+    base = [10_000 + i * 2 + (250 if i % 20 < 10 else -250) for i in range(300)]
+    close = pd.Series(base, index=idx, dtype=float)
+    return pd.DataFrame({
+        "open": close, "high": close + 120, "low": close - 120,
+        "close": close, "volume": pd.Series([1_000_000.0] * 300, index=idx),
+    })
+
+
+async def test_run_signal_injects_trade_plan_menu_and_clamps_oneill(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    monkeypatch.setattr(
+        "collectors.charts.load_ohlcv_from_db", lambda *a, **k: _synthetic_ohlcv()
+    )
+    seen: dict = {}
+
+    async def _runner(track_id, messages, **kw):
+        seen["tp_md"] = kw.get("trade_plan_menu_md")
+        return SimpleNamespace(text=_REC_BUY_CLAMP)
+
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-16", scorecard=_sample_scorecard(),
+        strategist_runner=_runner, band_gate=False, notify_signals=False,
+    )
+    assert r["persisted"] is True
+    # 결정론 가격대 메뉴가 전략가에 사실로 주입됨
+    assert seen["tp_md"] and "결정론 가격대 메뉴" in seen["tp_md"]
+    rec = captured["rec"]
+    # 메뉴 영속(설명가능성)
+    assert "trade_plan_menu" in rec.data
+    assert rec.data["trade_plan_menu"]["entry_hint"] is not None
+    # 절대 가드레일 — 손절 −10%(9000) → 오닐 −7% floor(9300) clamp
+    assert rec.stop_loss == pytest.approx(9300.0)
+    assert rec.data["trade_plan"]["oneill_clamped"]["to"] == pytest.approx(9300.0)
+    assert "menu_bound" in rec.data["trade_plan"]
+
+
 # ---------------------------------------------------------------------------
 # run_signal_for_ticker — 전략가 직접 호출 → cadence-keyed persist (source=auto)
 # ---------------------------------------------------------------------------

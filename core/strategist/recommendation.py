@@ -81,6 +81,53 @@ def _coerce_float(v: Any) -> float | None:
         return None
 
 
+def _parse_ladder(raw: Any) -> list[dict[str, Any]]:
+    """분할 사다리 (scaled_buy/scaled_sell) 정규화 → [{leg, price, ratio}] (graceful).
+
+    LLM 발행 형태 수용: [{price, ratio}] 또는 [{leg, price, ratio}] 또는 [가격, ...].
+    """
+    if not isinstance(raw, list):
+        return []
+    legs: list[dict[str, Any]] = []
+    for i, item in enumerate(raw):
+        if isinstance(item, dict):
+            price = _coerce_float(item.get("price"))
+            if price is None:
+                continue
+            legs.append({
+                "leg": int(item.get("leg") or (i + 1)),
+                "price": price,
+                "ratio": _coerce_float(item.get("ratio")),
+            })
+        else:
+            price = _coerce_float(item)
+            if price is not None:
+                legs.append({"leg": i + 1, "price": price, "ratio": None})
+    return legs
+
+
+def _parse_trade_plan(d: dict[str, Any]) -> dict[str, Any]:
+    """다단 트레이드 플랜 필드 (TRADE-PLAN-LIFECYCLE-001 B-MS1) → data['trade_plan'] (graceful).
+
+    LLM 이 메뉴에서 선택·조합해 발행한 다단 손절/분할매수/분할매도 + 메뉴-밖 deviation 근거.
+    기존 단일 entry/stop/target 은 그대로 두고 *가산*만 한다(하위호환).
+    """
+    plan: dict[str, Any] = {}
+    buy = _parse_ladder(d.get("scaled_buy"))
+    sell = _parse_ladder(d.get("scaled_sell"))
+    if buy:
+        plan["scaled_buy"] = buy
+    if sell:
+        plan["scaled_sell"] = sell
+    if d.get("stop_basis"):
+        plan["stop_basis"] = str(d["stop_basis"])
+    if d.get("stop_label"):
+        plan["stop_label"] = str(d["stop_label"])
+    if d.get("deviation_reason"):
+        plan["deviation_reason"] = str(d["deviation_reason"])
+    return plan
+
+
 def _from_mapping(d: dict[str, Any]) -> StrategistRecommendation | None:
     """파싱·로드 공용 — dict → dataclass (필수 필드 검증, graceful)."""
     if not isinstance(d, dict):
@@ -94,6 +141,11 @@ def _from_mapping(d: dict[str, Any]) -> StrategistRecommendation | None:
         targets = [
             f for f in (_coerce_float(d.get(f"target_price_{i}")) for i in (1, 2, 3)) if f is not None
         ]
+    # 다단 트레이드 플랜 (B-MS1) — 발행된 data 에 가산. 영속 형태(data.trade_plan)도 그대로 수용.
+    data = dict(d.get("data") or {})
+    plan = _parse_trade_plan(d)
+    if plan:
+        data["trade_plan"] = {**(data.get("trade_plan") or {}), **plan}
     return StrategistRecommendation(
         recommendation_id=str(d["recommendation_id"]),
         ticker=str(d["ticker"]),
@@ -108,7 +160,7 @@ def _from_mapping(d: dict[str, Any]) -> StrategistRecommendation | None:
         cited_scores=dict(d.get("cited_scores") or {}),
         confidence=int(d.get("confidence") or 0),
         reasons=[str(r) for r in (d.get("reasons") or [])],
-        data=dict(d.get("data") or {}),
+        data=data,
         contract_version=str(d.get("contract_version", "1.0")),
     )
 

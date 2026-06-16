@@ -400,6 +400,43 @@ async def _emit_daily_summary(summary: dict[str, Any]) -> None:
         log.warning("daily_summary_notify_failed", error=str(e))
 
 
+def _apply_trade_plan_guardrails(rec: Any, menu: Any, cfg: Any) -> None:
+    """절대 가드레일 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — LLM 권고에 결정론 강제.
+
+    ① 오닐 −7% floor: buy 손절이 −7% 초과(가격이 더 낮음)면 floor 로 clamp(+로그).
+    ② menu-bound 감사: entry/stop/target 이 메뉴 후보와 모두 멀면 pl=false 플래그(환각 의심).
+    rec.data['trade_plan'] 에 가산(파서가 채운 다단 필드와 병합). 순수·graceful.
+    """
+    from core.signal.trade_plan_menu import clamp_stop_to_oneill, is_menu_bound
+
+    if cfg is None or rec.verdict != "buy":
+        return
+    plan = dict(rec.data.get("trade_plan") or {})
+
+    # ① 오닐 −7% floor clamp (entry·stop 둘 다 있을 때만).
+    if rec.entry_price and rec.stop_loss:
+        clamped, was = clamp_stop_to_oneill(rec.entry_price, rec.stop_loss, cfg)
+        if was:
+            plan["oneill_clamped"] = {"from": round(rec.stop_loss, 2), "to": round(clamped, 2)}
+            rec.stop_loss = clamped
+            log.info("trade_plan_oneill_clamp", ticker=rec.ticker,
+                     frm=plan["oneill_clamped"]["from"], to=plan["oneill_clamped"]["to"])
+
+    # ② menu-bound 감사 — LLM 가격이 결정론 메뉴 후보에 근거하는지(환각 차단).
+    candidates: list[float] = [c.price for c in menu.stop_candidates]
+    candidates += [leg.price for leg in menu.buy_ladder]
+    candidates += [c.price for c in menu.target_candidates]
+    prices = [p for p in (rec.entry_price, rec.stop_loss, *rec.target_prices) if p]
+    if candidates and prices:
+        bound = all(is_menu_bound(p, candidates, cfg.menu_bound_tol_pct) for p in prices)
+        plan["menu_bound"] = bound
+        if not bound:
+            log.warning("trade_plan_menu_unbound", ticker=rec.ticker, track=rec.track)
+
+    if plan:
+        rec.data["trade_plan"] = plan
+
+
 async def run_signal_for_ticker(
     *,
     ticker: str,
@@ -455,6 +492,29 @@ async def run_signal_for_ticker(
         log.warning("alpha_posture_failed", ticker=ticker, track=track, error=str(e))
         posture, posture_md = None, None
 
+    # 결정론 가격대 메뉴 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 다단 손절/분할매수/목표 *후보*를
+    # 사실로 주입(숫자 환각 차단). LLM 이 이 중에서 선택·조합. 영속(설명가능성) + 절대 가드레일.
+    trade_plan_menu, trade_plan_menu_md, tp_cfg = None, None, None
+    try:
+        from collectors.charts import load_ohlcv_from_db
+        from collectors.screening import load_trade_plan_config
+        from core.inference.run_analyst import resolve_ticker as _resolve_tp
+        from core.signal.trade_plan_menu import (
+            build_trade_plan_menu, render_trade_plan_menu_md, trade_plan_inputs_from_ohlcv,
+        )
+
+        resolved_code, _ = _resolve_tp(ticker)
+        if resolved_code:
+            tp_cfg = load_trade_plan_config()
+            tp_inputs = trade_plan_inputs_from_ohlcv(
+                load_ohlcv_from_db(resolved_code), ticker=ticker,
+                extension=sc.extension_score, config=tp_cfg,
+            )
+            trade_plan_menu = build_trade_plan_menu(tp_inputs, tp_cfg)
+            trade_plan_menu_md = render_trade_plan_menu_md(trade_plan_menu)
+    except Exception as e:  # noqa: BLE001 — 메뉴 실패가 권고 생성을 막지 않음(graceful)
+        log.warning("trade_plan_menu_failed", ticker=ticker, track=track, error=str(e))
+
     runner = strategist_runner or run_strategist
     if retries is None:
         from collectors.screening import get_signal_strategist_retries
@@ -470,6 +530,7 @@ async def run_signal_for_ticker(
                 track_id, messages, target=ticker,
                 prefetched_analyst_outputs=entries,
                 alpha_posture_md=posture_md,
+                trade_plan_menu_md=trade_plan_menu_md,
                 provider=provider, mock_fallback_allowed=mock_fallback_allowed,
             )
         except Exception as e:  # noqa: BLE001 — transient 면 재시도, 아니면 그 종목만 skip
@@ -499,6 +560,9 @@ async def run_signal_for_ticker(
     # 결정론 후보 영속 — LLM verdict 와 무관하게 항상(설명가능성·deviation 감사 기준).
     if posture is not None:
         rec.data["alpha_posture"] = posture.to_dict()
+    if trade_plan_menu is not None:
+        rec.data["trade_plan_menu"] = trade_plan_menu.to_dict()
+        _apply_trade_plan_guardrails(rec, trade_plan_menu, tp_cfg)
     ok = persist_recommendation(rec)
     # 🟢 매수/매도 개별 알림 (어느 cadence든 buy/sell 뜨면 즉시 — 출근 중 포착).
     if ok and notify_signals and rec.verdict in ("buy", "sell"):

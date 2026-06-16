@@ -117,6 +117,62 @@ def test_parse_cited_scores_preserved():
     assert rec.cited_scores["s_score"] is None
 
 
+# ---------------------------------------------------------------------------
+# 다단 트레이드 플랜 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 가산 파싱, 하위호환
+# ---------------------------------------------------------------------------
+
+SAMPLE_MULTI_LEVEL = """다단 플랜 매수 권고.
+
+```yaml
+recommendation_id: REC-20260616-000660-A
+date: 2026-06-16
+ticker: "000660"
+display_name: "SK하이닉스"
+track: A
+verdict: "buy"
+entry_price: 10000
+target_price_1: 11000
+target_price_2: 12500
+stop_loss: 9500
+risk_reward: 2.0
+scaled_buy:
+  - {leg: 1, price: 10000, ratio: 0.6}
+  - {leg: 2, price: 9800, ratio: 0.3}
+  - {leg: 3, price: 9650, ratio: 0.1}
+scaled_sell:
+  - {leg: 1, price: 11000, ratio: 0.5}
+  - {leg: 2, price: 12500, ratio: 0.5}
+stop_basis: "close"
+stop_label: "직전 스윙저점"
+cited_scores:
+  s_score: 8
+confidence: 78
+contract_version: "1.0"
+```
+"""
+
+
+def test_parse_multi_level_into_trade_plan():
+    rec = parse_recommendation(SAMPLE_MULTI_LEVEL)
+    assert rec is not None
+    plan = rec.data.get("trade_plan")
+    assert plan is not None
+    assert len(plan["scaled_buy"]) == 3
+    assert plan["scaled_buy"][0] == {"leg": 1, "price": 10000.0, "ratio": 0.6}
+    assert len(plan["scaled_sell"]) == 2
+    assert plan["stop_basis"] == "close"
+    assert plan["stop_label"] == "직전 스윙저점"
+    # 기존 단일 필드도 그대로(하위호환).
+    assert rec.entry_price == 10000
+    assert rec.target_prices == [11000, 12500]
+
+
+def test_parse_backward_compat_no_plan():
+    """다단 필드 없는 기존 권고 → data.trade_plan 없음(무변)."""
+    rec = parse_recommendation(SAMPLE_B)
+    assert "trade_plan" not in rec.data
+
+
 def test_parse_returns_none_when_no_yaml_block():
     # 권고 양식 미발행(개념 질문 응답 등) → graceful None
     assert parse_recommendation("R/R 이란 손익비를 뜻합니다. 별다른 권고 없음.") is None

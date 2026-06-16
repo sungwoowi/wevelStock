@@ -360,6 +360,7 @@ async def run_strategist(
     provider: str | None = None,
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
     alpha_posture_md: str | None = None,
+    trade_plan_menu_md: str | None = None,
     mock_fallback_allowed: bool = True,
 ) -> StrategistResponse:
     """단일 전략가 호출. 멀티턴 messages 배열 그대로 수용.
@@ -402,6 +403,11 @@ async def run_strategist(
     # 주입. 자동 권고 funnel 만 전달(채팅 경로는 None → 무변).
     if alpha_posture_md:
         scores_md = f"{scores_md}\n\n{alpha_posture_md}" if scores_md else alpha_posture_md
+
+    # 결정론 가격대 메뉴 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 다단 손절/분할매수/목표 후보를
+    # 사실로 주입. LLM 은 이 중에서 선택·조합(숫자 환각 차단). funnel 만 전달(채팅 None → 무변).
+    if trade_plan_menu_md:
+        scores_md = f"{scores_md}\n\n{trade_plan_menu_md}" if scores_md else trade_plan_menu_md
 
     # market snapshot (분석가와 동일)
     snap_started = time.monotonic()

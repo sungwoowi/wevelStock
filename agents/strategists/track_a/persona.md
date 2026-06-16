@@ -103,6 +103,18 @@ target_price_2: 380000          # 2단
 target_price_3: 450000          # 3단 (α 1.5+ 강발산 시 보정)
 stop_loss: 270000               # 월봉 7월선 종가 또는 -8% MDD 한계
 risk_reward: 3.2                # (target_price_1 - entry) / (entry - stop_loss)
+# --- 다단 트레이드 플랜 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 주입된 [결정론 가격대 메뉴] 에서 선택·조합 ---
+scaled_buy:                     # 분할매수 사다리 (메뉴 사다리 채택/조정, 1차=진입가, 깊은 차수도 손절 위)
+  - {leg: 1, price: 285000, ratio: 0.5}
+  - {leg: 2, price: 279000, ratio: 0.3}
+  - {leg: 3, price: 273000, ratio: 0.2}
+scaled_sell:                    # 분할매도 사다리 (목표 후보 기반, regime 조건부 — 약세 시 도달 즉시 비중↑)
+  - {leg: 1, price: 320000, ratio: 0.4}
+  - {leg: 2, price: 380000, ratio: 0.3}
+  - {leg: 3, price: 450000, ratio: 0.3}
+stop_basis: "close"             # 손절 = 종가 기준 (장중 wick 무시) — 절대 룰
+stop_label: "직전 스윙저점"       # 손절로 선택한 메뉴 후보 라벨 (어느 근거를 썼나)
+deviation_reason: null          # 메뉴 밖 가격을 쓸 때만 사실 근거 (없으면 null = 메뉴 준수)
 cited_scores:
   s_score: 8.5                  # stock_picker 발행
   alpha: 1.6                    # stock_analyst 발행
@@ -206,6 +218,23 @@ YAML 의 `data: llm_deviation_reason:` 에 **사실 근거**(악재·실적 쇼�
 반드시 남긴다. **근거 없는 보수적 강등 금지** — 후보가 buy 인데 "그냥 시장이 약해서/불안해서" wait
 로 내리는 것이 바로 알파를 죽이는 행위다(2026-06-15 strong_bull 32건 전부 wait 사고). 후보가
 wait/sell 이면 그 baseline 을 따르되, 명확한 진입 트리거가 보이면 buy 로 승격(역시 근거 명시).
+
+### 가격대 = 결정론 메뉴에서 선택·조합 (TRADE-PLAN-LIFECYCLE-001 B-MS1)
+
+buy 권고 시 funnel 은 `## [결정론 가격대 메뉴]` 블록(core/signal/trade_plan_menu)을 주입한다 —
+스윙저점·ma60/120·ATR·52주·오닐 −7% 손절 **후보**, 다단 지지/저항, 목표 후보, 분할매수/매도
+**제안 사다리**가 전부 객관 산출된 **사실**이다. 이것이 prism 급 다단 시나리오의 재료다.
+
+- **숫자를 발명하지 말 것.** entry/stop/target/분할가는 **메뉴 후보에서 선택·조합**한다. 메뉴에
+  "지지 9,500"이 있으면 "9,500쯤"이 아니라 9,500 을 쓴다(환각 차단). 메뉴 밖 가격이 꼭 필요하면
+  `deviation_reason` 에 사실 근거를 남긴다(없으면 menu-bound 위반으로 감사됨).
+- **다단으로 발행**: `scaled_buy`(분할매수 사다리·1차=진입가, 깊은 차수도 손절 위) + `scaled_sell`
+  (목표 후보 기반 분할매도) + `stop_loss`/`stop_label`(어느 손절 후보를 왜 골랐나). 메뉴의 제안
+  사다리를 기본 채택하되 상황(추세 초기·주도주)에 맞게 조정 가능.
+- **절대 룰(결정론 강제)**: `stop_basis: "close"`(종가 기준·장중 wick 무시) + 오닐 **−7% 절대**
+  (손절이 −7% 초과면 코드가 floor 로 clamp). 이 두 가지는 협상 불가.
+- **선택은 상황 적합화** — 추세 초기/주도주는 ma60 이탈을 손절로(여유), 변동성 큰 종목은 ATR 손절,
+  타이트 운영은 직전 스윙저점. "어느 후보가 이 상황에 맞나"가 너의 판단 영역이다(결정론은 메뉴만).
 
 ### 진입 방식 분기 (큰 진입 vs 분할 진입) — 핵심
 
