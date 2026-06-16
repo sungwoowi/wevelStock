@@ -40,6 +40,7 @@
 | `chart_ohlcv` | `collectors/charts.py` | `charts.py` · `market_macro.py` · `sector_rs.py` · `core/account/holdings.py`·`desk.py` | 없음(내부 계산) | **KIS 일봉 OHLCV 5년 캐시** — (ticker, date) PK |
 | `fundamentals` | `collectors/fundamentals.py` | `fundamentals.py` | 없음 | **yfinance 펀더멘털 8필드 + 분기 5** — ticker PK, 24h TTL |
 | `manual_anchors` | (테스트만, 실 write 미구현) | `collectors/anchors.py` | 없음 | 사용자 직접 앵커 — (ticker, timeframe) PK |
+| `universe_membership` | `collectors/universe_membership.py`(거래대금) · `collectors/volume_bull.py`(거래량양봉) | `universe_membership.py`(get_stock_name·get_list_members·days_since) · `core/watchlist_view.py` · `core/account/desk_view.py` | `/api/watchlist/funnel` | **관심종목 리스트 일자별 멤버십** — (date, market, ticker, **list_type**) PK. list_type=trade_value\|volume_bull. 종목명 소스 + "며칠 전 상위" + funnel 멤버십(team_outputs.funnel_stage 와 조인). **거래대금 상위 신규 list 만들기 전 여기 확장** |
 
 ## 4. 뉴스
 

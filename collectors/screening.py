@@ -222,6 +222,17 @@ def load_trade_plan_config() -> Any:
     return trade_plan_config_from_dict(raw if isinstance(raw, dict) else {})
 
 
+def load_curation_config() -> Any:
+    """관심종목 잡주 floor + 정배열 임계 (config/screening.yaml `curation`) → CurationConfig.
+
+    거래대금/거래량양봉 리스트 persist 전 curate_groups 에 주입. graceful default. watchdog hot reload.
+    """
+    from collectors.universe_curation import curation_config_from_dict
+
+    raw = _load_screening_config().get("curation")
+    return curation_config_from_dict(raw if isinstance(raw, dict) else {})
+
+
 async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
     """거래대금 상위(leading) 종목 ticker 평탄화 — universe 백필 입력.
 
@@ -234,6 +245,16 @@ async def fetch_universe_tickers(kis: Any | None = None) -> list[str]:
     data = await fetch_kr_leading_stocks(
         kis, kospi_limit=kospi_limit, kosdaq_limit=kosdaq_limit
     )
+    # 거래대금 상위 멤버십 영속 — 잡주 floor+정배열 큐레이션 후(관심종목 페이지용). 멱등, 실패해도 universe 무영향.
+    # screening universe(반환 tickers)는 *전체* 유지 — 큐레이션은 관심종목 리스트에만(screening 동작 불변).
+    try:
+        from collectors.universe_curation import curate_groups
+        from collectors.universe_membership import persist_universe_membership
+
+        curated = curate_groups(data, list_type="trade_value", cfg=load_curation_config())
+        persist_universe_membership(curated)
+    except Exception as e:  # noqa: BLE001
+        log.warning("universe_membership_persist_failed", error=str(e))
     tickers = [i.get("ticker", "") for i in data.get("kospi", [])]
     tickers += [i.get("ticker", "") for i in data.get("kosdaq", [])]
     return [t for t in dict.fromkeys(tickers) if t]

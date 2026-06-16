@@ -267,6 +267,12 @@ export type ActiveRec = {
   display_name: string;
   track: string;
   verdict: string;
+  funnel_stage?: string; // "interest" | "watching" | "entering" (TRADE-PLAN-LIFECYCLE 2단계)
+  stage_reason?: string;
+  watching_entry?: number | null; // 매수대기 대기진입가
+  watching_label?: string; // 진입 방법 (눌림/추세 하단)
+  universe_last_date?: string | null; // 마지막 거래대금 상위 일자 (YYYY-MM-DD)
+  universe_days_ago?: number | null; // 그로부터 경과 일수 (0=오늘)
   entry_price: number | null;
   stop_loss: number | null;
   target_prices: number[];
@@ -293,6 +299,55 @@ export type FillEntry = {
 
 /** GET /api/desk/feed. */
 export type DeskFeed = { active_recommendations: ActiveRec[]; recent_fills: FillEntry[] };
+
+// --- 관심종목 funnel (GET /api/watchlist/funnel) ------------------------------
+// 주축 = 트랙(장기/단기) × 단계(진입/대기/관심). 바스킷(거래대금/거래량)은 후보 소스(칩).
+export type LadderLeg = { leg: number; price: number; ratio: number };
+export type WatchlistItem = {
+  ticker: string;
+  display_name: string;
+  sources: string[]; // ["trade_value","volume_bull"] — 후보 바스킷 출처
+  is_dual: boolean; // 거래대금 ∩ 거래량 양봉 교집합(둘 다)
+  concept: string; // leader 주도주 | pullback 눌림 | base 바닥·소외 | unknown
+  rank: number | null;
+  change_pct: number | null;
+  funnel_stage: string; // interest | watching | entering
+  verdict: string | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  target_prices: number[];
+  watching_entry: number | null;
+  watching_label: string;
+  stage_scenario: string | null; // 매매 시계열 시나리오(매수대기/진입)
+  scaled_buy: LadderLeg[] | null;
+  scaled_sell: LadderLeg[] | null;
+};
+export type WatchlistStageGroup = { stage: string; count: number; items: WatchlistItem[] };
+export type WatchlistTrack = { track: string; label: string; stages: WatchlistStageGroup[] };
+export type BasketMember = {
+  ticker: string;
+  display_name: string;
+  rank: number | null;
+  change_pct: number | null;
+  trade_amount: number | null;
+  volume: number | null;
+  is_dual: boolean; // 거래대금 ∩ 거래량 교집합 (둘 다)
+};
+export type BasketDateGroup = { date: string; count: number; items: BasketMember[] };
+export type WatchlistBasket = {
+  list_type: string;
+  label: string;
+  count: number;
+  latest_date: string | null;
+  dates: BasketDateGroup[];
+};
+export type WatchlistConceptGroup = { concept: string; label: string; count: number; items: WatchlistItem[] };
+export type WatchlistInterest = { count: number; concepts: WatchlistConceptGroup[] };
+export type WatchlistFunnel = {
+  baskets: WatchlistBasket[];
+  tracks: WatchlistTrack[];
+  interest: WatchlistInterest;
+};
 
 // --- 뉴스 (NEWS-SOURCE-001 / GET /api/news/*) ---------------------------------
 

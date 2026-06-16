@@ -28,6 +28,16 @@ log = get_logger(__name__)
 _YAML_FENCE = re.compile(r"```(?:yaml|yml)?\s*\n(.*?)```", re.DOTALL)
 _REQUIRED = ("recommendation_id", "ticker", "track")
 
+# 구조 필드(dataclass top-level + 발행 YAML 전용) — 영속 평탄화 dict 에서 data 복원 시 제외.
+# 나머지 top-level 키(alpha_posture·funnel_stage·source·cadence 등)는 rec.data 로 복원.
+_CORE_KEYS = frozenset({
+    "recommendation_id", "date", "ticker", "display_name", "track", "verdict",
+    "entry_price", "target_prices", "stop_loss", "risk_reward", "cited_scores",
+    "confidence", "reasons", "contract_version",
+    "target_price_1", "target_price_2", "target_price_3",  # 발행 형태
+    "scaled_buy", "scaled_sell", "stop_basis", "stop_label", "deviation_reason",  # _parse_trade_plan 처리
+})
+
 
 @dataclass
 class StrategistRecommendation:
@@ -143,6 +153,11 @@ def _from_mapping(d: dict[str, Any]) -> StrategistRecommendation | None:
         ]
     # 다단 트레이드 플랜 (B-MS1) — 발행된 data 에 가산. 영속 형태(data.trade_plan)도 그대로 수용.
     data = dict(d.get("data") or {})
+    # 영속 형태는 rec.data 를 top-level 로 평탄화(persist_recommendation) → core 키 외 나머지를
+    # data 로 복원(alpha_posture·funnel_stage·source 등). 발행 형태(nested data)는 위에서 이미 수용.
+    for k, v in d.items():
+        if k not in _CORE_KEYS and k != "data" and k not in data:
+            data[k] = v
     plan = _parse_trade_plan(d)
     if plan:
         data["trade_plan"] = {**(data.get("trade_plan") or {}), **plan}
@@ -266,7 +281,9 @@ def load_active_recommendations(*, within_days: int = 30) -> list[StrategistReco
     """활성 권고 조회 — track_a/b · 종목 target(global 제외) · 최근 within_days.
 
     데스크(RB-MS2)가 매일 이 목록을 read → 지정가 도달 판정·가상 체결.
-    동일 (team, ticker) 는 최신 권고 1건만 (recommendation_id 기준 갱신).
+    **동일 (track, ticker) 는 최신 1건만** — recommendation_id 는 cadence·날짜마다 달라지므로
+    그 키로 dedup 하면 같은 종목이 cadence·일자마다 누적된다(데스크 중복 버그). timestamp DESC
+    정렬 + (track, ticker) 첫 등장 = 종목별 최신 플랜.
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(days=within_days)).isoformat()
     rows = get_db().fetch_all(
@@ -280,15 +297,18 @@ def load_active_recommendations(*, within_days: int = 30) -> list[StrategistReco
         (cutoff,),
     )
     out: list[StrategistRecommendation] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for row in rows:
         try:
             data = json.loads(row["data_json"])
         except (json.JSONDecodeError, TypeError):
             continue
         rec = _from_mapping(data)
-        if rec is None or rec.recommendation_id in seen:
+        if rec is None:
             continue
-        seen.add(rec.recommendation_id)
+        key = (rec.track, rec.ticker)
+        if key in seen:
+            continue
+        seen.add(key)
         out.append(rec)
     return out

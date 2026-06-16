@@ -127,3 +127,9 @@ depends_on:
 
 ## 완료 정의
 사용자 개입 0으로 매일 4 cadence(09:35/12:35/14:35/18:05)에 watchlist 가 결정론 스크리닝→funnel→권고(매수/관망)로 발행되고(Track A·B 모두, 국장), 데스크가 그 위에서 체결·관망 리포트를 산출하며, 🔵 일일 요약 1건 + 🟢 매수/매도 개별 알림이 나간다 → 몸통이 빈손으로 돌지 않는다. (LLM 비용 = 결정론 컷 + 배치묶음으로 ~10콜/cadence 수준.)
+
+## 후속 — 체계적 종목 관리(관심종목 페이지, 2026-06-16)
+"지금 지켜보는 권고"가 거래대금 상위 누적 덤프로 무의미하다는 사용자 진단 → 관심종목 페이지로 funnel 표면화.
+- **두 큐레이션 리스트** = `universe_membership`(list_type='trade_value' 거래대금 / 'volume_bull' 거래량 양봉+3%) 매 cadence 멱등 영속. 거래대금=`fetch_universe_tickers`, 거래량양봉=`collectors/volume_bull.fetch_kr_volume_bull`(하이브리드: 장중 stock_price 실시간 시가 / 18:05 chart_ohlcv EOD). **신규 테이블 0 — universe_membership list_type 확장**(가드 #11).
+- **funnel(관심→매수대기→매수진입)** = `team_outputs.funnel_stage`(TRADE-PLAN-LIFECYCLE 2단계) 재사용. `core/watchlist_view.watchlist_funnel_view` = 멤버십 ⋈ 최신 rec 단계 조인. API `/api/watchlist/funnel`, 페이지 `/watchlist`(PC). 라이브 검증: 거래량 양봉 26종 실 KIS 산출.
+- **⏳ FOLLOW-UP**: 페이지 자리잡으면 데스크 "지금 지켜보는 권고" 섹션을 actionable(매수대기+진입)만 남기게 개선(관심 전체는 /watchlist).

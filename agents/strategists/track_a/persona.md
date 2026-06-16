@@ -135,6 +135,10 @@ data:
   holding_period_estimate_days: 120         # stock_analyst 발행 read (Module A 목표가 3단 + α 발산 기반)
   distribution_day_count: 1
   llm_deviation_reason: null                # AlphaPosture 후보와 다른 verdict 발행 시에만 사실 근거 (없으면 null = 후보 추종)
+  # 매수대기 단계 (verdict=wait/hold + 진입존 있을 때만 — TRADE-PLAN-LIFECYCLE-001 2단계):
+  #   funnel_stage: "watching"               # funnel 파생값 인용(발명 금지)
+  #   stage_scenario: "종가 20일선(9,800) 회복+거래량 동반 시 1차 진입, 미달 시 스윙저점(9,500) 분할"
+  #   waiting_entry: 9800                     # entry_zone 후보 중 선택한 1차 대기가 (menu_bound)
   yesterday_verdict_delta: "어제 hold → 오늘 buy (트리거: 월봉 종가 7월선 재돌파)"
   # ▲ 강제 필드. first run 시 "first run", 어제와 동일 verdict 면 "unchanged".
   # ▲ Track A 본질 = 연 5-15회 낮은 회전. 충분한 트리거 없는 verdict 뒤집기 = 본질 위반 자각 메커니즘.
@@ -235,6 +239,21 @@ buy 권고 시 funnel 은 `## [결정론 가격대 메뉴]` 블록(core/signal/t
   (손절이 −7% 초과면 코드가 floor 로 clamp). 이 두 가지는 협상 불가.
 - **선택은 상황 적합화** — 추세 초기/주도주는 ma60 이탈을 손절로(여유), 변동성 큰 종목은 ATR 손절,
   타이트 운영은 직전 스윙저점. "어느 후보가 이 상황에 맞나"가 너의 판단 영역이다(결정론은 메뉴만).
+
+### 매수대기 단계 시나리오 (TRADE-PLAN-LIFECYCLE-001 2단계)
+
+verdict 가 **wait/hold 인데** 주입된 `## 결정론 차등 변조 후보` 블록의 **조건부 진입**에 **진입존
+후보(팩트)** 가 함께 있으면, 이 종목은 단순 관망이 아니라 **"매수대기"** 단계 후보다(점수 근접 +
+진입 트리거 대기). funnel 이 이미 단계를 라벨하지만, 너는 그 단계의 **실전 진입 시나리오**를 서술한다:
+
+- **대기 진입가 선택**: 진입존 후보(entry_zone) 중 *방법에 맞는* 가격을 고른다 — 과열 해소
+  눌림(pullback)=20일선/직전 스윙저점, 추세 하단(bear_alignment)=스윙저점/60일선. **숫자는
+  진입존·메뉴 후보에서만** 쓴다(발명 시 `deviation_reason` 사실 근거 — menu_bound 감사됨).
+- **진입 트리거·조건 서술**: "무엇이 충족되면 매수대기 → 진입인가"를 한 줄 시계열로(예: 종가 20일선
+  9,800 회복 + 거래량 동반 시 1차 진입, 미달 시 직전 스윙저점 9,500 분할). conditional_entry.trigger 근거.
+- **결정론은 시나리오를 서술하지 않는다** — 진입가 선택·서술은 너의 판단 영역, 결정론은 zone(팩트)만 제공.
+- wait 권고 `data` 에 가산(선택): `funnel_stage: "watching"`(funnel 파생값 — 발명 금지, 확인·인용만) /
+  `stage_scenario: "<위 한 줄 시계열>"` / `waiting_entry: <entry_zone 후보 중 선택한 1차 대기가>`.
 
 ### 진입 방식 분기 (큰 진입 vs 분할 진입) — 핵심
 

@@ -97,6 +97,13 @@ async def compute_scorecard(ticker: str, snapshot: Any) -> Scorecard:
     )
 
     resolved, name = resolve_ticker(ticker)
+    if not name:  # 30종 매핑 밖 → 거래대금 상위 멤버십에 기록된 종목명 사용(코드 노출 방지).
+        try:
+            from collectors.universe_membership import get_stock_name
+
+            name = get_stock_name(ticker)
+        except Exception:  # noqa: BLE001 — 이름 조회 실패가 점수표를 막지 않음
+            name = None
     sc = Scorecard(ticker=ticker, display_name=name or ticker)
     if resolved is None:
         sc.errors.append(f"ticker_resolve_failed:{ticker}")
@@ -483,14 +490,17 @@ async def run_signal_for_ticker(
     # 전략가에 권위 베이스라인으로 주입(가드레일 있는 C) + 권고에 항상 영속(설명가능성).
     from core.signal.alpha_posture import derive_alpha_posture, render_alpha_posture_md
 
+    posture, posture_md, posture_inputs, posture_cfg = None, None, None, None
     try:
         from collectors.screening import load_posture_config
 
-        posture = derive_alpha_posture(posture_inputs_from_scorecard(sc, track), load_posture_config())
+        posture_inputs = posture_inputs_from_scorecard(sc, track)
+        posture_cfg = load_posture_config()
+        posture = derive_alpha_posture(posture_inputs, posture_cfg)
         posture_md = render_alpha_posture_md(posture)
     except Exception as e:  # noqa: BLE001 — 변조 실패가 권고 생성을 막지 않음(graceful)
         log.warning("alpha_posture_failed", ticker=ticker, track=track, error=str(e))
-        posture, posture_md = None, None
+        posture, posture_md, posture_inputs, posture_cfg = None, None, None, None
 
     # 결정론 가격대 메뉴 (TRADE-PLAN-LIFECYCLE-001 B-MS1) — 다단 손절/분할매수/목표 *후보*를
     # 사실로 주입(숫자 환각 차단). LLM 이 이 중에서 선택·조합. 영속(설명가능성) + 절대 가드레일.
@@ -514,6 +524,14 @@ async def run_signal_for_ticker(
             trade_plan_menu_md = render_trade_plan_menu_md(trade_plan_menu)
     except Exception as e:  # noqa: BLE001 — 메뉴 실패가 권고 생성을 막지 않음(graceful)
         log.warning("trade_plan_menu_failed", ticker=ticker, track=track, error=str(e))
+
+    # 진입존(팩트) 보강 (TRADE-PLAN-LIFECYCLE-001 2단계) — 관망 종목 conditional_entry 에
+    # 메뉴 지지 후보 zone 부착 후 posture_md 재렌더(zone 반영). 메뉴 있을 때만(중복 렌더 회피).
+    if posture is not None and posture.conditional_entry is not None and trade_plan_menu is not None:
+        from core.signal.alpha_posture import enrich_conditional_entry
+
+        posture.conditional_entry = enrich_conditional_entry(posture.conditional_entry, trade_plan_menu)
+        posture_md = render_alpha_posture_md(posture)
 
     runner = strategist_runner or run_strategist
     if retries is None:
@@ -558,8 +576,18 @@ async def run_signal_for_ticker(
         "recommendation_id": new_id, "band_fingerprint": fingerprint,
     }
     # 결정론 후보 영속 — LLM verdict 와 무관하게 항상(설명가능성·deviation 감사 기준).
+    # alpha_posture 는 보강된 conditional_entry(진입존 zone)를 포함해 영속.
     if posture is not None:
         rec.data["alpha_posture"] = posture.to_dict()
+        # 단계 라벨 파생(결정론 룰) — 관심/매수대기/진입. LLM verdict + 점수근접 + 진입존 조립.
+        if posture_inputs is not None:
+            from core.signal.alpha_posture import derive_funnel_stage
+
+            stage = derive_funnel_stage(
+                rec.verdict, posture_inputs, posture.conditional_entry, posture_cfg
+            )
+            rec.data["funnel_stage"] = stage.stage
+            rec.data["stage_reason"] = stage.reason
     if trade_plan_menu is not None:
         rec.data["trade_plan_menu"] = trade_plan_menu.to_dict()
         _apply_trade_plan_guardrails(rec, trade_plan_menu, tp_cfg)
@@ -597,7 +625,19 @@ async def run_signal_cadence(
 
         snapshot, _ = await build_market_snapshot()
 
-    watchlist = await build_watchlist()
+    watchlist = await build_watchlist()  # universe(거래대금 상위) 멤버십도 여기서 영속(list_type=trade_value)
+    # 거래량 양봉 상위 리스트 영속 (관심종목 페이지) — 장중=실시간 시가 / postclose=EOD 일봉. graceful.
+    try:
+        from collectors.screening import load_curation_config
+        from collectors.universe_curation import curate_groups
+        from collectors.universe_membership import persist_universe_membership
+        from collectors.volume_bull import fetch_kr_volume_bull
+
+        vb = await fetch_kr_volume_bull(intraday=(cadence != "postclose"))
+        vb = curate_groups(vb, list_type="volume_bull", cfg=load_curation_config())  # 잡주 floor+정배열
+        persist_universe_membership(vb, list_type="volume_bull")
+    except Exception as e:  # noqa: BLE001 — 리스트 갱신 실패가 권고 생성을 막지 않음
+        log.warning("volume_bull_refresh_failed", cadence=cadence, error=str(e))
     regime = get_current_regime(as_of)
     passers = screen_watchlist(watchlist, regime)
 

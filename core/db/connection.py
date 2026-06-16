@@ -95,6 +95,29 @@ class Database:
             except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
                 pass
 
+        # v17 — universe_membership list_type (PK 확장: 거래대금/거래량양봉 두 리스트).
+        #   이번 세션 신규 테이블이라 list_type 컬럼 없으면 DROP → schema.sql 이 새 PK 로 재생성(데이터 무해).
+        #   list_type 있으면 skip(멱등). SQLite 는 PK ALTER 미지원이라 recreate.
+        try:
+            if not _column_exists(conn, "universe_membership", "list_type"):
+                conn.execute("DROP TABLE IF EXISTS universe_membership")
+        except Exception:  # noqa: BLE001
+            pass
+
+        # v18 — universe_membership.concept (차트 컨셉 분류: 주도주/눌림/바닥). 멱등 ALTER(PK 불변).
+        try:
+            if not _column_exists(conn, "universe_membership", "concept"):
+                conn.execute("ALTER TABLE universe_membership ADD COLUMN concept TEXT")
+        except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+            pass
+
+        # v19 — universe_membership.volume (거래량 상위 리스트 거래량 표기). 멱등 ALTER.
+        try:
+            if not _column_exists(conn, "universe_membership", "volume"):
+                conn.execute("ALTER TABLE universe_membership ADD COLUMN volume INTEGER")
+        except Exception:  # noqa: BLE001
+            pass
+
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, timeout=10.0, isolation_level=None)

@@ -133,6 +133,31 @@ CREATE TABLE IF NOT EXISTS watchlist (
     added_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 관심종목 리스트 일자별 멤버십 (TRADE-PLAN-LIFECYCLE 후속 · 체계적 종목 관리).
+--   거래대금 상위 + 거래량 양봉 상위 두 큐레이션 리스트를 (date, market, ticker, list_type)으로 영속 →
+--   ① 종목명 DB 조회(resolve_ticker 30종 매핑 한계 해소) ② "며칠 전 상위였나" 추적
+--   ③ 관심종목 페이지의 관심→매수대기→매수진입 funnel 멤버십(team_outputs.funnel_stage 와 조인).
+--   list_type = 'trade_value'(거래대금 상위) | 'volume_bull'(거래량 양봉 +3%).
+--   멤버십 시계열을 담는 기존 테이블 없음(가드 #11, DATA-MAP 등재) → 신규.
+CREATE TABLE IF NOT EXISTS universe_membership (
+    date         TEXT NOT NULL,        -- YYYY-MM-DD (KST)
+    market       TEXT NOT NULL,        -- KOSPI | KOSDAQ
+    ticker       TEXT NOT NULL,
+    list_type    TEXT NOT NULL DEFAULT 'trade_value',  -- trade_value | volume_bull
+    name         TEXT,                 -- hts_kor_isnm (KIS 응답)
+    rank         INTEGER,              -- 리스트 내 순위
+    trade_amount INTEGER,              -- 누적 거래대금(원)
+    volume       INTEGER,              -- 누적 거래량(주)
+    change_pct   REAL,                 -- 전일 대비 등락률(%)
+    concept      TEXT,                 -- 차트 컨셉 분류 (leader 주도주 | pullback 눌림 | base 바닥·소외 | unknown)
+    source       TEXT NOT NULL DEFAULT 'kis',
+    PRIMARY KEY (date, market, ticker, list_type)
+);
+CREATE INDEX IF NOT EXISTS idx_universe_membership_ticker
+    ON universe_membership(ticker, date);
+CREATE INDEX IF NOT EXISTS idx_universe_membership_list
+    ON universe_membership(list_type, date);
+
 CREATE TABLE IF NOT EXISTS daily_macro (
     date         TEXT PRIMARY KEY,
     data_json    TEXT,

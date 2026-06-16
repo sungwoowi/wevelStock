@@ -150,6 +150,7 @@ from server.api import positions as positions_route  # noqa: E402
 from server.api import production_chat as production_chat_route  # noqa: E402
 from server.api import strategist_chat as strategist_chat_route  # noqa: E402
 from server.api import teams as teams_route  # noqa: E402
+from server.api import watchlist as watchlist_route  # noqa: E402
 
 app.include_router(pipelines_route.router, prefix="/api", tags=["pipelines"])
 app.include_router(teams_route.router, prefix="/api", tags=["teams"])
@@ -170,6 +171,7 @@ app.include_router(wealth_route.router, prefix="/api", tags=["wealth"])
 app.include_router(market_route.router, prefix="/api", tags=["market"])
 app.include_router(desk_route.router, prefix="/api", tags=["desk"])
 app.include_router(news_route.router, prefix="/api", tags=["news"])
+app.include_router(watchlist_route.router, prefix="/api", tags=["watchlist"])
 
 
 @app.get("/api/health")

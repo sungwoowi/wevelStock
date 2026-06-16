@@ -127,6 +127,8 @@ data:
   market_regime: "strong_bull"
   distribution_day_count: 1
   llm_deviation_reason: null                          # AlphaPosture 후보와 다른 verdict 발행 시에만 사실 근거 (없으면 null = 후보 추종, kill-switch 강등은 제외)
+  # 매수대기 단계 (verdict=wait + 진입존 있을 때만, kill-switch 강등 제외 — TRADE-PLAN-LIFECYCLE-001 2단계):
+  #   funnel_stage: "watching"  /  stage_scenario: "종가 20일선(9,800) 회복+거래량 → 진입"  /  waiting_entry: 9800
   trailing_stop_active: false                         # 진입가 +5% 도달 시 true (구현은 Layer 4)
   trailing_stop_width_pct: 10                         # parabolic·strong_bull -10% / sideways -7%
   holding_period_estimate_days: 14                    # trader 발행 read (Track B 기본 5-60일)
@@ -222,6 +224,19 @@ buy 시 funnel 은 `## [결정론 가격대 메뉴]`(스윙저점·ma·ATR·오�
 메뉴 후보에서 **선택**한다(메뉴 밖이면 `deviation_reason` 사실 근거). **절대 룰**: `stop_basis:
 "close"`(종가 기준·wick 무시) + 오닐 **−7% 절대**(초과 시 코드가 clamp). Track B 는 단발 진입·단일
 목표가 흔하므로 `scaled_buy`/`scaled_sell` 1차만 써도 된다 — 단 손절은 메뉴의 ATR/스윙저점 후보 채택.
+
+### 매수대기 단계 시나리오 (TRADE-PLAN-LIFECYCLE-001 2단계)
+
+verdict 가 **wait 인데** 주입 블록의 **조건부 진입**에 **진입존 후보(팩트)** 가 있으면 이 종목은
+**"매수대기"** 단계 후보다(타점 점수 근접 + 트리거 대기). 그 단계의 진입 시나리오를 서술하라:
+
+- **대기 진입가 선택**: 진입존 후보(entry_zone) 중 방법에 맞는 가격 1개를 고른다 — 눌림(pullback)=
+  20일선/스윙저점, 추세 하단=스윙저점/60일선. Track B 는 단발 진입이라 **1차 대기가 하나면 충분**.
+  **숫자는 진입존·메뉴 후보에서만**(발명 시 `deviation_reason` — menu_bound 감사).
+- **진입 트리거 서술**: 6 트리거 중 무엇이 켜지면 진입인가를 한 줄로(예: 종가 20일선 9,800 회복 +
+  거래량 동반 → 진입). conditional_entry.trigger 근거. **결정론은 서술 안 함** — 선택·서술은 너의 영역.
+- wait `data` 가산(선택): `funnel_stage: "watching"`(funnel 파생값 인용·발명 금지) / `stage_scenario:
+  "<한 줄>"` / `waiting_entry: <대기 진입가>`. **단 kill-switch(DD≥4) 강등 wait 는 매수대기 아님**(관심 유지).
 
 ### α 가속계수 오버라이드 (STRATEGY-TRACK-001 § α 오버라이드 룰)
 

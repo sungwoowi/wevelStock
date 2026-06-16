@@ -102,6 +102,9 @@ alpha_posture:
   crash_change_pct: -2.5    # 당일 지수 등락률(%) 이 이하 = 폭락장
   breadth_collapse: 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
   dd_kill: 6                # 25일 분산일 이 이상 = 지속 천장 경고
+  # 단계 라벨(TRADE-PLAN-LIFECYCLE-001 2단계) — wait 인데 1차 점수가 min − margin 이상 +
+  #   conditional_entry 존재 → "매수대기" 단계 승격(관심 → 매수대기). SLOT.
+  watching_score_margin: 1.0
 
 # 결정론 가격대 메뉴 (TRADE-PLAN-LIFECYCLE-001 B-MS1, core/signal/trade_plan_menu.py).
 #   결정론 = 객관 가격대 *계산기*(후보 메뉴), 결정자 아님. LLM 이 이 중에서 선택·조합(숫자 환각 차단).
@@ -120,3 +123,15 @@ trade_plan:
   max_levels: 4              # 다단 지지/저항/목표 최대 단수
   max_swing_stop_pct: 0.25   # 스윙저점이 진입 대비 이 % 초과로 멀면 stale 제외(수년전 저점 노이즈 차단)
   level_dedup_pct: 0.005     # 두 가격대가 이 % 이내면 동일 레벨로 dedup(스윙고점==52주고가 중복 제거)
+
+# 관심종목 리스트 큐레이션 (TRADE-PLAN-LIFECYCLE 후속, collectors/universe_curation.py).
+#   raw 거래대금/거래량 상위 → 잡주 제외(결정론 floor) + 정배열 위계("월/주봉 죽은 차트" proxy).
+#   리스트별 차등(거래대금=대형 중장기 / 거래량양봉=중소형 모멘텀 허용). LLM 0. 임계 = SLOT(watchdog).
+curation:
+  enabled: true
+  # max_change_pct 미설정 = 상한가 포함(사용자 결정 2026-06-16). 캡 원하면 숫자 지정(예: 20.0).
+  require_ma_alignment: true # 정배열 위계(현재가>60·120일선, ma20≥ma60) — 죽은 차트 잡주 제외
+  tv_min_trade_amount: 1.0e10  # 거래대금 상위: 일 거래대금 ≥ 100억
+  tv_min_market_cap: 5.0e11    # 거래대금 상위: 시총 ≥ 5000억 (best-effort — 시총 확보 시)
+  vb_min_trade_amount: 1.0e10  # 거래량 양봉: 일 거래대금 ≥ 100억
+  vb_min_market_cap: 1.0e11    # 거래량 양봉: 시총 ≥ 1000억 (중소형 모멘텀 허용)

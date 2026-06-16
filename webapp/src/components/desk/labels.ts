@@ -18,6 +18,38 @@ export function verdictKR(v: string): string {
   }
 }
 
+/** 진입 단계(funnel_stage) → 한국어. TRADE-PLAN-LIFECYCLE 2단계. */
+export function stageKR(stage: string): string {
+  switch (stage) {
+    case "entering":
+      return "진입";
+    case "watching":
+      return "매수대기";
+    case "interest":
+      return "관심";
+    default:
+      return "관심";
+  }
+}
+
+/** 단계 배지 색 — 진입=초록 / 매수대기=주황 / 관심=회색. */
+export function stageTone(stage: string): "profit" | "amber" | "neutral" {
+  if (stage === "entering") return "profit";
+  if (stage === "watching") return "amber";
+  return "neutral";
+}
+
+/** 단계 표시 순서 (진입 ▸ 매수대기 ▸ 관심). */
+export const STAGE_ORDER = ["entering", "watching", "interest"] as const;
+
+/** 거래대금 상위 경과일 → "거래대금 상위 N일 전" (null=기록 없음). */
+export function universeKR(daysAgo: number | null | undefined): string | null {
+  if (daysAgo === null || daysAgo === undefined) return null;
+  if (daysAgo <= 0) return "오늘 거래대금 상위";
+  if (daysAgo === 1) return "어제 거래대금 상위";
+  return `${daysAgo}일 전 거래대금 상위`;
+}
+
 /** 체결 reason → 한국어 (매매 일지). */
 export function fillReasonKR(side: string, reason: string, leg: number): string {
   if (side === "sell") {

@@ -173,6 +173,38 @@ def test_parse_backward_compat_no_plan():
     assert "trade_plan" not in rec.data
 
 
+# TRADE-PLAN-LIFECYCLE-001 2단계 — LLM 이 발행한 매수대기 단계 필드(data) 보존
+SAMPLE_WATCHING = """관망이나 매수대기 단계로 진입 시나리오 제시.
+
+```yaml
+recommendation_id: REC-20260616-005930-A
+date: 2026-06-16
+ticker: "005930"
+display_name: "삼성전자"
+track: A
+verdict: "wait"
+confidence: 40
+reasons:
+  - "강세장이나 과열 — 눌림 대기"
+data:
+  funnel_stage: "watching"
+  stage_scenario: "종가 20일선(9,800) 회복+거래량 동반 시 1차 진입, 미달 시 스윙저점(9,500) 분할"
+  waiting_entry: 9800
+contract_version: "1.0"
+```
+"""
+
+
+def test_parse_preserves_watching_stage_fields():
+    """파서는 data 블록을 통째 보존 — 매수대기 단계 필드 수정 불필요(가산만)."""
+    rec = parse_recommendation(SAMPLE_WATCHING)
+    assert rec is not None
+    assert rec.verdict == "wait"
+    assert rec.data["funnel_stage"] == "watching"
+    assert "20일선" in rec.data["stage_scenario"]
+    assert rec.data["waiting_entry"] == 9800
+
+
 def test_parse_returns_none_when_no_yaml_block():
     # 권고 양식 미발행(개념 질문 응답 등) → graceful None
     assert parse_recommendation("R/R 이란 손익비를 뜻합니다. 별다른 권고 없음.") is None
@@ -257,6 +289,38 @@ def test_persist_is_idempotent_per_recommendation(isolated_db):
     persist_recommendation(rec)
     persist_recommendation(rec)  # 같은 recommendation_id 재영속 → 행 1개 유지
     assert len(load_active_recommendations()) == 1
+
+
+def test_load_active_dedups_by_ticker_track_keeps_one(isolated_db):
+    # 같은 (track,ticker)가 다른 cadence/날짜 id로 여러 번 영속 → 최신 1건만 (중복 버그 수정).
+    persist_recommendation(parse_recommendation(SAMPLE_B))  # REC-20260609-005930-B
+    alt = SAMPLE_B.replace("REC-20260609-005930-B", "REC-20260610-12:35-005930-B")
+    persist_recommendation(parse_recommendation(alt))
+    active = load_active_recommendations()
+    assert len(active) == 1
+    assert active[0].ticker == "005930" and active[0].track == "B"
+
+
+def test_load_active_keeps_both_tracks_same_ticker(isolated_db):
+    # 같은 종목이라도 Track A/B는 별개 권고 → 둘 다 유지.
+    persist_recommendation(parse_recommendation(SAMPLE_B))  # 005930 B
+    persist_recommendation(parse_recommendation(SAMPLE_A))  # 005930 A
+    active = load_active_recommendations()
+    assert len(active) == 2
+    assert {r.track for r in active} == {"A", "B"}
+
+
+def test_load_recovers_flat_data_extras_round_trip(isolated_db):
+    # 영속은 rec.data 를 top-level 로 평탄화 → 로드 시 alpha_posture·funnel_stage 등 복원돼야 함.
+    rec = parse_recommendation(SAMPLE_B)
+    rec.data["funnel_stage"] = "watching"
+    rec.data["alpha_posture"] = {"verdict_candidate": "wait", "conditional_entry": {"trigger": "pullback"}}
+    rec.data["source"] = "auto"
+    persist_recommendation(rec)
+    loaded = load_active_recommendations()[0]
+    assert loaded.data["funnel_stage"] == "watching"
+    assert loaded.data["alpha_posture"]["verdict_candidate"] == "wait"
+    assert loaded.data["source"] == "auto"
 
 
 def test_persist_strategist_recommendations_from_agent_responses(isolated_db):

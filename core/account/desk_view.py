@@ -153,16 +153,71 @@ def recent_fills(*, limit: int = 12) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def _resolve_display_name(rec: StrategistRecommendation) -> str:
+    """종목명 — display_name 이 코드(숫자/ticker 동일)면 거래대금 상위 멤버십·정적 매핑 순으로 시도."""
+    from core.inference.run_analyst import KR_TICKER_TO_NAME
+
+    name = (rec.display_name or "").strip()
+    if name and name != rec.ticker and not name.isdigit():
+        return name
+    try:
+        from collectors.universe_membership import get_stock_name
+
+        resolved = get_stock_name(rec.ticker)
+    except Exception:  # noqa: BLE001
+        resolved = None
+    return resolved or KR_TICKER_TO_NAME.get(rec.ticker, rec.ticker)
+
+
+def _funnel_stage_of(rec: StrategistRecommendation) -> tuple[str, str]:
+    """단계 라벨(관심/매수대기/진입) + 사유. funnel_stage 누락(구버전 rec) → verdict 폴백."""
+    stage = rec.data.get("funnel_stage")
+    reason = rec.data.get("stage_reason") or ""
+    if stage in ("interest", "watching", "entering"):
+        return stage, reason
+    return ("entering" if rec.verdict == "buy" else "interest"), reason
+
+
+def _watching_hint(rec: StrategistRecommendation) -> tuple[float | None, str]:
+    """매수대기 표시용 — 대기 진입가 + 방법 라벨. LLM waiting_entry 우선, 없으면 진입존 첫 후보."""
+    we = rec.data.get("waiting_entry")
+    ce = (rec.data.get("alpha_posture") or {}).get("conditional_entry") or {}
+    zone = ce.get("entry_zone") or []
+    if we is None and zone:
+        we = zone[0].get("price")
+    basis = ce.get("zone_basis") or ""
+    label = "눌림" if "눌림" in basis else ("추세 하단" if "추세" in basis else "")
+    return (float(we) if isinstance(we, (int, float)) else None), label
+
+
 def active_recommendations_view(*, within_days: int = 30) -> list[dict[str, Any]]:
-    """지금 지켜보는 권고 — 활성 권고(`team_outputs` track_a/b) 표시용 dict 목록."""
+    """지금 지켜보는 권고 — 활성 권고(`team_outputs` track_a/b) 표시용 dict 목록.
+
+    단계 라벨(funnel_stage)·종목명 폴백·매수대기 대기진입가를 함께 노출 (TRADE-PLAN-LIFECYCLE 2단계 UI).
+    """
+    try:
+        from collectors.universe_membership import days_since_universe, last_universe_date
+    except Exception:  # noqa: BLE001
+        days_since_universe = last_universe_date = None  # type: ignore[assignment]
+
     out: list[dict[str, Any]] = []
     for rec in load_active_recommendations(within_days=within_days):
+        stage, stage_reason = _funnel_stage_of(rec)
+        watching_entry, watching_label = _watching_hint(rec)
+        uni_date = last_universe_date(rec.ticker) if last_universe_date else None
+        uni_days = days_since_universe(rec.ticker) if days_since_universe else None
         out.append({
             "recommendation_id": rec.recommendation_id,
             "ticker": rec.ticker,
-            "display_name": rec.display_name,
+            "display_name": _resolve_display_name(rec),
             "track": rec.track,
             "verdict": rec.verdict,
+            "funnel_stage": stage,
+            "stage_reason": stage_reason,
+            "watching_entry": watching_entry,
+            "watching_label": watching_label,
+            "universe_last_date": uni_date,
+            "universe_days_ago": uni_days,
             "entry_price": rec.entry_price,
             "stop_loss": rec.stop_loss,
             "target_prices": rec.target_prices,

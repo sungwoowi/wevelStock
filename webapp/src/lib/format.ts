@@ -76,6 +76,26 @@ export function wonKR(won: unknown): string {
   return neg ? `-${out}` : out;
 }
 
+/** 거래대금(원) → 억 단위 반올림 (억 이하 절삭·반올림). 예) 7_940_145_390_000 → "7조 9,401억". */
+export function eokKR(won: unknown): string {
+  if (typeof won !== "number" || Number.isNaN(won)) return "—";
+  const eok = Math.round(won / 1e8);
+  if (eok >= 10000) {
+    const jo = Math.floor(eok / 10000);
+    const rem = eok % 10000;
+    return rem ? `${jo}조 ${rem.toLocaleString("en-US")}억` : `${jo}조`;
+  }
+  return `${eok.toLocaleString("en-US")}억`;
+}
+
+/** 거래량(주) → 만주/억주. 예) 12_340_000 → "1,234만주". */
+export function volKR(v: unknown): string {
+  if (typeof v !== "number" || Number.isNaN(v)) return "—";
+  if (v >= 1e8) return `${(v / 1e8).toFixed(1)}억주`;
+  if (v >= 1e4) return `${Math.round(v / 1e4).toLocaleString("en-US")}만주`;
+  return `${Math.round(v).toLocaleString("en-US")}주`;
+}
+
 /** 원화 raw(원) → 만/억 (부호 포함, 손익액용). 예) +35만. */
 export function wonKRSigned(won: unknown): string {
   if (typeof won !== "number" || Number.isNaN(won)) return "—";

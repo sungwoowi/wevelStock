@@ -484,6 +484,106 @@ async def test_run_signal_injects_trade_plan_menu_and_clamps_oneill(monkeypatch)
     assert "menu_bound" in rec.data["trade_plan"]
 
 
+# TRADE-PLAN-LIFECYCLE-001 2단계 — 다층 진입 단계 라벨(관심/매수대기/진입) + 진입존 보강
+def _overheated_scorecard():
+    """강세장 + 과열(extension 2.0) + 점수 근접 → 매수대기 후보 (pullback conditional_entry)."""
+    sc = _sample_scorecard()
+    sc.extension_score = 2.0   # < chase_min_health(4.0) → bull_chase_demote → pullback wait 후보
+    return sc
+
+
+async def test_run_signal_persists_funnel_stage_entering_for_buy(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    monkeypatch.setattr(
+        "collectors.charts.load_ohlcv_from_db", lambda *a, **k: _synthetic_ohlcv()
+    )
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-16", scorecard=_sample_scorecard(),
+        strategist_runner=_stub_runner(_REC_BUY_CLAMP), band_gate=False, notify_signals=False,
+    )
+    assert r["persisted"] is True
+    assert captured["rec"].data["funnel_stage"] == "entering"   # verdict=buy → 진입 단계
+    assert captured["rec"].data["stage_reason"]
+
+
+async def test_run_signal_persists_watching_and_enriches_zone_for_near_wait(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    monkeypatch.setattr(
+        "collectors.charts.load_ohlcv_from_db", lambda *a, **k: _synthetic_ohlcv()
+    )
+    seen: dict = {}
+
+    async def _runner(track_id, messages, **kw):
+        seen["alpha_posture_md"] = kw.get("alpha_posture_md")
+        return SimpleNamespace(text=_REC_WAIT)
+
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-16", scorecard=_overheated_scorecard(),
+        strategist_runner=_runner, band_gate=False, notify_signals=False,
+    )
+    assert r["persisted"] is True
+    rec = captured["rec"]
+    # 점수 근접 + pullback 트리거 → 매수대기 단계
+    assert rec.data["funnel_stage"] == "watching"
+    assert "매수대기" in rec.data["stage_reason"]
+    # conditional_entry 진입존(팩트)이 메뉴 후보로 보강·영속
+    zone = rec.data["alpha_posture"]["conditional_entry"]["entry_zone"]
+    assert zone and all(z["price"] > 0 for z in zone)
+    # 주입된 posture_md 가 진입존을 반영(재렌더)
+    assert "진입존" in seen["alpha_posture_md"]
+
+
+async def test_run_signal_far_wait_is_interest(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    monkeypatch.setattr(
+        "collectors.charts.load_ohlcv_from_db", lambda *a, **k: _synthetic_ohlcv()
+    )
+    sc = _sample_scorecard()
+    sc.s_score, sc.buy_score = 2.0, 2.0   # 점수 하한 한참 미달 → 관심
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-16", scorecard=sc,
+        strategist_runner=_stub_runner(_REC_WAIT), band_gate=False, notify_signals=False,
+    )
+    assert r["persisted"] is True
+    assert captured["rec"].data["funnel_stage"] == "interest"
+
+
+async def test_run_signal_graceful_no_menu_still_persists_stage(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        asig, "persist_recommendation",
+        lambda rec: (captured.__setitem__("rec", rec), True)[1],
+    )
+    # OHLCV 로드 실패 → trade_plan_menu None (graceful) — 단계는 점수·verdict 로 여전히 영속.
+    def _raise(*a, **k):
+        raise RuntimeError("ohlcv unavailable")
+
+    monkeypatch.setattr("collectors.charts.load_ohlcv_from_db", _raise)
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-16", scorecard=_sample_scorecard(),
+        strategist_runner=_stub_runner(_REC_BUY_CLAMP), band_gate=False, notify_signals=False,
+    )
+    assert r["persisted"] is True
+    assert captured["rec"].data["funnel_stage"] == "entering"
+    assert "trade_plan_menu" not in captured["rec"].data
+
+
 # ---------------------------------------------------------------------------
 # run_signal_for_ticker — 전략가 직접 호출 → cadence-keyed persist (source=auto)
 # ---------------------------------------------------------------------------

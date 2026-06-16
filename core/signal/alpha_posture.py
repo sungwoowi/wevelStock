@@ -47,6 +47,8 @@ class PostureConfig:
     pullback_min_health: float = 6.0  # 과열도(건강도) 이 이상 = 눌림목 건강 (이탈/과열 아님)
     chase_min_health: float = 4.0     # 강세장에서 이 미만 = 과열 추격 → buy 강등
     require_wave_for_bear_override: bool = True  # 약세장 override 에 파동 생존 필수
+    # 단계 라벨(매수대기 승격) — wait 인데 1차 점수가 min − margin 이상 + conditional_entry 존재 → "매수대기".
+    watching_score_margin: float = 1.0   # 승격 근접 마진 (TRADE-PLAN-LIFECYCLE-001 2단계, SLOT)
     # 복합 위험 게이트 (폭락 회피 — blanket 방어, 차등보다 우선). 2026-06-15 라이브 발견:
     # dd 단독 blanket(4)은 완만한 분산에도 전부 wait + 당일 급락은 못 잡는 최악 조합. 교체.
     crash_change_pct: float = -2.5    # 당일 지수 등락률 이 이하 = 폭락장(반대매매·프로그램 매도)
@@ -88,6 +90,19 @@ class AlphaPosture:
     def to_dict(self) -> dict[str, Any]:
         """team_outputs.data_json 가산 주입용 (M5). JSON 직렬화 가능한 평탄 dict."""
         return asdict(self)
+
+
+@dataclass
+class FunnelStage:
+    """다층 진입 단계 라벨 (TRADE-PLAN-LIFECYCLE-001 2단계) — 파생 라벨, 새 판단 아님.
+
+    관심(interest) → 매수대기(watching) → 진입(entering). 이미 있는 판단(verdict·점수·
+    conditional_entry)을 조립·표면화. legibility = "쓰는 데스크" 차별화.
+    """
+
+    stage: str                  # "interest" | "watching" | "entering"
+    reason: str                 # 라벨이 된 사유(한 줄)
+    score_gap: float | None = None  # 1차 점수 − min (음수=미달). 감사·설명가능성.
 
 
 _BOOL_FIELDS = frozenset({"enabled", "require_wave_for_bear_override"})
@@ -144,6 +159,14 @@ def render_alpha_posture_md(posture: AlphaPosture) -> str:
         lines.append(
             f"- **조건부 진입(관망 시)**: trigger=`{ce.get('trigger')}` — {ce.get('note', '')}"
         )
+        zone = ce.get("entry_zone")
+        if zone:
+            zone_str = " · ".join(f"{z.get('label')} {z.get('price'):,.0f}" for z in zone)
+            basis = ce.get("zone_basis", "")
+            lines.append(
+                f"  - **진입존 후보(팩트 — 이 중에서 선택하라)**: {zone_str}"
+                + (f" ({basis})" if basis else "")
+            )
     lines += [
         "",
         "**deviation 규칙 (중요)**: 위 후보와 다른 verdict 를 발행하려면 권고 YAML 의",
@@ -180,8 +203,99 @@ def _passes_score_floor(inp: PostureInputs, cfg: PostureConfig) -> tuple[bool, s
 
 
 def _cond_entry(trigger: str, note: str, **extra: Any) -> dict[str, Any]:
-    """관망 종목 조건부 진입 의도 (M1 = 심볼릭, 실제 진입가는 M3 가 가격으로 채움)."""
+    """관망 종목 조건부 진입 의도 (M1 = 심볼릭, 진입가 zone 은 enrich_conditional_entry 가 채움)."""
     return {"trigger": trigger, "note": note, **extra}
+
+
+# trigger → 진입존에 실을 메뉴 지지 후보 라벨 (팩트만 — 어느 가격을 택할지는 LLM).
+# 가격형 trigger 만 등록. 조건 재평가형(score_improve/danger_release/regime_confirm/alignment)은
+# 특정 눌림가가 없어(조건 충족 후 재평가) entry_zone 을 비운다.
+_ZONE_TRIGGER_MAP: dict[str, dict[str, Any]] = {
+    "pullback": {
+        "labels": ("20일선", "스윙저점"),
+        "basis": "눌림목 분할 (20일선·직전 스윙저점)",
+    },
+    "bear_alignment": {
+        "labels": ("스윙저점", "60일선"),
+        "basis": "추세 하단 분할 (스윙저점·60일선)",
+    },
+}
+
+
+def enrich_conditional_entry(
+    conditional_entry: dict[str, Any] | None,
+    menu: Any,
+) -> dict[str, Any] | None:
+    """trigger 별 진입가 *후보 zone*(메뉴 지지 후보에서 선별)을 conditional_entry 에 가산.
+
+    결정론 = 팩트만 — 단일 진입가를 *선택*하지 않고 후보 리스트(zone)만 붙인다(선택은 LLM).
+    숫자는 menu.support_levels 에서 그대로 복사 → 환각 0(prism·cited_scores 누수 교훈).
+    순수: conditional_entry None → None / menu None → 원본 그대로(graceful).
+    가격형이 아닌 trigger → entry_zone=[] + 재평가 사유.
+    """
+    if conditional_entry is None:
+        return None
+    if menu is None:
+        return conditional_entry
+    out = dict(conditional_entry)
+    spec = _ZONE_TRIGGER_MAP.get(out.get("trigger"))
+    if spec is None:
+        out["entry_zone"] = []
+        out["zone_basis"] = "조건 재평가 (특정 눌림가 없음 — 조건 충족 후 재산정)"
+        return out
+    supports = list(getattr(menu, "support_levels", []) or [])
+    zone: list[dict[str, Any]] = []
+    seen: set[float] = set()
+    for lv in supports:
+        if lv.label in spec["labels"] and lv.price not in seen:
+            zone.append(lv.to_dict())
+            seen.add(lv.price)
+    if not zone and supports:  # 라벨 매칭 0 → 가장 가까운(첫) 지지로 fallback (빈 zone 회피)
+        zone.append(supports[0].to_dict())
+    zone.sort(key=lambda z: z["price"], reverse=True)  # 가까운(높은) 진입가 먼저
+    out["entry_zone"] = zone
+    out["zone_basis"] = spec["basis"]
+    return out
+
+
+def derive_funnel_stage(
+    verdict: str,
+    inp: PostureInputs,
+    conditional_entry: dict[str, Any] | None,
+    config: PostureConfig | None = None,
+) -> FunnelStage:
+    """단계 라벨 파생 (결정론 룰) — 새 판단 아니라 verdict·점수근접·conditional_entry 조립.
+
+    - verdict == "buy"                                        → entering (진입)
+    - verdict in (wait, hold) AND 1차 점수 ≥ (min − margin)
+      AND conditional_entry 존재                              → watching (매수대기)
+    - 그 외                                                   → interest (관심)
+
+    근접 임계 = derive_alpha_posture 의 점수 하한(min)과 한 출처(floor − margin) — 표류 방지.
+    1차 점수 결측 = 보수적 interest.
+    """
+    cfg = config or PostureConfig()
+    if inp.track == "A":
+        primary, p_floor = inp.s_score, cfg.min_s_score_a
+        secondary, s_floor = inp.buy_score, cfg.min_buy_score_a
+    else:
+        primary, p_floor = inp.t_score, cfg.min_t_score_b
+        secondary, s_floor = inp.buy_score, cfg.min_buy_score_b
+    gap = (primary - p_floor) if primary is not None else None
+
+    if verdict == "buy":
+        return FunnelStage("entering", "매수 발행 — 진입 단계", gap)
+    if verdict in ("wait", "hold"):
+        m = cfg.watching_score_margin
+        near = (
+            primary is not None and primary >= p_floor - m
+            and secondary is not None and secondary >= s_floor - m
+        )
+        if near and conditional_entry is not None:
+            return FunnelStage(
+                "watching", "점수 근접 + 진입 트리거 대기 — 매수대기 단계", gap
+            )
+    return FunnelStage("interest", "관심 — 점수 미근접 또는 진입 트리거 부재", gap)
 
 
 def derive_alpha_posture(

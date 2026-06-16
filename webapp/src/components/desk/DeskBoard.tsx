@@ -14,8 +14,9 @@ import {
 import { fmtPct, pnlClass, wonKR, wonKRSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useState } from "react";
 import useSWR from "swr";
-import { fillReasonKR, verdictKR } from "./labels";
+import { STAGE_ORDER, fillReasonKR, stageKR, stageTone, universeKR } from "./labels";
 import { Badge, Card, EmptyNote, Metric, ProgressBar, TrackChip } from "./primitives";
 import { MetricStrip } from "./MetricStrip";
 import { WealthCurveCard } from "./WealthCurveCard";
@@ -111,40 +112,89 @@ function AccountGrid({ accounts }: { accounts: AccountItem[] }) {
   );
 }
 
-// ── 하단: 활성 권고 + 매매 일지 ───────────────────────────────────────────────
-function ActiveRecsCard({ recs }: { recs: ActiveRec[] }) {
+// ── 하단: 지켜보는 권고(장기/단기 × 단계 그룹) + 매매 일지 ──────────────────────
+/** 단계 파생 — funnel_stage 우선, 누락(구버전 rec) 시 verdict 폴백. */
+function stageOf(r: ActiveRec): string {
+  return r.funnel_stage ?? (r.verdict === "buy" ? "entering" : "interest");
+}
+
+function RecRow({ r }: { r: ActiveRec }) {
+  const stage = stageOf(r);
+  const priceText =
+    stage === "entering"
+      ? `${r.entry_price ? wonKR(r.entry_price) : "—"}${r.stop_loss ? ` / ${wonKR(r.stop_loss)}` : ""}`
+      : stage === "watching"
+        ? `대기 ${r.watching_entry ? wonKR(r.watching_entry) : "—"}${r.watching_label ? ` · ${r.watching_label}` : ""}`
+        : "—";
+  const uni = universeKR(r.universe_days_ago);
   return (
-    <Card title="지금 지켜보는 권고" subtitle="활성 · 최근 30일">
-      {recs.length === 0 ? (
-        <EmptyNote>아직 활성 권고가 없어요 — 전략가가 매수/관망 신호를 내면 여기에 표시됩니다.</EmptyNote>
-      ) : (
+    <div className="flex items-center gap-2 border-b border-border py-2 last:border-0">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-sm font-semibold text-foreground">{r.display_name || r.ticker}</span>
+        {uni && <span className="truncate text-[11px] text-faint">{uni}</span>}
+      </span>
+      <span className="shrink-0 text-right font-mono text-xs text-body">{priceText}</span>
+    </div>
+  );
+}
+
+/** 단계 소그룹 — 진입/매수대기는 펼침, 관심은 개수+펼치기 토글(노이즈 컷). */
+function StageGroup({ stage, recs }: { stage: string; recs: ActiveRec[] }) {
+  const [open, setOpen] = useState(stage !== "interest");
+  if (recs.length === 0) return null;
+  return (
+    <div className="flex flex-col border-t border-border first:border-t-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 py-2 text-left"
+        aria-expanded={open}
+      >
+        <Badge tone={stageTone(stage)}>{stageKR(stage)}</Badge>
+        <span className="text-xs font-semibold text-faint">{recs.length}</span>
+        {stage === "interest" && (
+          <span className="ml-auto text-xs text-info">{open ? "접기" : "펼치기"}</span>
+        )}
+      </button>
+      {open && (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-border pb-2 text-[11px] font-semibold text-faint">
-            <span className="min-w-0 flex-1">종목</span>
-            <span className="w-14 shrink-0 text-center">트랙</span>
-            <span className="w-14 shrink-0 text-center">상태</span>
-            <span className="w-28 shrink-0 text-right">진입 / 손절</span>
-          </div>
           {recs.map((r) => (
-            <div key={r.recommendation_id} className="flex items-center gap-2 border-b border-border py-2 last:border-0">
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                {r.display_name || r.ticker}
-              </span>
-              <span className="w-14 shrink-0 text-center">
-                <TrackChip track={r.track} />
-              </span>
-              <span className="w-14 shrink-0 text-center">
-                <Badge tone={r.verdict === "buy" ? "profit" : "neutral"}>{verdictKR(r.verdict)}</Badge>
-              </span>
-              <span className="w-28 shrink-0 text-right font-mono text-xs text-body">
-                {r.entry_price ? wonKR(r.entry_price) : "—"}
-                {r.stop_loss ? ` / ${wonKR(r.stop_loss)}` : ""}
-              </span>
-            </div>
+            <RecRow key={r.recommendation_id} r={r} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** 트랙별 카드 — 단계 순(진입▸매수대기▸관심) 그룹. 해당 트랙 권고 0이면 숨김. */
+function TrackWatchCard({ track, recs }: { track: "A" | "B"; recs: ActiveRec[] }) {
+  if (recs.length === 0) return null;
+  return (
+    <Card title="지켜보는 권고" subtitle={track === "A" ? "중장기 (Track A)" : "단기 (Track B)"}>
+      <div className="flex flex-col">
+        {STAGE_ORDER.map((s) => (
+          <StageGroup key={s} stage={s} recs={recs.filter((r) => stageOf(r) === s)} />
+        ))}
+      </div>
     </Card>
+  );
+}
+
+/** 지금 지켜보는 권고 — 장기/단기 2카드 스택. 둘 다 비면 안내. */
+function WatchlistSection({ recs }: { recs: ActiveRec[] }) {
+  if (recs.length === 0) {
+    return (
+      <Card title="지금 지켜보는 권고" subtitle="활성 · 최근 30일">
+        <EmptyNote>아직 활성 권고가 없어요 — 전략가가 매수/관망 신호를 내면 여기에 표시됩니다.</EmptyNote>
+      </Card>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <TrackWatchCard track="A" recs={recs.filter((r) => r.track === "A")} />
+      <TrackWatchCard track="B" recs={recs.filter((r) => r.track === "B")} />
+    </div>
   );
 }
 
@@ -219,7 +269,7 @@ export function DeskBoard({
       <AccountGrid accounts={accounts} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ActiveRecsCard recs={feed?.active_recommendations ?? []} />
+        <WatchlistSection recs={feed?.active_recommendations ?? []} />
         <FillJournalCard fills={feed?.recent_fills ?? []} />
       </div>
     </div>

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from collectors import universe_membership
 from core.account import desk_view, holdings, paper_trading, portfolio
 from core.account.sizing import reload_accounts_config
 from core.db.connection import Database, reset_db
@@ -38,7 +39,7 @@ def isolated_db(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Database:
     reset_db()
     reload_accounts_config()
     db = Database(tmp_path / "test_desk_view.sqlite")
-    for mod in (desk_view, holdings, paper_trading, portfolio, recommendation):
+    for mod in (desk_view, holdings, paper_trading, portfolio, recommendation, universe_membership):
         monkeypatch.setattr(mod, "get_db", lambda: db)
     monkeypatch.setattr("core.outputs.get_db", lambda: db)
     return db
@@ -101,3 +102,64 @@ def test_active_recommendations_view(isolated_db):
     assert recs[0]["ticker"] == "005930"
     assert recs[0]["verdict"] == "buy"
     assert recs[0]["track"] == "A"
+
+
+# TRADE-PLAN-LIFECYCLE 2단계 UI — 단계 라벨·종목명·매수대기 노출
+REC_WATCH = """관망.
+
+```yaml
+recommendation_id: REC-20260616-000660-A
+date: 2026-06-16
+ticker: "000660"
+display_name: "000660"
+track: A
+verdict: "wait"
+confidence: 40
+reasons: ["과열 눌림 대기"]
+data:
+  funnel_stage: "watching"
+  stage_reason: "점수 근접 + 진입 트리거 대기 — 매수대기 단계"
+  waiting_entry: 92000
+  alpha_posture:
+    conditional_entry:
+      trigger: "pullback"
+      zone_basis: "눌림목 분할 (20일선·직전 스윙저점)"
+      entry_zone:
+        - {label: "20일선", price: 92000}
+contract_version: "1.0"
+```
+"""
+
+
+def test_active_recs_view_buy_is_entering_with_name_fallback(isolated_db):
+    recommendation.persist_recommendation(recommendation.parse_recommendation(REC_A))
+    r = desk_view.active_recommendations_view()[0]
+    assert r["funnel_stage"] == "entering"        # verdict=buy 폴백
+    assert r["display_name"] == "삼성전자"          # 이름 그대로
+
+
+def test_active_recs_view_watching_surfaces_stage_name_entry(isolated_db):
+    recommendation.persist_recommendation(recommendation.parse_recommendation(REC_WATCH))
+    r = desk_view.active_recommendations_view()[0]
+    assert r["funnel_stage"] == "watching"
+    assert r["stage_reason"] and "매수대기" in r["stage_reason"]
+    assert r["watching_entry"] == 92000
+    assert r["watching_label"] == "눌림"
+    assert r["display_name"] == "SK하이닉스"        # 코드(000660) → 이름 매핑(KR_TICKER_TO_NAME)
+
+
+def test_active_recs_view_name_and_universe_date_from_membership(isolated_db):
+    # 30종 매핑 밖 종목(298040) — 거래대금 상위 멤버십이 종목명·상위 일자를 제공.
+    universe_membership.persist_universe_membership(
+        {"kospi": [{"ticker": "298040", "name": "효성중공업", "rank": 2}]}, date="2026-06-13"
+    )
+    rec = recommendation.parse_recommendation(
+        REC_A.replace('ticker: "005930"', 'ticker: "298040"')
+        .replace('display_name: "삼성전자"', 'display_name: "298040"')
+        .replace("REC-20260601-005930-A", "REC-20260601-298040-A")
+    )
+    recommendation.persist_recommendation(rec)
+    r = desk_view.active_recommendations_view()[0]
+    assert r["display_name"] == "효성중공업"        # 코드 → 멤버십 종목명
+    assert r["universe_last_date"] == "2026-06-13"
+    assert isinstance(r["universe_days_ago"], int)

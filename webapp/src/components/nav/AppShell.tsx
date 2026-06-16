@@ -2,7 +2,7 @@
 
 import { API_BASE } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Bell, HelpCircle, LineChart, MessageSquare, Newspaper, Wallet } from "lucide-react";
+import { Bell, HelpCircle, LineChart, ListChecks, MessageSquare, Newspaper, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import useSWR from "swr";
@@ -92,6 +92,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex-1" />
 
+        {/* 관심종목 — PC 전용(모바일 5탭 고정 유지). 종목 관리 페이지. */}
+        <Link
+          href="/watchlist"
+          aria-label="관심종목"
+          className={cn(
+            "hidden items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1.5 text-xs transition md:inline-flex",
+            isActivePath(pathname, "/watchlist")
+              ? "font-semibold text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <ListChecks className="size-4" />
+          관심종목
+        </Link>
         <Link
           href="/guide"
           aria-label="가이드"

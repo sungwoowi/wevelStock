@@ -6,14 +6,20 @@
 """
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from core.signal.alpha_posture import (
     AlphaPosture,
+    FunnelStage,
     PostureConfig,
     PostureInputs,
     derive_alpha_posture,
+    derive_funnel_stage,
+    enrich_conditional_entry,
     posture_config_from_dict,
     render_alpha_posture_md,
 )
+from core.signal.trade_plan_menu import PriceLevel, TradePlanMenu
 
 
 def _strong_a(**over: object) -> PostureInputs:
@@ -237,3 +243,148 @@ def test_load_posture_config_reads_yaml_section() -> None:
     assert cfg.enabled is True
     assert cfg.dd_kill == 6
     assert cfg.crash_change_pct == -2.5
+
+
+# === TRADE-PLAN-LIFECYCLE-001 2단계: 매수대기 단계 ========================
+#
+# A. conditional_entry 진입존(팩트) 보강 — 결정론은 가격 *후보*(zone)만 붙이고,
+#    어느 진입가를 택할지는 LLM. 숫자 출처는 메뉴(환각 0).
+
+
+def _menu_with_supports() -> TradePlanMenu:
+    """진입 10,000 아래 다단 지지(가까운=높은 順): 20일선 9,800·스윙저점 9,500·60일선 9,300."""
+    return TradePlanMenu(
+        ticker="X",
+        entry_hint=10000.0,
+        support_levels=[
+            PriceLevel("20일선", 9800.0),
+            PriceLevel("스윙저점", 9500.0),
+            PriceLevel("60일선", 9300.0),
+        ],
+    )
+
+
+def test_enrich_pullback_attaches_ma20_and_swing_low() -> None:
+    # 강세장 과열 눌림 대기(pullback) → 진입존 = 20일선 + 직전 스윙저점(메뉴 후보 그대로).
+    ce = {"trigger": "pullback", "note": "과열 해소 후 눌림", "ref": "ma20"}
+    out = enrich_conditional_entry(ce, _menu_with_supports())
+    prices = [z["price"] for z in out["entry_zone"]]
+    assert 9800.0 in prices and 9500.0 in prices   # ma20·스윙저점
+    assert all(p < 10000.0 for p in prices)         # 전부 진입 아래
+    assert out["zone_basis"]                         # 방법 라벨 존재
+    assert out["trigger"] == "pullback"              # 원본 보존
+
+
+def test_enrich_bear_alignment_uses_swing_low_and_ma60() -> None:
+    # 약세장 정렬 대기(bear_alignment) → 스윙저점·60일선만, 20일선 제외(추세 하단).
+    ce = {"trigger": "bear_alignment", "note": "정렬 대기", "missing": ["주도주"]}
+    out = enrich_conditional_entry(ce, _menu_with_supports())
+    prices = [z["price"] for z in out["entry_zone"]]
+    assert 9500.0 in prices and 9300.0 in prices
+    assert 9800.0 not in prices                      # 20일선 제외
+    assert out["missing"] == ["주도주"]               # 원본 extra 보존
+
+
+def test_enrich_score_improve_has_empty_zone() -> None:
+    # 조건 재평가형 trigger(가격 없음) → entry_zone 비고 사유만.
+    for trig in ("score_improve", "danger_release", "regime_confirm", "alignment"):
+        out = enrich_conditional_entry({"trigger": trig, "note": "n"}, _menu_with_supports())
+        assert out["entry_zone"] == []
+        assert "재평가" in out["zone_basis"]
+
+
+def test_enrich_none_menu_returns_original() -> None:
+    ce = {"trigger": "pullback", "note": "n"}
+    out = enrich_conditional_entry(ce, None)
+    assert out == ce                                 # menu 없으면 원본 그대로(graceful)
+    assert "entry_zone" not in out
+
+
+def test_enrich_none_conditional_entry_returns_none() -> None:
+    assert enrich_conditional_entry(None, _menu_with_supports()) is None
+
+
+def test_enrich_no_matching_support_empty_zone() -> None:
+    # pullback 인데 메뉴에 지지 후보가 없음 → entry_zone 비되 basis 는 존재(크래시 0).
+    empty_menu = TradePlanMenu(ticker="X", entry_hint=10000.0, support_levels=[])
+    out = enrich_conditional_entry({"trigger": "pullback", "note": "n"}, empty_menu)
+    assert out["entry_zone"] == []
+    assert out["zone_basis"]
+
+
+def test_render_md_shows_entry_zone() -> None:
+    p = derive_alpha_posture(_strong_a(extension_score=2.0))   # 강세장 과열 → pullback wait
+    p.conditional_entry = enrich_conditional_entry(p.conditional_entry, _menu_with_supports())
+    md = render_alpha_posture_md(p)
+    assert "진입존" in md
+    assert "9,800" in md or "9,500" in md             # 메뉴 가격 노출
+
+
+def test_render_md_no_zone_unchanged() -> None:
+    # zone 없는 conditional_entry(보강 전) → 진입존 라인 없음(회귀).
+    p = derive_alpha_posture(_strong_a(extension_score=2.0))
+    md = render_alpha_posture_md(p)
+    assert "진입존" not in md
+    assert "pullback" in md or "조건부" in md          # 기존 한 줄은 유지
+
+
+# B. 단계 라벨 파생(결정론 룰) — 관심/매수대기/진입. 새 판단 아니라 조립.
+
+
+def test_stage_buy_is_entering() -> None:
+    inp = _strong_a()
+    st = derive_funnel_stage("buy", inp, None)
+    assert st.stage == "entering"
+
+
+def test_stage_wait_near_with_conditional_is_watching() -> None:
+    # wait + 1차 점수가 min 근처(margin 1.0 안) + conditional_entry 존재 → 매수대기.
+    inp = _strong_a(s_score=5.5, buy_score=5.5)        # floor 6.0, margin 1.0 → 둘 다 ≥5.0
+    st = derive_funnel_stage("wait", inp, {"trigger": "pullback"})
+    assert st.stage == "watching"
+    assert "매수대기" in st.reason
+
+
+def test_stage_wait_far_below_is_interest() -> None:
+    inp = _strong_a(s_score=2.0, buy_score=2.0)
+    st = derive_funnel_stage("wait", inp, {"trigger": "score_improve"})
+    assert st.stage == "interest"
+
+
+def test_stage_wait_near_but_no_conditional_is_interest() -> None:
+    # 근접해도 트리거(conditional_entry) 없으면 매수대기 아님.
+    inp = _strong_a(s_score=5.5, buy_score=5.5)
+    st = derive_funnel_stage("wait", inp, None)
+    assert st.stage == "interest"
+
+
+def test_stage_track_b_uses_t_score() -> None:
+    inp = PostureInputs(track="B", regime="strong_bull", t_score=5.5, buy_score=4.5)
+    st = derive_funnel_stage("wait", inp, {"trigger": "pullback"})
+    assert st.stage == "watching"                      # t_score floor 6.0 − 1.0 = 5.0 이상
+
+
+def test_stage_margin_config_override() -> None:
+    # margin 을 2.0 으로 키우면 더 먼 점수도 매수대기 승격.
+    cfg = PostureConfig(watching_score_margin=2.0)
+    inp = _strong_a(s_score=4.5, buy_score=4.5)        # floor 6 − 2 = 4.0 이상
+    st = derive_funnel_stage("wait", inp, {"trigger": "pullback"}, cfg)
+    assert st.stage == "watching"
+
+
+def test_stage_missing_score_is_conservative_interest() -> None:
+    inp = _strong_a(s_score=None, buy_score=None)
+    st = derive_funnel_stage("wait", inp, {"trigger": "pullback"})
+    assert st.stage == "interest"
+
+
+def test_funnel_stage_serializes() -> None:
+    st = derive_funnel_stage("buy", _strong_a(), None)
+    d = asdict(st)
+    assert d["stage"] == "entering"
+    assert "reason" in d
+
+
+def test_watching_margin_in_config_from_dict() -> None:
+    cfg = posture_config_from_dict({"watching_score_margin": 1.5})
+    assert cfg.watching_score_margin == 1.5
