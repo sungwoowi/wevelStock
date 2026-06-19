@@ -124,7 +124,7 @@ function ClassificationBadge({ c }: { c: Classification }) {
         </span>
         {c.ticker_display && (
           <span className="px-2 py-0.5 rounded bg-blue-950 text-blue-200">
-            {c.ticker_display} ({c.ticker})
+            {c.ticker_display}
           </span>
         )}
         <span className={`px-2 py-0.5 rounded ${confColor}`}>

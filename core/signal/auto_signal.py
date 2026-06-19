@@ -368,7 +368,9 @@ async def _emit_trade_signal(rec: StrategistRecommendation, cadence: str) -> Non
     action = _VERDICT_KR.get(rec.verdict)
     if action is None:
         return
-    name = rec.display_name or rec.ticker
+    from collectors.universe_membership import resolve_stock_name
+
+    name = resolve_stock_name(rec.ticker, rec.display_name)
     track_label = _TRACK_LABEL.get(rec.track, rec.track)
     parts = [f"{track_label} · cadence {cadence}"]
     if rec.entry_price is not None:
@@ -381,7 +383,7 @@ async def _emit_trade_signal(rec: StrategistRecommendation, cadence: str) -> Non
     try:
         await notify(
             team_id="auto_signal", level="info",
-            title=f"🟢 {action} 신호 — {name}({rec.ticker})", body=body,
+            title=f"🟢 {action} 신호 — {name}", body=body,
             related_run_id=rec.recommendation_id, related_target=rec.ticker,
             notification_type="trade_signal",
         )

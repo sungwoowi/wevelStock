@@ -209,6 +209,7 @@ export type Tranche = {
 export type Holding = {
   account_id: string;
   ticker: string;
+  display_name: string;
   track: string;
   shares: number;
   avg_price: number;
@@ -237,6 +238,7 @@ export type WatchingItem = { ticker: string; display_name: string; verdict: stri
 
 export type ClosedFill = {
   ticker: string;
+  display_name: string;
   leg: number;
   fill_price: number;
   shares: number;
@@ -286,6 +288,7 @@ export type FillEntry = {
   recommendation_id: string;
   account_id: string;
   ticker: string;
+  display_name: string;
   track: string;
   side: "buy" | "sell";
   leg: number;

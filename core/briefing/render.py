@@ -165,9 +165,8 @@ def render_positions(data: dict) -> str:
             verdict = str(p.get("verdict", "HOLD")).upper()
             icon = VERDICT_ICON.get(verdict, "•")
             name = p.get("name") or p.get("ticker", "?")
-            ticker = p.get("ticker", "")
             reason = p.get("reason", "")
-            lines.append(f"  {icon} {name} ({ticker}) — {verdict}")
+            lines.append(f"  {icon} {name} — {verdict}")
             if reason:
                 lines.append(f"     {reason[:120]}")
 

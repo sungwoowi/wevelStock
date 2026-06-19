@@ -35,6 +35,14 @@ def _market_of(ticker: str) -> str:
     return "KR" if ticker.isdigit() and len(ticker) == 6 else "US"
 
 
+def _with_name(row: dict[str, Any]) -> dict[str, Any]:
+    """row['ticker'] → 노출용 종목명 'display_name' 주입 (코드 노출 방지)."""
+    from collectors.universe_membership import resolve_stock_name
+
+    row["display_name"] = resolve_stock_name(row.get("ticker", ""), row.get("display_name"))
+    return row
+
+
 def _planned_ladder(rec: StrategistRecommendation, account: Any) -> list[dict[str, Any]]:
     """권고 원안 분할 사다리(신규 진입 가정 = state 0) → leg별 지정가·배분·자본.
 
@@ -108,24 +116,28 @@ def get_account_pending(account_id: str) -> dict[str, Any]:
     if account is None:
         return {"ladder_waiting": [], "watching": []}
 
+    from collectors.universe_membership import resolve_stock_name
+
     holdings = get_holdings(account_id)
     held = {h["ticker"] for h in holdings}
     ladder_waiting: list[dict[str, Any]] = []
     for h in holdings:
         tr = get_position_tranches(account_id, h["ticker"], account=account)
+        name = resolve_stock_name(h["ticker"], h.get("display_name"))
         for p in tr["pending"]:
-            ladder_waiting.append({"ticker": h["ticker"], "display_name": "", **p})
+            ladder_waiting.append({"ticker": h["ticker"], "display_name": name, **p})
 
     watching: list[dict[str, Any]] = []
     for rec in load_active_recommendations():
         if rec.track != account.track or _market_of(rec.ticker) != account.market or rec.ticker in held:
             continue
+        name = _resolve_display_name(rec)
         if rec.is_actionable:  # 미보유 진입 대기 → 원안 사다리 노출
             for p in _planned_ladder(rec, account):
-                ladder_waiting.append({"ticker": rec.ticker, "display_name": rec.display_name, **p})
+                ladder_waiting.append({"ticker": rec.ticker, "display_name": name, **p})
         else:  # 관망/기다림
             watching.append({
-                "ticker": rec.ticker, "display_name": rec.display_name,
+                "ticker": rec.ticker, "display_name": name,
                 "verdict": rec.verdict, "reason": (rec.reasons[0] if rec.reasons else ""),
             })
     return {"ladder_waiting": ladder_waiting, "watching": watching}
@@ -139,7 +151,7 @@ def get_account_closed(account_id: str, *, limit: int = 20) -> list[dict[str, An
         "ORDER BY filled_date DESC, created_at DESC LIMIT ?",
         (account_id, limit),
     )
-    return [dict(r) for r in rows]
+    return [_with_name(dict(r)) for r in rows]
 
 
 def recent_fills(*, limit: int = 12) -> list[dict[str, Any]]:
@@ -150,23 +162,14 @@ def recent_fills(*, limit: int = 12) -> list[dict[str, Any]]:
         "FROM account_fills ORDER BY filled_date DESC, created_at DESC LIMIT ?",
         (limit,),
     )
-    return [dict(r) for r in rows]
+    return [_with_name(dict(r)) for r in rows]
 
 
 def _resolve_display_name(rec: StrategistRecommendation) -> str:
     """종목명 — display_name 이 코드(숫자/ticker 동일)면 거래대금 상위 멤버십·정적 매핑 순으로 시도."""
-    from core.inference.run_analyst import KR_TICKER_TO_NAME
+    from collectors.universe_membership import resolve_stock_name
 
-    name = (rec.display_name or "").strip()
-    if name and name != rec.ticker and not name.isdigit():
-        return name
-    try:
-        from collectors.universe_membership import get_stock_name
-
-        resolved = get_stock_name(rec.ticker)
-    except Exception:  # noqa: BLE001
-        resolved = None
-    return resolved or KR_TICKER_TO_NAME.get(rec.ticker, rec.ticker)
+    return resolve_stock_name(rec.ticker, rec.display_name)
 
 
 def _funnel_stage_of(rec: StrategistRecommendation) -> tuple[str, str]:

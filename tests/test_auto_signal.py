@@ -896,7 +896,9 @@ async def test_buy_verdict_emits_green_trade_signal(monkeypatch, captured_notify
     assert len(captured_notify) == 1
     n = captured_notify[0]
     assert n["notification_type"] == "trade_signal"
-    assert "매수" in n["title"] and "005930" in n["title"]
+    # 알림단 코드 노출 차단 — 종목명만, 종목코드는 제목에 없어야
+    assert "매수" in n["title"] and "삼성전자" in n["title"]
+    assert "005930" not in n["title"]
 
 
 async def test_wait_verdict_emits_no_signal(monkeypatch, captured_notify):

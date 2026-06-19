@@ -126,6 +126,27 @@ def get_stock_name(ticker: str) -> str | None:
     return row["name"] if row else None
 
 
+def resolve_stock_name(ticker: str, hint: str | None = None) -> str:
+    """노출용 종목명 — 알림·화면 단의 단일 진입점. 코드 노출 방지.
+
+    우선순위: hint(이미 사람이 읽을 이름) → universe_membership(최근 거래대금 상위) →
+    정적 매핑(KR_TICKER_TO_NAME) → 최후 폴백으로 코드 자체.
+    hint 가 코드(숫자)거나 ticker 와 같으면 무시하고 재해석한다.
+    """
+    name = (hint or "").strip()
+    if name and name != ticker and not name.isdigit():
+        return name
+    resolved = get_stock_name(ticker)
+    if resolved:
+        return resolved
+    try:
+        from core.inference.run_analyst import KR_TICKER_TO_NAME
+
+        return KR_TICKER_TO_NAME.get(ticker, ticker)
+    except Exception:  # noqa: BLE001 — 매핑 모듈 부재 시 코드 폴백
+        return ticker
+
+
 def last_universe_date(ticker: str) -> str | None:
     """가장 최근 거래대금 상위 일자 (YYYY-MM-DD). 한 번도 없으면 None."""
     if not ticker:

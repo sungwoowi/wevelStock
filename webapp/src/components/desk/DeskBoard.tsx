@@ -214,7 +214,7 @@ function FillJournalCard({ fills }: { fills: FillEntry[] }) {
               <div key={`${f.recommendation_id}-${f.side}-${f.leg}-${i}`} className="rounded-xl bg-surface px-3 py-2">
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <span className="min-w-0 truncate font-semibold text-foreground">
-                    {f.filled_date.slice(5)} · {f.ticker} {action}
+                    {f.filled_date.slice(5)} · {f.display_name || f.ticker} {action}
                   </span>
                   {profit ? (
                     <span className={cn("shrink-0 font-mono text-xs font-bold", pnlClass(f.realized_pnl_krw))}>

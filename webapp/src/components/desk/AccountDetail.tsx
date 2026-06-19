@@ -70,7 +70,7 @@ function TrancheLadder({ h }: { h: Holding }) {
   return (
     <div className="mt-2 flex flex-col gap-2 rounded-xl bg-surface px-4 py-3">
       <p className="text-xs font-semibold text-body">
-        {h.ticker} — 회차별 체결 내역 (분할 사다리: 진입가→손절가 보간, 물타기 차단)
+        {h.display_name || h.ticker} — 회차별 체결 내역 (분할 사다리: 진입가→손절가 보간, 물타기 차단)
       </p>
       {t.filled.map((f) => (
         <div key={`f${f.leg}`} className="flex items-center gap-3">
@@ -129,7 +129,7 @@ function HoldingsCard({ holdings }: { holdings: Holding[] }) {
                 <div key={h.ticker}>
                   <div className="flex items-center gap-2 border-b border-border py-2.5 text-sm last:border-0">
                     <span className="min-w-0 flex-1 truncate font-semibold text-foreground">
-                      {h.ticker}
+                      {h.display_name || h.ticker}
                       {!h.priced && <span className="ml-1 text-[10px] text-amber">시세대기</span>}
                     </span>
                     <span className="w-20 shrink-0 text-right font-mono text-xs text-body">{manWon(h.avg_price)}</span>
@@ -215,7 +215,7 @@ function ClosedCard({ closed, realizedSum }: { closed: ClosedFill[]; realizedSum
               <div key={`c${i}`} className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2">
                 <Badge tone={win ? "profit" : "loss"}>{fillReasonKR("sell", c.reason, c.leg)}</Badge>
                 <span className="text-sm text-body">
-                  {c.filled_date.slice(5)} · {c.ticker} — {manWon(c.fill_price)} × {c.shares.toFixed(0)}주 → 실현{" "}
+                  {c.filled_date.slice(5)} · {c.display_name || c.ticker} — {manWon(c.fill_price)} × {c.shares.toFixed(0)}주 → 실현{" "}
                   <span className={cn("font-semibold", pnlClass(c.realized_pnl_krw))}>
                     {wonKRSigned(c.realized_pnl_krw)}
                     {pct !== null ? ` (${fmtPct(pct)})` : ""}

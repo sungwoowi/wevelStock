@@ -184,7 +184,7 @@ def render_accounts_text(account_items: list[dict], holdings_by_id: dict[str, di
             sign = "+" if pos["unrealized_pct"] >= 0 else ""
             note = "" if pos["priced"] else " (시세 대기)"
             lines.append(
-                f"  · {pos['ticker']} {pos['shares']:.0f}주 · 평단 {pos['avg_price']:,.0f} · "
+                f"  · {pos.get('display_name') or pos['ticker']} {pos['shares']:.0f}주 · 평단 {pos['avg_price']:,.0f} · "
                 f"{sign}{pos['unrealized_pct']:.1f}%{note}"
             )
         s = h["summary"]

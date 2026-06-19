@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Callable
 
+from collectors.universe_membership import resolve_stock_name
 from core.db import get_db
 from core.logging import get_logger
 
@@ -74,6 +75,7 @@ def get_holdings(
         out.append({
             "account_id": account_id,
             "ticker": r["ticker"],
+            "display_name": resolve_stock_name(r["ticker"]),
             "track": r["track"],
             "shares": shares,
             "avg_price": avg,

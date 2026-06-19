@@ -60,6 +60,22 @@ def _open_two_tranches() -> None:
     )
 
 
+def test_resolve_stock_name_priority(isolated_db):
+    rsn = universe_membership.resolve_stock_name
+    # ① 사람이 읽을 hint 그대로
+    assert rsn("005930", "삼성전자") == "삼성전자"
+    # ② hint 가 코드면 무시 → 정적 매핑
+    assert rsn("005935", "005935") == "삼성전자우"
+    assert rsn("000660", None) == "SK하이닉스"
+    # ③ 멤버십 DB 종목명 (정적 매핑 밖)
+    universe_membership.persist_universe_membership(
+        {"kospi": [{"ticker": "298040", "name": "효성중공업", "rank": 1}]}, date="2026-06-13"
+    )
+    assert rsn("298040", None) == "효성중공업"
+    # ④ 어디에도 없으면 최후 폴백 = 코드
+    assert rsn("999999", None) == "999999"
+
+
 def test_position_tranches_filled_and_pending(isolated_db):
     _open_two_tranches()
     tr = desk_view.get_position_tranches("kr_long", "005930")
@@ -76,6 +92,17 @@ def test_account_pending_ladder_waiting(isolated_db):
     legs = [(w["ticker"], w["leg"]) for w in pending["ladder_waiting"]]
     assert ("005930", 3) in legs
     assert pending["watching"] == []  # 관망(verdict≠buy) 권고 없음
+    # 노출단 코드 차단 — 보유분 매수대기 사다리도 종목명을 실어야 (코드 폴백 금지)
+    held = next(w for w in pending["ladder_waiting"] if w["ticker"] == "005930")
+    assert held["display_name"] == "삼성전자"
+
+
+def test_account_pending_resolves_code_only_display_name(isolated_db):
+    # display_name 이 코드(000660)인 관망 권고 → 매수대기 노출 시 이름으로 해석돼야
+    recommendation.persist_recommendation(recommendation.parse_recommendation(REC_WATCH))
+    pending = desk_view.get_account_pending("kr_long")
+    w = next(x for x in pending["watching"] if x["ticker"] == "000660")
+    assert w["display_name"] == "SK하이닉스"  # 코드 노출 차단
 
 
 def test_account_closed_and_recent_fills(isolated_db):
@@ -89,10 +116,19 @@ def test_account_closed_and_recent_fills(isolated_db):
     assert len(closed) == 1
     assert closed[0]["reason"] == "target_1"
     assert closed[0]["realized_pnl_krw"] > 0
+    assert closed[0]["display_name"] == "삼성전자"  # 청산 내역 코드 노출 차단
 
     fills = desk_view.recent_fills(limit=10)
     assert len(fills) == 3  # 매수 2 + 매도 1
     assert fills[0]["filled_date"] == "2026-06-11"  # 최신순
+    assert all(f["display_name"] == "삼성전자" for f in fills)  # 매매일지 코드 노출 차단
+
+
+def test_holdings_carry_display_name(isolated_db):
+    _open_two_tranches()
+    hs = holdings.get_holdings("kr_long")
+    assert hs and all(h["ticker"] == "005930" for h in hs)
+    assert all(h["display_name"] == "삼성전자" for h in hs)  # 보유중 코드 노출 차단
 
 
 def test_active_recommendations_view(isolated_db):
