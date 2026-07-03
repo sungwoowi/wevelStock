@@ -234,6 +234,18 @@ class ServerConfig(BaseModel):
     cors: CORSConfig = Field(default_factory=CORSConfig)
 
 
+class AlphaConfig(BaseModel):
+    """WAVE-ALPHA anchor 산출 정책 (LLM-COST-LEDGER-001 후속, 2026-07-04).
+
+    anchor_llm_enabled=False (기본): anchor A·B·C 선택을 결정론 코드로. 실 Gemini 대비
+      성공 픽은 α 소수점까지 동일하고, LLM 의 'C=최근점→current 충돌' 실패를 회피(검증됨).
+      universe × 3 timeframe × 매일 도는 LLM anchor 비용을 0 으로.
+    True: Stage 2 LLM anchor 를 되살림(되돌리기 가능).
+    """
+
+    anchor_llm_enabled: bool = False
+
+
 class RuntimeConfig(BaseModel):
     """Top-level merged config."""
 
@@ -248,5 +260,6 @@ class RuntimeConfig(BaseModel):
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     teams: TeamsConfig = Field(default_factory=TeamsConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
+    alpha: AlphaConfig = Field(default_factory=AlphaConfig)
 
     model_config = {"populate_by_name": True}

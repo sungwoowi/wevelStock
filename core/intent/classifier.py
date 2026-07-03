@@ -347,6 +347,7 @@ async def _stage2_classify_via_llm(
     started = time.monotonic()
     try:
         resp = await call_llm(
+            call_type="intent_classification",
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
             model=model,

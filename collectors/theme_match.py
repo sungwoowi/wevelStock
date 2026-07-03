@@ -213,6 +213,8 @@ async def classify_theme(
     prompt = _format_theme_prompt(ticker, name, taxonomy)
     try:
         resp = await call_llm(
+            call_type="theme_match",
+            target=ticker,
             system="You are a deterministic stock theme classifier. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
             model=_STAGE2_MODEL_DEFAULT,

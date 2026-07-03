@@ -111,3 +111,10 @@ server:
   cors:
     allowed_origins:
       - http://localhost:3000
+
+# WAVE-ALPHA anchor 산출 정책 (LLM-COST-LEDGER-001, 2026-07-04)
+alpha:
+  # false=결정론 anchor 픽커 기본. 실 Gemini 성공 픽과 α 소수점까지 동일 검증 +
+  #   LLM 의 'C=최근점→current 충돌' 실패 회피 → universe×3tf×매일 anchor LLM 비용 0.
+  # true 로 바꾸면 Stage2 LLM anchor 되살림 (runtime.yaml 에서 hot reload).
+  anchor_llm_enabled: false

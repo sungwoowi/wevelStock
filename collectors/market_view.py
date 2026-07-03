@@ -760,6 +760,7 @@ async def cross_check_rotation_via_llm(
     prompt = _format_rotation_prompt(rotation, change_map, window_days)
     try:
         resp = await call_llm(
+            call_type="market_view",
             system="You are a deterministic sector-rotation verifier. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
             model=model,

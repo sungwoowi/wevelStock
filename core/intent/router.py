@@ -419,6 +419,7 @@ async def _call_refuse_or_guide(
     )
     try:
         resp = await call_llm(
+            call_type="refuse_guide",
             system=_REFUSE_GUIDE_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
             model=model,

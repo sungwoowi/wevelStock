@@ -240,6 +240,7 @@ async def synthesize_executive(
 
     try:
         resp = await call_llm(
+            call_type="executive",
             system=system_blocks,
             messages=[{"role": "user", "content": user_msg}],
             model=model,

@@ -78,6 +78,31 @@ CREATE TABLE IF NOT EXISTS llm_call_cache (
 CREATE INDEX IF NOT EXISTS idx_llm_call_cache_type ON llm_call_cache(type);
 
 -- ============================================================
+-- llm_cost_ledger — 비용 원장 (LLM-COST-LEDGER-001)
+--   llm_call_cache 는 "중복제거 캐시"(unique input_hash 1행). 원장은 "모든 호출 1행씩"
+--   기록해 벤더(provider)·모델(model)·질의영역(call_type)별 일단위 지출을 추적.
+--   벤더/모델을 바꿔도 같은 축으로 추적 → 운영자 화면(/ops/llm-cost)이 소비.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_cost_ledger (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            TEXT NOT NULL,                       -- ISO8601 (KST) 호출 시각
+    day           TEXT NOT NULL,                       -- 'YYYY-MM-DD' (KST) 일단위 집계 키
+    provider      TEXT NOT NULL,                       -- gemini | claude_code | anthropic | gemini+claude_code | mock
+    model         TEXT NOT NULL,                       -- gemini-2.5-flash | claude-haiku-4-5 | ...
+    call_type     TEXT NOT NULL DEFAULT 'general',     -- 질의영역: anchor_selection|analyst:<id>|strategist:<track>|briefing|news_classify|...
+    target        TEXT,                                -- 종목코드 / 'global' (optional)
+    tokens_in     INTEGER NOT NULL DEFAULT 0,
+    tokens_out    INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL DEFAULT 0,
+    cache_hit     INTEGER NOT NULL DEFAULT 0,          -- 1=캐시 히트(비용 0, 절감 가시화)
+    success       INTEGER NOT NULL DEFAULT 1           -- 0=호출 실패(폴백/에러)
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_cost_ledger_day ON llm_cost_ledger(day);
+CREATE INDEX IF NOT EXISTS idx_llm_cost_ledger_prov_model ON llm_cost_ledger(provider, model);
+CREATE INDEX IF NOT EXISTS idx_llm_cost_ledger_type ON llm_cost_ledger(call_type);
+
+-- ============================================================
 -- notifications_log — 알림 발송 이력 (webapp 조회용)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS notifications_log (

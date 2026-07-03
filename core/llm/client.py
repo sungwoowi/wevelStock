@@ -26,6 +26,7 @@ import json
 from typing import Any, AsyncIterator
 
 from core.config import env, get_config
+from core.llm.ledger import record_llm_cost
 from core.logging import get_logger
 from core.memory.cache import get_cached_response, store_cached_response
 
@@ -255,6 +256,8 @@ async def call_llm(
     provider: str | None = None,
     mock_fallback_allowed: bool = True,
     thinking_budget: int | None = None,
+    call_type: str = "general",
+    target: str | None = None,
 ) -> dict:
     """Call the configured LLM with optional cache lookup.
 
@@ -275,6 +278,10 @@ async def call_llm(
         thinking_budget: Gemini-only thinking 토큰 예산. None=모델 기본, 0=비활성
             (flash, 결정론 JSON 호출용 — thinking 의 예산 잠식 잘림 방지), N=명시.
             anthropic/claude_code/mock 백엔드에서는 무시(no-op).
+        call_type: 비용 원장(llm_cost_ledger) 질의영역 라벨 — 'anchor_selection' /
+            'analyst:<id>' / 'strategist:<track>' / 'briefing' / 'news_classify' 등.
+            운영자 화면이 이 축으로 지출을 집계. 기본 'general'.
+        target: 원장 target 컬럼 — 종목코드/'global' 등 (optional).
 
     Returns:
         dict with content, tokens_in, tokens_out, model, cost_usd, raw.
@@ -300,6 +307,7 @@ async def call_llm(
         cached = get_cached_response(input_hash)
         if cached is not None and not _is_mock_response(cached):
             log.debug("llm_cache_hit", input_hash=input_hash[:24], provider=resolved_provider)
+            _record_ledger(cached, resolved_provider, call_type, target, cache_hit=True)
             return cached
 
     resp = await _dispatch_provider(
@@ -326,7 +334,33 @@ async def call_llm(
             tokens_out=resp["tokens_out"],
             cost_usd=resp["cost_usd"],
         )
+    # 비용 원장 — served 응답 1건 기록 (mock 은 제외 — dev/CI 노이즈).
+    if not _is_mock_response(resp):
+        _record_ledger(resp, resolved_provider, call_type, target, cache_hit=False)
     return resp
+
+
+def _record_ledger(
+    resp: dict,
+    resolved_provider: str,
+    call_type: str,
+    target: str | None,
+    *,
+    cache_hit: bool,
+) -> None:
+    """resp dict → llm_cost_ledger 1행. 실제 서빙한 provider 는 raw.provider 우선."""
+    provider = ((resp.get("raw") or {}).get("provider")) or resolved_provider
+    record_llm_cost(
+        provider=provider,
+        model=resp.get("model") or "unknown",
+        call_type=call_type,
+        target=target,
+        tokens_in=resp.get("tokens_in") or 0,
+        tokens_out=resp.get("tokens_out") or 0,
+        cost_usd=0.0 if cache_hit else (resp.get("cost_usd") or 0.0),
+        cache_hit=cache_hit,
+        success=True,
+    )
 
 
 def _resolve_provider(cfg, *, mock_fallback_allowed: bool = True) -> str:

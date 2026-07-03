@@ -187,6 +187,8 @@ class AnalyzeStage(Stage):
         )
 
         resp = await call_llm(
+            call_type="briefing",
+            target="global",
             system=system_bundle.blocks,
             messages=[{"role": "user", "content": user_content}],
             input_hash=input_hash,

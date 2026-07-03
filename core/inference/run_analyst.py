@@ -899,6 +899,8 @@ async def run_analyst(
 
     started = time.monotonic()
     resp = await call_llm(
+        call_type=f"analyst:{analyst_id}",
+        target=target_ticker,
         system=bundle.blocks,
         messages=messages,
         model=model or spec.model,

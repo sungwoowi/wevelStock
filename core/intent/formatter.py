@@ -478,6 +478,7 @@ async def format_answer(
 
     async def _call(extra_user: str = "") -> dict:
         return await call_llm(
+            call_type="answer_formatter",
             system=system_blocks,
             messages=[{"role": "user", "content": user_msg + extra_user}],
             model=model,

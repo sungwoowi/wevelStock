@@ -452,6 +452,8 @@ async def run_strategist(
 
     started = time.monotonic()
     resp = await call_llm(
+        call_type=f"strategist:{strategist_id}",
+        target=target,
         system=blocks,
         messages=messages,
         model=model or spec.model,

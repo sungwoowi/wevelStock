@@ -37,6 +37,7 @@ from collectors.scoring import (
     interpret_alpha,
     progress_to_b as compute_progress_to_b,
 )
+from core.config import get_config
 from core.db import get_db
 from core.llm.client import call_llm, parse_json_response
 from core.logging import get_logger
@@ -48,7 +49,9 @@ log = get_logger(__name__)
 # Types
 # ---------------------------------------------------------------------------
 
-AnchorSource = Literal["manual", "llm_stage2", "deterministic_fallback", "unavailable"]
+AnchorSource = Literal[
+    "manual", "llm_stage2", "deterministic", "deterministic_fallback", "unavailable"
+]
 CandidateKind = Literal["high", "low"]
 Candidate = tuple[date, float, CandidateKind]
 
@@ -361,6 +364,8 @@ async def select_anchors_via_llm(
 
     try:
         resp = await call_llm(
+            call_type="anchor_selection",
+            target=ticker,
             system="You are a deterministic anchor selector. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
             model=model,
@@ -545,6 +550,28 @@ def _build_result(
     )
 
 
+def _deterministic_anchors(
+    candidates: list[Candidate], current: Anchor, timeframe: str
+) -> tuple[Anchor, Anchor, Anchor] | None:
+    """결정론 anchor 픽 — 마지막 3 usable candidate (C < current 가드).
+
+    WE6. 실 Gemini Stage 2 가 성공 시 산출하는 anchor 와 α 가 소수점까지 동일함을
+    실증(2026-07-04)하면서, LLM 의 'C=최근점 → current 와 날짜 충돌 → α 산출 실패'
+    구조적 결함을 회피한다. config.alpha.anchor_llm_enabled=false 시 기본 경로.
+    """
+    min_gap = max(1, TIMEFRAME_LIMITS[timeframe]["min_gap_days"] // 2)
+    cur_date = current[0]
+    usable = [c for c in candidates if (cur_date - c[0]).days >= min_gap]
+    if len(usable) < 3:
+        return None
+    last3 = usable[-3:]
+    return (
+        (last3[0][0], last3[0][1]),
+        (last3[1][0], last3[1][1]),
+        (last3[2][0], last3[2][1]),
+    )
+
+
 async def _compute_one(
     ticker: str,
     timeframe: str,
@@ -553,7 +580,7 @@ async def _compute_one(
     *,
     skip_cache: bool = False,
 ) -> AlphaResult:
-    """단일 timeframe — manual → Stage 1 + Stage 2 → fallback."""
+    """단일 timeframe — manual → Stage 1 → (config 시 Stage 2 LLM) → 결정론 픽."""
     current = _current_from_ohlcv(ohlcv, cutoff_date)
     if current is None:
         return _unavailable(timeframe, "ohlcv_empty_after_cutoff")
@@ -577,43 +604,52 @@ async def _compute_one(
     if len(candidates) < 3:
         return _unavailable(timeframe, f"insufficient_candidates:{len(candidates)}")
 
-    # 3) Stage 2 LLM
-    llm_result = await select_anchors_via_llm(
-        ticker, timeframe, candidates, cutoff_date=cutoff_date, skip_cache=skip_cache
+    # 3) Stage 2 LLM — config.alpha.anchor_llm_enabled=true 일 때만 (기본 false).
+    #    LLM anchor 는 성공 시 결정론과 α 동일·절반은 실패(검증됨) → 기본은 결정론(비용 0).
+    anchor_llm_enabled = bool(
+        getattr(getattr(get_config(), "alpha", None), "anchor_llm_enabled", False)
     )
-    if llm_result is not None:
-        a_idx, b_idx, c_idx = llm_result["A_idx"], llm_result["B_idx"], llm_result["C_idx"]
-        a = (candidates[a_idx][0], candidates[a_idx][1])
-        b = (candidates[b_idx][0], candidates[b_idx][1])
-        c = (candidates[c_idx][0], candidates[c_idx][1])
-        try:
-            return _build_result(
-                timeframe, a, b, c, current,
-                source="llm_stage2",
-                reason=llm_result.get("reasoning") or None,
-            )
-        except (ValueError, TypeError) as e:
-            log.warning("llm_anchor_alpha_failed", ticker=ticker, tf=timeframe, error=str(e))
+    if anchor_llm_enabled:
+        llm_result = await select_anchors_via_llm(
+            ticker, timeframe, candidates, cutoff_date=cutoff_date, skip_cache=skip_cache
+        )
+        if llm_result is not None:
+            try:
+                a_idx, b_idx, c_idx = (
+                    llm_result["A_idx"], llm_result["B_idx"], llm_result["C_idx"]
+                )
+                a = (candidates[a_idx][0], candidates[a_idx][1])
+                b = (candidates[b_idx][0], candidates[b_idx][1])
+                c = (candidates[c_idx][0], candidates[c_idx][1])
+                return _build_result(
+                    timeframe, a, b, c, current,
+                    source="llm_stage2",
+                    reason=llm_result.get("reasoning") or None,
+                )
+            except (ValueError, TypeError, IndexError, KeyError) as e:
+                log.warning("llm_anchor_alpha_failed", ticker=ticker, tf=timeframe, error=str(e))
 
-    # 4) E6 fallback — 결정론 candidate 마지막 3 개 (단 C < current 보장)
-    # current 와 너무 가까운 trailing candidate 는 제외 — α 계산 시 days(C→current) > 0 강제.
-    min_gap = max(1, TIMEFRAME_LIMITS[timeframe]["min_gap_days"] // 2)
-    cur_date = current[0]
-    usable = [c for c in candidates if (cur_date - c[0]).days >= min_gap]
-    if len(usable) < 3:
+    # 4) 결정론 픽 — 기본 경로 (LLM 비활성) 또는 Stage 2 실패/무효 시 fallback.
+    #    current 와 너무 가까운 trailing candidate 는 제외 — days(C→current) > 0 강제.
+    det = _deterministic_anchors(candidates, current, timeframe)
+    if det is None:
+        min_gap = max(1, TIMEFRAME_LIMITS[timeframe]["min_gap_days"] // 2)
+        usable_n = sum(1 for c in candidates if (current[0] - c[0]).days >= min_gap)
         return _unavailable(
             timeframe,
-            f"WE6 fallback failed: only {len(usable)} candidates ≥ {min_gap}d before current",
+            f"deterministic anchor: only {usable_n} candidates ≥ {min_gap}d before current",
         )
-    last3 = usable[-3:]
-    a = (last3[0][0], last3[0][1])
-    b = (last3[1][0], last3[1][1])
-    c = (last3[2][0], last3[2][1])
-    return _build_result(
-        timeframe, a, b, c, current,
-        source="deterministic_fallback",
-        reason="WE6 fallback (Stage 2 실패 또는 무효 → 결정론 마지막 3 candidate, C < current 가드 적용)",
-    )
+    a, b, c = det
+    if anchor_llm_enabled:
+        source: AnchorSource = "deterministic_fallback"
+        reason = "WE6 fallback (Stage 2 실패/무효 → 결정론 마지막 3 candidate, C < current 가드)"
+    else:
+        source = "deterministic"
+        reason = (
+            "결정론 anchor 기본 (config.alpha.anchor_llm_enabled=false) — "
+            "마지막 3 usable candidate, C < current 가드. LLM 대비 α 동일·비용 0 (2026-07-04 검증)"
+        )
+    return _build_result(timeframe, a, b, c, current, source=source, reason=reason)
 
 
 async def compute_alpha_3tf(
@@ -677,7 +713,7 @@ def render_alpha_3tf_md(results: dict[str, AlphaResult], ticker: str) -> str:
     """`[5] α 3 timeframe` 블록 — chart_data_md 다음 system prompt 주입.
 
     WAVE-ALPHA-001 § 11 + persona v4 § 4 가 인용할 데이터 풀세트.
-    환각 가드 3중 정합: source 항상 명시 (manual / llm_stage2 / deterministic_fallback / unavailable).
+    환각 가드 3중 정합: source 항상 명시 (manual / deterministic / llm_stage2 / deterministic_fallback / unavailable).
     """
     lines: list[str] = []
     lines.append("## [5] α 3 timeframe (WAVE-ALPHA-001)")
@@ -712,8 +748,9 @@ def render_alpha_3tf_md(results: dict[str, AlphaResult], ticker: str) -> str:
         lines.append("")
 
     lines.append(
-        "_anchor source = `manual` (사용자 직접 박음) / `llm_stage2` (Haiku 4.5 직관 캐시) / "
-        "`deterministic_fallback` (LLM 실패 시 결정론 마지막 3 candidate) / `unavailable` (산출 불가)._"
+        "_anchor source = `manual` (사용자 직접 박음) / `deterministic` (결정론 픽 기본, 비용 0) / "
+        "`llm_stage2` (LLM 직관 캐시, config 시) / `deterministic_fallback` (LLM 실패 시 결정론) / "
+        "`unavailable` (산출 불가)._"
     )
     return "\n".join(lines)
 

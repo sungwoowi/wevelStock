@@ -15,6 +15,7 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
@@ -442,12 +443,26 @@ class TestComputeAlpha3TF:
         assert results["weekly"].anchor_a == (date(2023, 2, 1), 80.0)
 
     @pytest.mark.asyncio
+    async def test_deterministic_by_default_no_llm(self, seeded_ohlcv, fresh_db) -> None:
+        """기본(anchor_llm_enabled=false): LLM 호출 없이 결정론 픽 → source='deterministic'."""
+        ticker = seeded_ohlcv
+        async def _fail(**kwargs):
+            raise AssertionError("anchor_llm_enabled=false 기본에서 LLM 이 호출되면 안 됨")
+        with patch("collectors.anchors.call_llm", side_effect=_fail):
+            results = await compute_alpha_3tf(ticker, skip_cache=True)
+        sources = [r.source for r in results.values()]
+        assert "deterministic" in sources
+        assert all(s in ("deterministic", "unavailable", "manual") for s in sources)
+
+    @pytest.mark.asyncio
     async def test_e6_fallback_when_llm_fails(self, seeded_ohlcv, fresh_db) -> None:
-        """LLM 실패 시 결정론 candidate 마지막 3 개 채택."""
+        """anchor_llm_enabled=true + LLM 실패 시 결정론 candidate 마지막 3 개로 fallback."""
         ticker = seeded_ohlcv
         async def _raise(**kwargs):
             raise RuntimeError("llm down")
-        with patch("collectors.anchors.call_llm", side_effect=_raise):
+        cfg = SimpleNamespace(alpha=SimpleNamespace(anchor_llm_enabled=True))
+        with patch("collectors.anchors.get_config", return_value=cfg), \
+             patch("collectors.anchors.call_llm", side_effect=_raise):
             results = await compute_alpha_3tf(ticker, skip_cache=True)
         # 적어도 한 timeframe 은 deterministic_fallback 으로 떨어져야 함
         sources = [r.source for r in results.values()]

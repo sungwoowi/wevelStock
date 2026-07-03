@@ -661,6 +661,7 @@ async def _classify_one(
 
     try:
         resp = await call_llm(
+            call_type="news_classify",
             system="You are a deterministic news classifier. Output only valid JSON.",
             messages=[{"role": "user", "content": _build_classify_prompt(item)}],
             model=model,

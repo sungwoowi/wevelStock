@@ -390,3 +390,34 @@ export type NewsItemsResp = { items: NewsItem[]; count: number };
 
 /** GET /api/notifications/recent. */
 export type NotificationsResp = { notifications: Notification[]; unread_count: number };
+
+// --- 운영자: LLM 비용 원장 (LLM-COST-LEDGER-001 / GET /api/ops/llm-cost) --------
+
+export type LlmCostRow = {
+  provider?: string;
+  model?: string;
+  call_type?: string;
+  day?: string;
+  cost_usd: number;
+  calls: number;
+  cache_hits?: number;
+  tokens_in?: number;
+  tokens_out?: number;
+};
+
+/** GET /api/ops/llm-cost?days=N — 벤더·모델·질의영역·일자별 지출 집계. */
+export type LlmCostSummary = {
+  range: { days: number; since: string };
+  totals: {
+    cost_usd: number;
+    calls: number;
+    cache_hits: number;
+    tokens_in: number;
+    tokens_out: number;
+  };
+  by_provider: LlmCostRow[];
+  by_model: LlmCostRow[];
+  by_call_type: LlmCostRow[];
+  by_day: LlmCostRow[];
+  by_day_provider: LlmCostRow[];
+};
