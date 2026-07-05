@@ -33,13 +33,15 @@ def test_track_b_manifest_loads() -> None:
     assert spec.id == "track_b"
     assert spec.display_name == "Track B 프랙탈 1 파 전략가"  # 2026-05-19 본질 표기 갱신 (기간 어휘 폐기)
     assert spec.track == "B"
-    # SPEC L152-157 reads_analysts 5명
+    # SPEC L152-157 reads_analysts 5명 + news_curator (NEWS-EVENT-INTERPRETATION-001
+    # M1-c 2026-07-06 — 뉴스부 dead-end 해소로 양 트랙 합류)
     assert spec.reads_analysts == [
         "stock_picker",
         "trader",
         "market_state_analyzer",
         "flow_analyzer",
         "principle_guardian",
+        "news_curator",
     ]
     # canon_categories 3개 (시장 체제 + 트레이딩 doctrine + 운영 안전장치)
     assert spec.canon_categories == [
@@ -233,12 +235,13 @@ async def test_run_strategist_track_b_metadata(monkeypatch: pytest.MonkeyPatch) 
     assert md["strategist_id"] == "track_b"
     assert md["track"] == "B"
     assert md["target"] == "005930"
-    assert len(md["reads_analysts"]) == 5
+    assert len(md["reads_analysts"]) == 6  # 5명 + news_curator (M1-c 합류)
     assert md["analyst_published_count"] == 1  # trader 만 발행
-    assert md["analyst_missing_count"] == 4
+    assert md["analyst_missing_count"] == 5
     assert set(md["analyst_missing_ids"]) == {
         "stock_picker",
         "market_state_analyzer",
         "flow_analyzer",
         "principle_guardian",
+        "news_curator",
     }

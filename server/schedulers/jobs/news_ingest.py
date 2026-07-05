@@ -65,6 +65,36 @@ async def _build_universe_and_name_map() -> tuple[list[str], dict[str, str]]:
     return tickers, name_map
 
 
+def _interpretation_market_context(date: str) -> str | None:
+    """해석 4축 ⑷(시장 실반응·파동 정합) 재료 — 결정론 실측 md (LLM 0, graceful).
+
+    market_view 스냅샷(regime·entry_posture·미장 risk 토큰·지수 반응 흡수)을 재사용.
+    오늘 없으면 최근 3일 lookback(주말·장전 커버) + 시점 표기. 전부 없으면 None
+    (프롬프트가 '판단 불가' 지시로 처리).
+    """
+    from datetime import timedelta
+
+    from collectors.market_view import get_today_view, render_market_view_md
+
+    try:
+        base = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return None
+    for back in range(0, 4):
+        day = (base - timedelta(days=back)).strftime("%Y-%m-%d")
+        try:
+            view = get_today_view(day, "KOSPI")
+        except Exception as e:  # noqa: BLE001 — 컨텍스트 부재가 해석을 막지 않음
+            log.warning("interpretation_context_failed", date=day, error=str(e))
+            return None
+        if view is not None:
+            md = render_market_view_md(view)
+            if back > 0:
+                md = f"(주의: {back}일 전 {day} 스냅샷 — 최신 아님)\n{md}"
+            return md
+    return None
+
+
 async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
     """뉴스 일일 적재 entrypoint. 일일 허브가 호출.
 
@@ -92,6 +122,7 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
         collect_from_sources,
         digest_persist_empty_scopes,
         digest_scope_universe_limit,
+        interpret_elevated_events,
         upsert_news_digest,
         upsert_news_items,
     )
@@ -159,6 +190,7 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
 
     scopes_persisted = 0
     scopes_failed = 0
+    market_digest_obj: Any | None = None
     for scope_label, tk, sec in scopes:
         try:
             digest = build_news_digest(target_date, ticker=tk, sector=sec, persist=False)
@@ -167,6 +199,7 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
                 upsert_news_digest(digest)
                 scopes_persisted += 1
             if scope_label == "market":
+                market_digest_obj = digest
                 digest_result = {
                     "tone": digest.tone,
                     "source": digest.source,
@@ -183,6 +216,35 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
         scopes_persisted=scopes_persisted,
         scopes_failed=scopes_failed,
     )
+
+    # 5.5단계: 격상 이벤트 LLM 해석 (NEWS-EVENT-INTERPRETATION-001 M1-b, market 전용).
+    # 격상 감지는 5단계 build_news_digest 가 결정론으로 끝냄 — 여기선 미해석분만 LLM
+    # (일 0~2건 상한, 캐시 멱등 → 06:40 장전·18:05 장후 하루 2회 돌아도 재해석은 기사
+    # 집합이 늘었을 때뿐). 해석 attach 후 재영속. 실패는 격리 (advisory 층이라 비치명).
+    elevated_events = list(getattr(market_digest_obj, "elevated_events", None) or [])
+    interpreted = 0
+    if elevated_events:
+        try:
+            pending = [e for e in elevated_events if e.get("interpretation") is None]
+            if pending:
+                ctx_md = _interpretation_market_context(target_date)
+                await interpret_elevated_events(
+                    elevated_events, date=target_date, market_context_md=ctx_md
+                )
+                upsert_news_digest(market_digest_obj)
+            interpreted = sum(
+                1 for e in elevated_events if e.get("interpretation") is not None
+            )
+            log.info(
+                "news_ingest_interpreted",
+                elevated=len(elevated_events), interpreted=interpreted,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("news_ingest_interpret_failed", error=str(e))
+            failures.append({"stage": "interpret", "error": str(e)})
+    if isinstance(digest_result, dict) and "error" not in digest_result:
+        digest_result["elevated"] = len(elevated_events)
+        digest_result["interpreted"] = interpreted
 
     elapsed = time.monotonic() - started
     log.info(

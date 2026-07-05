@@ -537,6 +537,7 @@ CREATE TABLE IF NOT EXISTS news_digest_snapshot (
     top_themes_json TEXT,                    -- [{theme, time_axis, trigger_titles[]}]
     catalyst_tilt_json TEXT,                 -- {direction, strength} (종목/섹터 scope → buy_score N 블렌드)
     raw_labels      TEXT,                    -- LLM 주입용 분류 텍스트 묶음
+    elevated_events_json TEXT,               -- v20: 격상 이벤트+해석 [{event_key,...,interpretation}] (NEWS-EVENT-INTERPRETATION-001, market scope)
     source          TEXT,                    -- db | computed | empty
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (scope, date)

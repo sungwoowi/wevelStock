@@ -31,6 +31,13 @@ def _cron_from_expr(expr: str, tz: str = "Asia/Seoul") -> CronTrigger:
     return CronTrigger(minute=m, hour=h, day=dom, month=mo, day_of_week=dow, timezone=tz)
 
 
+def _news_premarket_cfg() -> dict:
+    """config/news_source.yaml premarket 섹션 (하드코딩 금지). 부재 시 기본값."""
+    from collectors.news_source import load_news_source_config
+
+    return (load_news_source_config().get("premarket") or {})
+
+
 def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
     cfg = get_config().scheduler
     tz = get_config().timezone
@@ -99,6 +106,29 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         max_instances=1,
     )
     registered += 1
+
+    # NEWS-EVENT-INTERPRETATION-001 M1-b′ (D5) — 장전 06:40 KST 뉴스 ingest (평일).
+    #   간밤 미장발 이벤트(메타발 유형)를 수집→분류→격상→해석해 07:00 장전 브리핑과
+    #   09:35 장중 회차가 해석된 상태로 읽게 함. 분류=url 캐싱(간밤 신규분만 실비용),
+    #   해석=격상 시 0~2콜. 18:05 daily_refresh 의 뉴스 단계와 같은 entrypoint (멱등).
+    #   config news_source.yaml premarket 섹션으로 시각·토글 외부화.
+    _premarket_cfg = _news_premarket_cfg()
+    if _premarket_cfg.get("enabled", True):
+        scheduler.add_job(
+            run_news_ingest,
+            CronTrigger(
+                day_of_week="mon-fri",
+                hour=int(_premarket_cfg.get("hour", 6)),
+                minute=int(_premarket_cfg.get("minute", 40)),
+                timezone=tz,
+            ),
+            id="news_ingest::premarket",
+            replace_existing=True,
+            misfire_grace_time=MISFIRE_GRACE_SEC,
+            coalesce=True,
+            max_instances=1,
+        )
+        registered += 1
 
     # AUTO-SIGNAL-GENERATION-001 M3 — 장중 자동 권고 생성 (09:35/12:35/14:35 KST 평일).
     #   스냅샷 갱신(market_briefing_now 09:30/12:30/14:30) 직후 = fresh 외인·기관 수급.

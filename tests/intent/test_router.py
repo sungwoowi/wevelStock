@@ -411,15 +411,15 @@ class TestScenarioRouting:
             scenario_id=999, agent_route="track_a", ticker="005930"
         )
         asyncio.run(route_intent(c, [{"role": "user", "content": "x"}]))
-        # track_a reads_analysts = 6명
-        assert len(stub_analyst) == 6
+        # track_a reads_analysts = 7명 (6명 + news_curator, NEWS-EVENT-INTERPRETATION-001 M1-c)
+        assert len(stub_analyst) == 7
 
     def test_resolve_analyst_ids_helper(self) -> None:
         # 직접 helper 호출 검증
         ids1 = _resolve_analyst_ids_for_scenario(1, ["track_a"])
         assert set(ids1) == {"stock_analyst", "principle_guardian", "flow_analyzer"}
         ids_fallback = _resolve_analyst_ids_for_scenario(999, ["track_a"])
-        assert len(ids_fallback) == 6
+        assert len(ids_fallback) == 7  # 6명 + news_curator (M1-c 합류)
 
 
 class TestTrackRequiredAugmentation:

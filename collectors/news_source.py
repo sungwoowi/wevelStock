@@ -372,6 +372,10 @@ class NewsDigest:
     top_themes: list[dict] = field(default_factory=list)
     catalyst_tilt: dict[str, str] = field(default_factory=dict)  # {direction, strength}
     raw_labels: str = ""
+    # NEWS-EVENT-INTERPRETATION-001 — 격상 이벤트 + LLM 해석 (market scope 전용).
+    # [{event_key, theme, elevated_by, source_count, max_magnitude,
+    #   trigger_titles[], urls[], interpretation|None}]
+    elevated_events: list[dict] = field(default_factory=list)
     source: str = "empty"  # db | computed | empty
 
 
@@ -382,13 +386,15 @@ def upsert_news_digest(digest: NewsDigest) -> None:
         conn.execute(
             "INSERT INTO news_digest_snapshot "
             "(scope, date, tone, category_counts_json, top_themes_json, "
-            " catalyst_tilt_json, raw_labels, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            " catalyst_tilt_json, raw_labels, elevated_events_json, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(scope, date) DO UPDATE SET "
             " tone=excluded.tone, category_counts_json=excluded.category_counts_json, "
             " top_themes_json=excluded.top_themes_json, "
             " catalyst_tilt_json=excluded.catalyst_tilt_json, "
-            " raw_labels=excluded.raw_labels, source=excluded.source",
+            " raw_labels=excluded.raw_labels, "
+            " elevated_events_json=excluded.elevated_events_json, "
+            " source=excluded.source",
             (
                 digest.scope,
                 digest.date,
@@ -397,6 +403,7 @@ def upsert_news_digest(digest: NewsDigest) -> None:
                 json.dumps(digest.top_themes, ensure_ascii=False),
                 json.dumps(digest.catalyst_tilt, ensure_ascii=False),
                 digest.raw_labels,
+                json.dumps(digest.elevated_events, ensure_ascii=False),
                 # source 정직 저장 — 빈 집계는 'empty' 그대로 (미수집/neutral 구분).
                 # get_news_digest 는 캐시 출처 마커로 'db' 를 반환하므로 소비자 분기 무영향.
                 digest.source,
@@ -413,6 +420,8 @@ def get_news_digest(scope: str, date: str) -> NewsDigest | None:
     )
     if row is None:
         return None
+    keys = row.keys()
+    elevated_raw = row["elevated_events_json"] if "elevated_events_json" in keys else None
     return NewsDigest(
         date=row["date"],
         scope=row["scope"],
@@ -421,6 +430,7 @@ def get_news_digest(scope: str, date: str) -> NewsDigest | None:
         top_themes=json.loads(row["top_themes_json"]) if row["top_themes_json"] else [],
         catalyst_tilt=json.loads(row["catalyst_tilt_json"]) if row["catalyst_tilt_json"] else {},
         raw_labels=row["raw_labels"] or "",
+        elevated_events=json.loads(elevated_raw) if elevated_raw else [],
         source="db",
     )
 
@@ -452,13 +462,15 @@ def _classify_cache_key(url: str, title: str, model: str) -> str:
     return f"{url}|{title}|{model}|{_CLASSIFY_CONTRACT_VERSION}"
 
 
-def _get_cached_classification(input_hash: str, *, ttl_days: int) -> dict | None:
-    """llm_call_cache type='news_classify' 조회 (anchors _get_cached_anchor mirror)."""
+def _get_cached_classification(
+    input_hash: str, *, ttl_days: int, cache_type: str = _CLASSIFY_CACHE_TYPE
+) -> dict | None:
+    """llm_call_cache type 조회 (anchors _get_cached_anchor mirror). 기본=news_classify."""
     db = get_db()
     row = db.fetch_one(
         "SELECT response_json, created_at FROM llm_call_cache "
         "WHERE input_hash = ? AND type = ?",
-        (input_hash, _CLASSIFY_CACHE_TYPE),
+        (input_hash, cache_type),
     )
     if row is None:
         return None
@@ -482,8 +494,9 @@ def _store_cached_classification(
     tokens_out: int = 0,
     cost_usd: float = 0.0,
     ttl_days: int = 365,
+    cache_type: str = _CLASSIFY_CACHE_TYPE,
 ) -> None:
-    """llm_call_cache 에 type='news_classify' 저장 (anchors _store_cached_anchor mirror)."""
+    """llm_call_cache 저장 (anchors _store_cached_anchor mirror). 기본=news_classify."""
     db = get_db()
     with db.connect() as conn:
         conn.execute(
@@ -508,7 +521,7 @@ def _store_cached_classification(
                 cost_usd,
                 ttl_days,
                 datetime.now(timezone.utc).isoformat(),
-                _CLASSIFY_CACHE_TYPE,
+                cache_type,
             ),
         )
 
@@ -933,6 +946,303 @@ def _top_themes(items: list[NewsItem], *, n: int, titles_n: int) -> list[dict]:
     return themes
 
 
+# ---------------------------------------------------------------------------
+# NEWS-EVENT-INTERPRETATION-001 M1-a — 격상 레인 (결정론, LLM 0)
+#   D1: mag3 단건 즉시 + mag2 × 서로 다른 출처 N건(확산) 격상. 클러스터=_theme_key 재사용.
+#   순수 함수 — cutoff 리플레이·백테스트 재현 가능.
+# ---------------------------------------------------------------------------
+_EVENT_KEY_WS_RE = re.compile(r"\s+")
+
+
+def _event_key(theme: str) -> str:
+    """테마 → 결정론 이벤트 키 (lifecycle 연결·재보도 병합의 기초). 공백→'-', 소문자."""
+    return _EVENT_KEY_WS_RE.sub("-", str(theme).strip()).lower()
+
+
+def detect_elevated_events(
+    items: list[NewsItem],
+    *,
+    multi_source_n: int = 3,
+    mag3_single: bool = True,
+    titles_n: int = 3,
+) -> list[dict]:
+    """당일 라벨링 뉴스에서 '오늘의 중심 이벤트' 후보를 결정론 격상 (D1).
+
+    ① magnitude=3 단건 → 즉시 격상 (elevated_by="mag3_single")
+    ② magnitude≥2 클러스터가 서로 다른 출처 multi_source_n 건 이상 → 확산 격상
+       (elevated_by="mag2_multi_source") — LLM 라벨 불안정성(같은 이벤트도 2/3 갈림) 보완.
+    클러스터 키 = _theme_key (top_themes 와 동일 축). 같은 클러스터 mag3+mag2 는 1건 dedup.
+    정렬 = max_magnitude desc → source_count desc → event_key (백테스트 재현).
+    interpretation 은 None — M1-b 해석 스테이지(LLM)가 별도 attach.
+    """
+    groups: dict[str, list[NewsItem]] = defaultdict(list)
+    for it in items:
+        if it.magnitude not in (2, 3):
+            continue
+        key = _theme_key(it)
+        if key:
+            groups[key].append(it)
+
+    events: list[dict] = []
+    for theme, members in groups.items():
+        has_mag3 = any(m.magnitude == 3 for m in members)
+        sources = {m.source for m in members if m.source}
+        if has_mag3 and mag3_single:
+            elevated_by = "mag3_single"
+        elif len(sources) >= max(1, int(multi_source_n)):
+            elevated_by = "mag2_multi_source"
+        else:
+            continue
+        events.append({
+            "event_key": _event_key(theme),
+            "theme": theme,
+            "elevated_by": elevated_by,
+            "source_count": len(sources),
+            "max_magnitude": max(m.magnitude or 0 for m in members),
+            "trigger_titles": [m.title for m in members[:titles_n]],
+            "urls": [m.url for m in members],
+            "interpretation": None,
+        })
+
+    events.sort(key=lambda e: (-e["max_magnitude"], -e["source_count"], e["event_key"]))
+    return events
+
+
+def _elevation_cfg() -> dict[str, Any]:
+    return (load_news_source_config().get("elevation") or {})
+
+
+# ---------------------------------------------------------------------------
+# NEWS-EVENT-INTERPRETATION-001 M1-b — 해석 스테이지 (LLM 1콜/이벤트, D3)
+#   격상 이벤트에 한해 4축 해석: novelty / 펀더 정합 / 노이즈 반복 / 시장 실반응·파동 정합.
+#   nature ∈ {transient_fear, structural_inflection, unresolved}.
+#   캐시 = llm_call_cache type='news_interpretation' (event_key×기사집합×일자×모델 멱등).
+#   M1 은 advisory 전용 — 게이트(is_macro_inflection·entry_posture) 기여 없음.
+# ---------------------------------------------------------------------------
+_INTERP_CONTRACT_VERSION = "1.0"
+_INTERP_CACHE_TYPE = "news_interpretation"
+_VALID_NATURES = {"transient_fear", "structural_inflection", "unresolved"}
+_INTERP_AXES = (
+    "novelty",
+    "fundamental_alignment",
+    "noise_rotation",
+    "market_reaction_alignment",
+)
+
+
+def _interpretation_cfg() -> dict[str, Any]:
+    return (load_news_source_config().get("interpretation") or {})
+
+
+def _interp_cache_key(event: dict, date: str, model: str) -> str:
+    """해석 멱등 키 — event_key + 소속 기사 url 집합 + 일자 + 모델 + 계약버전.
+
+    기사 집합이 늘면(재보도 확산) 키가 바뀌어 재해석 = 의도된 갱신.
+    """
+    urls = "|".join(sorted(event.get("urls") or []))
+    return f"{event.get('event_key')}|{urls}|{date}|{model}|{_INTERP_CONTRACT_VERSION}"
+
+
+def _build_interpretation_prompt(
+    event: dict, *, date: str, market_context_md: str | None
+) -> str:
+    """격상 이벤트 1건 해석 프롬프트 — 해석 질문지 4축 (07-03 사용자 실판단에서 추출).
+
+    시장 실반응·파동 컨텍스트(결정론 값)를 주입해 매크로×업황×파동 종합 해석.
+    제목·라벨에 실제로 담긴 내용으로만 — 학습 데이터 추측 금지 (classify 와 동일 가드).
+    """
+    titles = "\n".join(f"- {t}" for t in (event.get("trigger_titles") or []))
+    ctx_block = (
+        f"\n시장 실반응·차트 위치 (결정론 실측값 — 4축 ⑷ 판별 재료):\n{market_context_md}\n"
+        if market_context_md
+        else "\n(시장 반응 데이터 없음 — ⑷ 축은 '판단 불가'로 답하세요)\n"
+    )
+    return f"""당신은 시장 이벤트 해석자입니다. 아래 격상된 중심 이벤트 1건을 해석하세요.
+기사 제목·라벨에 실제로 담긴 내용과 주어진 실측값으로만 판단하고, 학습 데이터의 추측을 더하지 마세요.
+
+날짜: {date}
+중심 이벤트: {event.get('theme')} (격상 사유: {event.get('elevated_by')}, 출처 {event.get('source_count')}곳, 최대강도 {event.get('max_magnitude')})
+관련 기사 제목:
+{titles}
+{ctx_block}
+해석 질문지 4축 — 각 축에 verdict(짧은 판정)와 reason(한 줄 근거)로 답하세요:
+1. novelty: 새 정보인가, 이미 예고됐던 것의 재탕인가 (재탕이면 임팩트 할인)
+2. fundamental_alignment: 사이클 팩트(실적·가이던스)와 뉴스 내러티브가 정합하는가 (괴리면 뉴스가 빌미일 확률)
+3. noise_rotation: 매일 다른 악재가 돌아가며 나오는 패턴인가 (= 고점 조정 빌미 찾기 시그니처)
+4. market_reaction_alignment: 시장이 실제로 얼마나 반응했고, 그 시장이 추세·차트상 조정이 나올 자리였는가 (뉴스가 원인인가 빌미인가)
+
+nature 판정 (택1):
+- transient_fear: 단기 공포 — 4축이 재탕·괴리·빌미 쪽으로 정렬. 급락 = 잠재 기회 성격.
+- structural_inflection: 구조 변곡 — 새 정보가 사이클·구조를 실제로 바꿈.
+- unresolved: 아직 판별 불가 — 재평가 조건 명시 필수.
+
+JSON 형식으로만 응답 (다른 텍스트 금지):
+{{
+  "nature": "transient_fear|structural_inflection|unresolved",
+  "axes": {{
+    "novelty": {{"verdict": "...", "reason": "..."}},
+    "fundamental_alignment": {{"verdict": "...", "reason": "..."}},
+    "noise_rotation": {{"verdict": "...", "reason": "..."}},
+    "market_reaction_alignment": {{"verdict": "...", "reason": "..."}}
+  }},
+  "impact_path": ["영향 섹터/테마", ...],
+  "trade_implication": "<posture 후보 서술 — 관망/현금확보/눌림목 대기 등>",
+  "reassess_condition": "<무엇이 확인되면 판정을 바꾸는가>",
+  "confidence": <0~100>
+}}"""
+
+
+def _validate_interpretation(result: Any) -> dict | None:
+    """해석 응답 유효성 검증 — 실패 시 None (graceful, interpretation 미부착)."""
+    if not isinstance(result, dict):
+        return None
+    if result.get("nature") not in _VALID_NATURES:
+        return None
+    axes = result.get("axes")
+    if not isinstance(axes, dict):
+        return None
+    clean_axes: dict[str, dict] = {}
+    for axis in _INTERP_AXES:
+        entry = axes.get(axis)
+        if not isinstance(entry, dict) or not entry.get("verdict"):
+            return None
+        clean_axes[axis] = {
+            "verdict": str(entry.get("verdict")),
+            "reason": str(entry.get("reason") or ""),
+        }
+    try:
+        confidence = max(0, min(100, int(result.get("confidence"))))
+    except (TypeError, ValueError):
+        return None
+    impact_path = result.get("impact_path")
+    return {
+        "nature": result["nature"],
+        "axes": clean_axes,
+        "impact_path": [str(p) for p in impact_path] if isinstance(impact_path, list) else [],
+        "trade_implication": str(result.get("trade_implication") or ""),
+        "reassess_condition": str(result.get("reassess_condition") or ""),
+        "confidence": confidence,
+    }
+
+
+async def _interpret_one(
+    event: dict,
+    *,
+    date: str,
+    model: str,
+    provider: str | None,
+    max_tokens: int,
+    ttl_days: int,
+    skip_cache: bool,
+    market_context_md: str | None,
+) -> None:
+    """단일 격상 이벤트 해석 — 캐시 → LLM → 검증 → attach. 실패 시 미변경 (graceful)."""
+    input_hash = hashlib.sha256(
+        _interp_cache_key(event, date, model).encode("utf-8")
+    ).hexdigest()
+
+    if not skip_cache:
+        cached = _get_cached_classification(
+            input_hash, ttl_days=ttl_days, cache_type=_INTERP_CACHE_TYPE
+        )
+        if cached is not None:
+            interp = _validate_interpretation(cached)
+            if interp is not None:
+                event["interpretation"] = interp
+            return
+
+    try:
+        resp = await call_llm(
+            call_type="news_interpretation",
+            system=(
+                "You are a market event interpreter. Ground strictly in the given "
+                "facts. Output only valid JSON."
+            ),
+            messages=[{
+                "role": "user",
+                "content": _build_interpretation_prompt(
+                    event, date=date, market_context_md=market_context_md
+                ),
+            }],
+            model=model,
+            provider=provider,
+            max_tokens=max_tokens,
+            temperature=0.0,
+            # Gemini-2.5 thinking 토큰의 max_output 잠식 → JSON 잘림 방지
+            # ([[feedback_gemini_thinking_budget_json]] — classify 와 동일 가드).
+            thinking_budget=0,
+        )
+        interp = _validate_interpretation(parse_json_response(resp.get("content", "")))
+    except Exception as e:  # noqa: BLE001 — 한 건 실패가 전체를 막지 않음
+        log.warning(
+            "news_interpret_failed",
+            event_key=event.get("event_key"), error_type=type(e).__name__, error=str(e),
+        )
+        return
+
+    if interp is None:
+        log.info("news_interpret_invalid", event_key=event.get("event_key"))
+        return
+
+    event["interpretation"] = interp
+    if not skip_cache:
+        _store_cached_classification(
+            input_hash,
+            interp,
+            model=resp.get("model", model),
+            tokens_in=int(resp.get("tokens_in", 0)),
+            tokens_out=int(resp.get("tokens_out", 0)),
+            cost_usd=float(resp.get("cost_usd", 0.0)),
+            ttl_days=ttl_days,
+            cache_type=_INTERP_CACHE_TYPE,
+        )
+
+
+async def interpret_elevated_events(
+    events: list[dict],
+    *,
+    date: str,
+    market_context_md: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    skip_cache: bool = False,
+) -> list[dict]:
+    """격상 이벤트 목록에 LLM 해석 attach (in-place + 반환, M1-b).
+
+    이미 해석 있는 이벤트는 skip (멱등). max_events_per_day 상한으로 비용 유계 —
+    격상은 드묾(예상 일 0~2건)이라 Flash 기본으로 미미, 퀄 부족 시 config 로 Pro 승격.
+
+    Args:
+        events: detect_elevated_events 산출 (정렬 순서대로 상한 적용).
+        date: 해석 기준 일자 (캐시 키 축).
+        market_context_md: 시장 실반응·파동 결정론 실측 md (4축 ⑷ 재료). None 허용.
+        model / provider: None 시 config interpretation.* → call_llm 기본.
+        skip_cache: True 면 캐시 bypass (테스트용).
+    """
+    if not events:
+        return events
+    cfg = _interpretation_cfg()
+    if not cfg.get("enabled", True):
+        return events
+    model = model or cfg.get("model") or "gemini-2.5-flash"
+    provider = provider if provider is not None else cfg.get("provider")
+    max_tokens = int(cfg.get("max_tokens", 1024))
+    ttl_days = int(cfg.get("cache_ttl_days", 30))
+    cap = int(cfg.get("max_events_per_day", 3))
+
+    targets = [e for e in events if e.get("interpretation") is None][:cap]
+    for event in targets:
+        await _interpret_one(
+            event,
+            date=date, model=model, provider=provider, max_tokens=max_tokens,
+            ttl_days=ttl_days, skip_cache=skip_cache,
+            market_context_md=market_context_md,
+        )
+    interpreted = sum(1 for e in events if e.get("interpretation") is not None)
+    log.info("news_interpreted", total=len(events), interpreted=interpreted)
+    return events
+
+
 def _raw_labels(items: list[NewsItem]) -> str:
     """LLM 주입용 분류 텍스트 묶음 — 한 줄/뉴스. 라벨 없으면 (미분류) 표시."""
     lines: list[str] = []
@@ -1016,11 +1326,46 @@ def build_news_digest(
             "strength": _catalyst_strength(net),
         },
         raw_labels=_raw_labels(scoped),
+        elevated_events=_detect_and_merge_elevated(scope, date, scoped),
         source="computed",
     )
     if persist:
         upsert_news_digest(digest)
     return digest
+
+
+def _detect_and_merge_elevated(
+    scope: str, date: str, scoped: list[NewsItem]
+) -> list[dict]:
+    """격상 후보 결정론 산출 + 기존 영속 해석 보존 병합 (M1-a — market scope 전용).
+
+    소비자(market_view·buy_score)가 on-demand 재계산해도 ingest 가 attach 한
+    LLM 해석이 event_key 병합으로 살아남는다 (REPLACE 덮어쓰기 사고 방지).
+    """
+    if scope != "market":
+        return []  # 중심 이벤트 = 시장 단위 판단 (종목/섹터 scope 은 격상 없음)
+    ecfg = _elevation_cfg()
+    if not ecfg.get("enabled", True):
+        return []
+    events = detect_elevated_events(
+        scoped,
+        multi_source_n=int(ecfg.get("multi_source_n", 3)),
+        mag3_single=bool(ecfg.get("mag3_single", True)),
+        titles_n=int(_digest_cfg().get("trigger_titles_n", 3)),
+    )
+    if not events:
+        return events
+    existing = get_news_digest(scope, date)
+    if existing and existing.elevated_events:
+        interp_by_key = {
+            e.get("event_key"): e.get("interpretation")
+            for e in existing.elevated_events
+            if e.get("interpretation") is not None
+        }
+        for e in events:
+            if e["event_key"] in interp_by_key:
+                e["interpretation"] = interp_by_key[e["event_key"]]
+    return events
 
 
 # ===========================================================================
@@ -1049,6 +1394,65 @@ _TIME_AXIS_KR = {
     "structural_trend": "지속 흐름",
 }
 _STRENGTH_KR = {"weak": "약", "mid": "중", "strong": "강"}
+_NATURE_KR = {
+    "transient_fear": "단기 공포 (잠재 기회 성격)",
+    "structural_inflection": "구조 변곡",
+    "unresolved": "판별 유보",
+}
+_AXIS_KR = {
+    "novelty": "새 정보 vs 재탕",
+    "fundamental_alignment": "펀더멘털 정합",
+    "noise_rotation": "노이즈 반복(빌미) 패턴",
+    "market_reaction_alignment": "시장 실반응·차트 위치 정합",
+}
+_ELEVATED_BY_KR = {
+    "mag3_single": "대형(강도3) 단건",
+    "mag2_multi_source": "중형(강도2) 다중 출처 확산",
+}
+
+
+def _render_elevated_events_md(events: list[dict]) -> list[str]:
+    """'오늘의 중심 이벤트' 섹션 lines (M1-c — digest md 최상단 배치용)."""
+    lines: list[str] = []
+    lines.append("")
+    lines.append("### ⚡ 오늘의 중심 이벤트 (격상 레인)")
+    for ev in events:
+        by_kr = _ELEVATED_BY_KR.get(ev.get("elevated_by"), ev.get("elevated_by", "?"))
+        lines.append("")
+        lines.append(
+            f"**{ev.get('theme')}** — 격상 사유: {by_kr} "
+            f"(출처 {ev.get('source_count', '?')}곳, 최대강도 {ev.get('max_magnitude', '?')})"
+        )
+        titles = ev.get("trigger_titles") or []
+        if titles:
+            lines.append(f"- 대표 기사: {' / '.join(titles)}")
+        interp = ev.get("interpretation")
+        if not interp:
+            lines.append("- _해석 대기 (다음 ingest 회차에서 LLM 해석)_")
+            continue
+        nature_kr = _NATURE_KR.get(interp.get("nature"), interp.get("nature", "?"))
+        lines.append(
+            f"- **판정**: {nature_kr} (`{interp.get('nature')}`, 확신 {interp.get('confidence', '?')}%)"
+        )
+        axes = interp.get("axes") or {}
+        for axis_key, axis_kr in _AXIS_KR.items():
+            entry = axes.get(axis_key) or {}
+            if entry:
+                lines.append(
+                    f"  - {axis_kr}: {entry.get('verdict', '?')} — {entry.get('reason', '')}"
+                )
+        if interp.get("impact_path"):
+            lines.append(f"- 영향 경로: {', '.join(interp['impact_path'])}")
+        if interp.get("trade_implication"):
+            lines.append(f"- 매매 함의: {interp['trade_implication']}")
+        if interp.get("reassess_condition"):
+            lines.append(f"- 재평가 조건: {interp['reassess_condition']}")
+    lines.append("")
+    lines.append(
+        "_중심 이벤트 해석은 advisory — 매수/관망 게이트가 아님 (M1, N5 원칙 유지). "
+        "전략가는 판단 근거로만 반영._"
+    )
+    return lines
 
 
 def render_news_digest_md(digest: NewsDigest) -> str:
@@ -1070,6 +1474,10 @@ def render_news_digest_md(digest: NewsDigest) -> str:
         lines.append("")
         lines.append("_해당 날짜·범위에 분류된 뉴스 없음 — 톤 중립._")
         return "\n".join(lines)
+
+    # 격상 이벤트 + 해석 — 최상단 배치 (tone·테마 요약보다 먼저, M1-c).
+    if digest.elevated_events:
+        lines.extend(_render_elevated_events_md(digest.elevated_events))
 
     if digest.category_counts:
         lines.append("")
@@ -1105,6 +1513,32 @@ def render_news_digest_md(digest: NewsDigest) -> str:
         "단일 점수로 누르지 않음). 방향·강도 라벨은 개별 뉴스 LLM 판단의 결정론 집계._"
     )
     return "\n".join(lines)
+
+
+def render_market_news_digest_md(
+    as_of: str, *, lookback_days: int = 3
+) -> str | None:
+    """market digest md — DB-first + lookback 폴백 + 시점 표기 (M1-c 소비 진입점, D5).
+
+    오늘(as_of) digest 부재 시 최근 lookback_days 내 최신 것으로 폴백 (장전·주말 커버).
+    stale 이면 시점 표기를 헤더 직후에 삽입 — 침묵 금지. 전무하면 None (주입 생략).
+    소비 시 LLM 0 (읽기 전용) — 전략가·브리핑·자동 권고가 공유.
+    """
+    for back in range(0, max(0, int(lookback_days)) + 1):
+        try:
+            base = datetime.strptime(as_of, "%Y-%m-%d")
+        except ValueError:
+            return None
+        day = (base - timedelta(days=back)).strftime("%Y-%m-%d")
+        digest = get_news_digest("market", day)
+        if digest is None:
+            continue
+        md = render_news_digest_md(digest)
+        if back > 0:
+            head, _, rest = md.partition("\n")
+            md = f"{head}\n_⏱ 시점 주의: {back}일 전({day}) 집계 — 최신 아님._\n{rest}"
+        return md
+    return None
 
 
 def news_digest_metadata(digest: NewsDigest) -> dict[str, Any]:

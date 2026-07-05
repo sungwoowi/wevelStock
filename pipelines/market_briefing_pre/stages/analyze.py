@@ -148,6 +148,17 @@ class AnalyzeStage(Stage):
         night_futures = futures.get("night_futures", {})
         news_items = news_data.get("items", [])
 
+        # 뉴스 종합 + 격상 이벤트 해석 (NEWS-EVENT-INTERPRETATION-001 M1-c, D5) —
+        # 06:40 장전 ingest 산출을 DB-first read(LLM 0). 아침 텔레그램 "시나리오+뉴스"
+        # 파트에 "오늘의 중심 이벤트" 해석이 실리는 경로. 실패는 격리 (advisory).
+        news_digest_md: str | None = None
+        try:
+            from collectors.news_source import render_market_news_digest_md
+
+            news_digest_md = render_market_news_digest_md(today_date_string())
+        except Exception as e:  # noqa: BLE001
+            log.warning("briefing_news_digest_md_failed", error=str(e))
+
         # Build system prompt (canon + persona + memory)
         persona_path = PROMPTS_DIR / "analyst.md"
         system_bundle = await build_pipeline_prompt(
@@ -156,6 +167,7 @@ class AnalyzeStage(Stage):
             include_shared_canon=True,
             include_memory=True,
             token_budget_memory=4000,
+            news_digest_md=news_digest_md,
             response_rules=(
                 "\n## Response rules\n"
                 "- Respond with a single JSON object matching the schema in the prompt.\n"

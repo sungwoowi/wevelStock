@@ -52,6 +52,33 @@ backfill:
   lookback_days: 7       # 이 기간 내 수집분만 재시도 (오래된 뉴스는 시효 지남)
   limit: 120             # 1회 재시도 상한 (비용 유계)
 
+# 격상 레인 (NEWS-EVENT-INTERPRETATION-001 M1-a, D1) — '오늘의 중심 이벤트' 결정론 감지.
+# mag3 단건 즉시 + mag2 클러스터가 서로 다른 출처 N건 동시 보도(확산) 시 격상.
+# tone 평균·건수 클러스터와 별도 레인 (1건짜리 초대형 이벤트 희석 방지). market scope 전용.
+elevation:
+  enabled: true
+  mag3_single: true      # magnitude=3 단건 즉시 격상
+  multi_source_n: 3      # mag2 확산 격상 임계 (서로 다른 출처 수)
+
+# 해석 스테이지 (M1-b, D3) — 격상 이벤트만 LLM 심층 해석 1콜.
+# 4축(novelty·펀더정합·노이즈반복·시장반응정합) + nature + 매매함의 + 재평가조건.
+# Flash 기본(격상 일 0~2건 = 비용 미미), 해석 퀄 부족 시 model 로 Pro 승격.
+# 캐시 = event_key×기사집합×일자 멱등 / 원장 질의영역 = news_interpretation.
+interpretation:
+  enabled: true
+  provider: gemini       # Anthropic 미결제 — claude-* default 금지
+  model: null            # null → call_llm 기본 (flash, BALANCED tier)
+  max_tokens: 1024       # 4축 JSON 잘림 방지 하한
+  cache_ttl_days: 30     # 해석은 이벤트 lifecycle 동안만 유효 (라벨과 달리 영속 아님)
+  max_events_per_day: 3  # 격상 폭주 방어 (비용 상한)
+
+# 장전 ingest cron (M1-b′, D5) — 간밤 미장발 이벤트를 07:00 장전 브리핑·09:35 장중
+# 회차 전에 수집→분류→격상→해석. 시간표: 06:40 ingest → 07:00 브리핑 → 09:35 권고.
+premarket:
+  enabled: true
+  hour: 6
+  minute: 40
+
 # 거친 종합 (MS-B — build_news_digest). 정밀 점수 폐기(M4): tone 5단 tilt 만.
 # tone = Σ(direction 부호 × magnitude × confidence/100) / Σweight → [-1,1] → 5단 매핑.
 digest:

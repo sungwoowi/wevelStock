@@ -118,6 +118,16 @@ class Database:
         except Exception:  # noqa: BLE001
             pass
 
+        # v20 — news_digest_snapshot.elevated_events_json (NEWS-EVENT-INTERPRETATION-001).
+        #   격상 이벤트 + LLM 해석 내장 (D2: 컬럼 확장, 신규 테이블 0). 멱등 ALTER.
+        try:
+            if not _column_exists(conn, "news_digest_snapshot", "elevated_events_json"):
+                conn.execute(
+                    "ALTER TABLE news_digest_snapshot ADD COLUMN elevated_events_json TEXT"
+                )
+        except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+            pass
+
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path, timeout=10.0, isolation_level=None)

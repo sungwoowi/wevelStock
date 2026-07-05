@@ -192,6 +192,22 @@ _PENDING_MS5_TEXT = (
 )
 
 
+def _today_news_digest_md() -> str | None:
+    """뉴스 종합+격상 이벤트 해석 md (DB-first, LLM 0) — 전략가 [3c] 주입 (M1-c).
+
+    production chat 동기·스트림 양 경로 공용. digest 부재·오류는 None (graceful,
+    주입 생략) — 뉴스 층 실패가 채팅 응답을 막지 않는다.
+    """
+    try:
+        from collectors.news_source import render_market_news_digest_md
+        from core.outputs import today_date_string
+
+        return render_market_news_digest_md(today_date_string())
+    except Exception as e:  # noqa: BLE001
+        log.warning("news_digest_md_failed", error=str(e))
+        return None
+
+
 async def _call_strategist_safe(
     strategist_id: str,
     messages: list[dict],
@@ -213,6 +229,7 @@ async def _call_strategist_safe(
             target=target,
             provider=provider,
             prefetched_analyst_outputs=prefetched_analyst_outputs,
+            news_digest_md=_today_news_digest_md(),
             mock_fallback_allowed=False,
         )
         return {
@@ -597,6 +614,7 @@ async def _stream_strategist_safe(
             target=target,
             provider=provider,
             prefetched_analyst_outputs=prefetched_analyst_outputs,
+            news_digest_md=_today_news_digest_md(),
             mock_fallback_allowed=False,
         ):
             etype = event.get("type")

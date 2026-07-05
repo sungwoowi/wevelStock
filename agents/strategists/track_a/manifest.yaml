@@ -17,6 +17,7 @@ reads_analysts:
   - principle_guardian      # 7계명 위반 검증
   - market_state_analyzer   # 시장 체제 6단계 + Distribution Day 카운트
   - flow_analyzer           # F-Score 발행
+  - news_curator            # 뉴스 종합 + 격상 이벤트 해석 (NEWS-EVENT-INTERPRETATION-001, advisory — dead-end 해소)
 
 # Track A 가 받을 canon 카테고리 화이트리스트.
 # 분석가가 이미 dept 별 점수로 압축했으므로 Track A 는 통합 frame 권위만 필요.

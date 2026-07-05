@@ -361,6 +361,7 @@ async def run_strategist(
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
     alpha_posture_md: str | None = None,
     trade_plan_menu_md: str | None = None,
+    news_digest_md: str | None = None,
     mock_fallback_allowed: bool = True,
 ) -> StrategistResponse:
     """단일 전략가 호출. 멀티턴 messages 배열 그대로 수용.
@@ -426,6 +427,9 @@ async def run_strategist(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        # 뉴스 종합 + 격상 이벤트 해석 (NEWS-EVENT-INTERPRETATION-001 M1-c) — compose
+        # [3c] 기존 슬롯. 2026-07-05 진단 ①(슬롯 있는데 미전달) 상환. advisory 전용.
+        news_digest_md=news_digest_md,
         response_rules=spec.response_rules,
     )
 
@@ -538,6 +542,7 @@ async def run_strategist_stream(
     include_memory: bool = True,
     provider: str | None = None,
     prefetched_analyst_outputs: list[dict[str, Any]] | None = None,
+    news_digest_md: str | None = None,
     mock_fallback_allowed: bool = True,
 ):
     """run_strategist 의 streaming 변종. text_delta + 종료 시 metadata.
@@ -584,6 +589,8 @@ async def run_strategist_stream(
         rag_dept=rag_dept,
         canon_categories=spec.canon_categories or None,
         market_snapshot_md=market_snapshot_md,
+        # 뉴스 종합 + 격상 이벤트 해석 (M1-c) — run_strategist 와 동일 배선 (advisory).
+        news_digest_md=news_digest_md,
         response_rules=spec.response_rules,
     )
 

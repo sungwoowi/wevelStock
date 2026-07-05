@@ -132,6 +132,8 @@ def test_seed_analyst_has_eight_portable_sections(analyst_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+# news_curator 는 NEWS-EVENT-INTERPRETATION-001 M1-c (2026-07-06) 로 양 트랙에 합류 —
+# "뉴스부 dead-end" (news_curator 출력을 어느 전략가도 안 읽음, 2026-07-05 진단 ④) 해소.
 TRACK_A_READS = {
     "stock_picker",
     "stock_analyst",
@@ -139,6 +141,7 @@ TRACK_A_READS = {
     "principle_guardian",
     "market_state_analyzer",
     "flow_analyzer",
+    "news_curator",
 }
 
 TRACK_B_READS = {
@@ -147,6 +150,7 @@ TRACK_B_READS = {
     "market_state_analyzer",
     "flow_analyzer",
     "principle_guardian",
+    "news_curator",
 }
 
 
@@ -175,21 +179,17 @@ def test_track_b_reads_includes_seed_3() -> None:
     assert track_b_reads == TRACK_B_READS
 
 
-def test_trading_journalist_news_curator_not_in_track_reads() -> None:
-    """trading_journalist 와 news_curator 는 Track A·B reads_analysts 양쪽 X.
+def test_trading_journalist_not_in_track_reads() -> None:
+    """trading_journalist 는 Track A·B reads_analysts 양쪽 X.
 
-    trading_journalist = Layer 5 회고분석가 read 영역 (또는 사용자 직접 호출)
-    news_curator = market_state·flow·stock_picker 간접 read (Track A·B 직접 read X)
+    trading_journalist = Layer 5 회고분석가 read 영역 (또는 사용자 직접 호출).
+    ※ news_curator 는 원래 여기 함께 배제였으나 NEWS-EVENT-INTERPRETATION-001 M1-c
+    (2026-07-06) 로 양 트랙 합류 — dead-end 진단 ④ 해소 (TRACK_*_READS 권위 갱신).
     """
     track_a_reads = _load_strategist_reads("track_a")
     track_b_reads = _load_strategist_reads("track_b")
-    for indirect_id in ["trading_journalist", "news_curator"]:
-        assert indirect_id not in track_a_reads, (
-            f"{indirect_id} should NOT be in Track A reads_analysts"
-        )
-        assert indirect_id not in track_b_reads, (
-            f"{indirect_id} should NOT be in Track B reads_analysts"
-        )
+    assert "trading_journalist" not in track_a_reads
+    assert "trading_journalist" not in track_b_reads
 
 
 # ---------------------------------------------------------------------------

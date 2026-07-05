@@ -207,6 +207,17 @@ def _sector_rs_from_s_inputs(si: Any) -> float | None:
     return getattr(si, "supply_chain_score", None)
 
 
+def _market_news_digest_md(as_of: str) -> str | None:
+    """뉴스 종합+격상 이벤트 해석 md — DB-first(LLM 0)·lookback 폴백 (M1-c). graceful."""
+    try:
+        from collectors.news_source import render_market_news_digest_md
+
+        return render_market_news_digest_md(as_of)
+    except Exception as e:  # noqa: BLE001 — 뉴스 층 실패가 권고 생성을 막지 않음
+        log.warning("news_digest_md_failed", as_of=as_of, error=str(e))
+        return None
+
+
 def _market_state_md(sc: Scorecard) -> str:
     """결정론 시장상태 entry — regime + 시장 위험 원시지표 (market_state_analyzer LLM 우회).
 
@@ -622,6 +633,11 @@ async def run_signal_for_ticker(
         posture.conditional_entry = enrich_conditional_entry(posture.conditional_entry, trade_plan_menu)
         posture_md = render_alpha_posture_md(posture)
 
+    # 뉴스 종합 + 격상 이벤트 해석 (NEWS-EVENT-INTERPRETATION-001 M1-c) — DB-first
+    # read(LLM 0) + lookback 폴백(장전·주말 stale 시점 표기). as_of 기준 = point-in-time
+    # 보존(리플레이 재현). 실패는 격리 — 뉴스 층이 권고 생성을 막지 않음 (advisory).
+    news_digest_md = _market_news_digest_md(as_of)
+
     runner = strategist_runner or run_strategist
     if retries is None:
         from collectors.screening import get_signal_strategist_retries
@@ -638,6 +654,7 @@ async def run_signal_for_ticker(
                 prefetched_analyst_outputs=entries,
                 alpha_posture_md=posture_md,
                 trade_plan_menu_md=trade_plan_menu_md,
+                news_digest_md=news_digest_md,
                 provider=provider, mock_fallback_allowed=mock_fallback_allowed,
             )
         except Exception as e:  # noqa: BLE001 — transient 면 재시도, 아니면 그 종목만 skip
