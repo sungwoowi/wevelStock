@@ -54,6 +54,10 @@ class PostureConfig:
     crash_change_pct: float = -2.5    # 당일 지수 등락률 이 이하 = 폭락장(반대매매·프로그램 매도)
     breadth_collapse: float = 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
     dd_kill: int = 6                  # 25일 분산일 이 이상 = 지속 천장(오닐 5~6). 4→6 상향(완만 분산 통과)
+    # 방어 태세 차등 게이트 (AUTO-SIGNAL-INTEGRITY-001 T0-a) — blanket 아님:
+    # entry_posture=defensive 면 buy 후보에 주도주·강세섹터·건강 위치·파동 생존을 추가 요구.
+    # (2026-06-29 라이브: defensive 인데 buy 5건 발령 → 07-02 급락 직격이 근거 사고.)
+    defensive_gate_enabled: bool = True
 
 
 @dataclass
@@ -75,6 +79,7 @@ class PostureInputs:
     index_change_pct: float | None = None  # 당일 지수 등락률 (market_macro.change_pct)
     breadth_ratio: float | None = None     # 당일 상승종목 비율 (market_macro.breadth_ratio)
     vix_panic: bool | None = None          # 미장 VIX 패닉 (us_macro.extreme == "vix_panic")
+    entry_posture: str | None = None       # 시장 진입 자세 (market_view — aggressive/neutral/defensive)
 
 
 @dataclass
@@ -105,7 +110,7 @@ class FunnelStage:
     score_gap: float | None = None  # 1차 점수 − min (음수=미달). 감사·설명가능성.
 
 
-_BOOL_FIELDS = frozenset({"enabled", "require_wave_for_bear_override"})
+_BOOL_FIELDS = frozenset({"enabled", "require_wave_for_bear_override", "defensive_gate_enabled"})
 _INT_FIELDS = frozenset({"dd_kill"})
 
 
@@ -298,14 +303,83 @@ def derive_funnel_stage(
     return FunnelStage("interest", "관심 — 점수 미근접 또는 진입 트리거 부재", gap)
 
 
+def derive_wave_alive(alpha_results: Any, track: str) -> bool | None:
+    """α 3tf 결과 → 트랙별 파동 생존 (AUTO-SIGNAL-INTEGRITY-001 T0-b).
+
+    타임프레임↔트랙 철학(2026-06-20): Track A=주봉(추세) / Track B=일봉(단기스윙).
+    생존 = 해당 timeframe α 산출됨(value not None) AND label != trend_broken.
+    산출 불가·timeframe 부재·입력 None → None (미상 — 소비처가 보수 처리).
+    """
+    if not alpha_results:
+        return None
+    tf = "weekly" if track == "A" else "daily"
+    r = alpha_results.get(tf) if hasattr(alpha_results, "get") else None
+    if r is None or getattr(r, "value", None) is None:
+        return None
+    return getattr(r, "label", None) != "trend_broken"
+
+
+def _apply_defensive_gate(
+    posture: AlphaPosture, inp: PostureInputs, cfg: PostureConfig
+) -> AlphaPosture:
+    """방어 태세 차등 게이트 (T0-a) — blanket 아님.
+
+    entry_posture=defensive 인 시장에서 buy 후보는 bear_override 와 같은 결의 조건
+    (강세섹터 + 주도주 + 건강 위치 + 파동 생존)을 전부 충족해야 유지된다. 미충족 시
+    wait 강등 + 원판단 기록(pre_defensive_candidate) — 채점·설명가능성 보존
+    (사용자 결정 2026-07-05: 차등 게이트 + wait 강등·원판단 기록).
+    """
+    if (
+        not cfg.defensive_gate_enabled
+        or inp.entry_posture != "defensive"
+        or posture.verdict_candidate != "buy"
+    ):
+        return posture
+    mod = posture.modulation
+    wave_req_ok = mod.get("wave_ok") is True or not cfg.require_wave_for_bear_override
+    missing = [
+        label for ok, label in (
+            (mod.get("sector_strong") is True, "강세섹터"),
+            (mod.get("is_leader") is True, "주도주"),
+            (mod.get("healthy") is True, "눌림목(건강 위치)"),
+            (wave_req_ok, "파동 생존"),
+        ) if not ok
+    ]
+    if not missing:
+        mod["defensive_pass"] = True
+        posture.selection_reason.append(
+            "시장 방어 태세(defensive)이나 주도주·강세섹터·눌림목·파동 전부 충족 — buy 유지"
+        )
+        return posture
+    mod["defensive_demote"] = True
+    mod["pre_defensive_candidate"] = "buy"  # 원판단 기록 (Tier 4 채점 재료)
+    posture.verdict_candidate = "wait"
+    posture.selection_reason.append(
+        "시장 방어 태세(defensive) — 차등 게이트 미충족, 관망 강등 (미충족: "
+        + ", ".join(missing) + ")"
+    )
+    posture.conditional_entry = _cond_entry(
+        "defensive_release",
+        "방어 태세 해제 또는 주도주·강세섹터·눌림목 정렬 시 재평가",
+        missing=missing,
+    )
+    return posture
+
+
 def derive_alpha_posture(
     inp: PostureInputs, config: PostureConfig | None = None
 ) -> AlphaPosture:
     """결정론 차등 변조 — regime baseline × 섹터RS × 주도주 × 파동 × 과열도 → verdict 후보.
 
     순수: 같은 입력 → 같은 출력. 부작용 0. 모든 분기에 selection_reason 을 남긴다(설명가능성).
+    마지막에 방어 태세 차등 게이트(_apply_defensive_gate)가 buy 후보를 한 번 더 검증한다.
     """
     cfg = config or PostureConfig()
+    return _apply_defensive_gate(_derive_base(inp, cfg), inp, cfg)
+
+
+def _derive_base(inp: PostureInputs, cfg: PostureConfig) -> AlphaPosture:
+    """차등 변조 본체 (위험 게이트 → 점수 하한 → regime × 차등)."""
     rclass = regime_class(inp.regime)
     reasons: list[str] = []
     mod: dict[str, Any] = {"regime": inp.regime, "regime_class": rclass}

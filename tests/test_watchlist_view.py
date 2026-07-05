@@ -1,12 +1,21 @@
 """관심종목 funnel view 테스트 — 멤버십 ⋈ funnel_stage 조인 (신규 테이블 0)."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from collectors import universe_membership
 from core import watchlist_view
 from core.db.connection import Database, reset_db
 from core.strategist import recommendation
+
+# view 가 오늘(KST) 기준 rolling window(list_window_days=10)로 필터하므로 절대 날짜를
+# 심으면 시간이 지나 테스트가 썩는다(2026-07-05 date-rot 발견) → 오늘 기준 상대 날짜.
+_KST = ZoneInfo("Asia/Seoul")
+_D_LATEST = datetime.now(_KST).strftime("%Y-%m-%d")
+_D_OLDER = (datetime.now(_KST) - timedelta(days=6)).strftime("%Y-%m-%d")
 
 
 @pytest.fixture
@@ -26,18 +35,18 @@ def _seed_members():
             {"ticker": "000660", "name": "SK하이닉스", "rank": 2, "change_pct": 2.0},
             {"ticker": "298040", "name": "효성중공업", "rank": 3, "change_pct": 6.1},
         ]},
-        list_type="trade_value", date="2026-06-16",
+        list_type="trade_value", date=_D_LATEST,
     )
     universe_membership.persist_universe_membership(
         {"kosdaq": [{"ticker": "067310", "name": "하나마이크론", "rank": 1, "change_pct": 8.0}]},
-        list_type="volume_bull", date="2026-06-16",
+        list_type="volume_bull", date=_D_LATEST,
     )
 
 
-_REC_BUY = """매수.
+_REC_BUY = f"""매수.
 ```yaml
-recommendation_id: REC-20260616-09:35-000660-A
-date: 2026-06-16
+recommendation_id: REC-{_D_LATEST}-09:35-000660-A
+date: {_D_LATEST}
 ticker: "000660"
 display_name: "SK하이닉스"
 track: A
@@ -68,16 +77,16 @@ def test_funnel_view_baskets_grouped_by_date(isolated_db):
     # 바스킷 펼침 — 멤버를 날짜별 그룹(최신 우선) + 종목 리스트.
     universe_membership.persist_universe_membership(
         {"kospi": [{"ticker": "005930", "name": "삼성전자", "rank": 1}]},
-        list_type="trade_value", date="2026-06-10",
+        list_type="trade_value", date=_D_OLDER,
     )
     universe_membership.persist_universe_membership(
         {"kospi": [{"ticker": "000660", "name": "SK하이닉스", "rank": 2}]},
-        list_type="trade_value", date="2026-06-16",
+        list_type="trade_value", date=_D_LATEST,
     )
     view = watchlist_view.watchlist_funnel_view()
     tv = next(b for b in view["baskets"] if b["list_type"] == "trade_value")
-    assert tv["latest_date"] == "2026-06-16"           # 갱신 시 최신 날짜
-    assert [d["date"] for d in tv["dates"]] == ["2026-06-16", "2026-06-10"]  # 최신 우선
+    assert tv["latest_date"] == _D_LATEST           # 갱신 시 최신 날짜
+    assert [d["date"] for d in tv["dates"]] == [_D_LATEST, _D_OLDER]  # 최신 우선
     assert tv["dates"][0]["items"][0]["display_name"] == "SK하이닉스"
 
 
@@ -89,7 +98,7 @@ def test_basket_trade_value_sorted_by_trade_amount_desc(isolated_db):
             {"ticker": "000660", "name": "SK하이닉스", "rank": 1, "trade_amount": 7_940_000_000_000},
         ],
          "kosdaq": [{"ticker": "036930", "name": "주성엔지니어링", "rank": 1, "trade_amount": 508_000_000_000}]},
-        list_type="trade_value", date="2026-06-16",
+        list_type="trade_value", date=_D_LATEST,
     )
     view = watchlist_view.watchlist_funnel_view()
     items = next(b for b in view["baskets"] if b["list_type"] == "trade_value")["dates"][0]["items"]
@@ -131,7 +140,7 @@ def test_interest_grouped_by_concept(isolated_db):
             {"ticker": "111111", "name": "주도주A", "rank": 1, "concept": "leader"},
             {"ticker": "222222", "name": "바닥B", "rank": 2, "concept": "base"},
         ]},
-        list_type="trade_value", date="2026-06-16",
+        list_type="trade_value", date=_D_LATEST,
     )
     view = watchlist_view.watchlist_funnel_view()
     concepts = {c["concept"]: c for c in view["interest"]["concepts"]}
@@ -142,9 +151,9 @@ def test_interest_grouped_by_concept(isolated_db):
 def test_item_is_dual_when_in_both_baskets(isolated_db):
     # 거래대금 ∩ 거래량 양봉 교집합 → is_dual True.
     universe_membership.persist_universe_membership(
-        {"kospi": [{"ticker": "005930", "name": "삼성전자", "rank": 1}]}, list_type="trade_value", date="2026-06-16")
+        {"kospi": [{"ticker": "005930", "name": "삼성전자", "rank": 1}]}, list_type="trade_value", date=_D_LATEST)
     universe_membership.persist_universe_membership(
-        {"kospi": [{"ticker": "005930", "name": "삼성전자", "rank": 3}]}, list_type="volume_bull", date="2026-06-16")
+        {"kospi": [{"ticker": "005930", "name": "삼성전자", "rank": 3}]}, list_type="volume_bull", date=_D_LATEST)
     view = watchlist_view.watchlist_funnel_view()
     item = next(it for c in view["interest"]["concepts"] for it in c["items"] if it["ticker"] == "005930")
     assert item["is_dual"] is True

@@ -86,6 +86,7 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
     from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
     from collectors.news_source import (
         RssNewsSource,
+        backfill_unlabeled_news,
         build_news_digest,
         classify_news_items,
         collect_from_sources,
@@ -136,6 +137,18 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
             log.exception("news_ingest_classify_failed", error=str(e))
             failures.append({"stage": "classify", "error": str(e)})
 
+    # 4.5단계: 미라벨링 백필 (AUTO-SIGNAL-INTEGRITY-001 T0-d) — 과거 classify 실패분 재시도.
+    # 오늘 수집분의 실패도 포함되나 limit 로 유계·캐시 멱등. 잔량은 로그로 관측 가능.
+    backfilled = 0
+    try:
+        bf = await backfill_unlabeled_news(name_code_map=name_code_map)
+        backfilled = bf.get("labeled", 0)
+        if bf.get("candidates"):
+            log.info("news_ingest_backfill", **bf)
+    except Exception as e:  # noqa: BLE001
+        log.warning("news_ingest_backfill_failed", error=str(e))
+        failures.append({"stage": "backfill", "error": str(e)})
+
     # 5단계: 다중 scope 결정론 집계 (market + 종목 N + 14섹터). 분류 실패해도 적재분으로 집계.
     # 결정론이라 추가 LLM 비용 0. 각 scope 독립 격리 — 하나 실패가 나머지를 막지 않음.
     limit = digest_scope_universe_limit()
@@ -185,6 +198,7 @@ async def run_news_ingest(date: str | None = None) -> dict[str, Any]:
         "date": target_date,
         "collected": collected,
         "classified": classified,
+        "backfilled": backfilled,
         "digest": digest_result,
         "scopes_persisted": scopes_persisted,
         "scopes_failed": scopes_failed,

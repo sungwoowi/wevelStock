@@ -45,6 +45,13 @@ classify:
   max_tokens: 512        # JSON 잘림 방지 하한
   cache_ttl_days: 365    # 뉴스 라벨은 불변 → 사실상 영속 캐시
 
+# 미라벨링 재분류 백필 (AUTO-SIGNAL-INTEGRITY-001 T0-d) — classify 실패분(NULL 라벨) 재시도.
+# 일일 news_ingest 4.5단계 수행. 멱등: 과거 성공 라벨은 캐시 히트(비용 0), 실패분만 실 LLM.
+backfill:
+  enabled: true
+  lookback_days: 7       # 이 기간 내 수집분만 재시도 (오래된 뉴스는 시효 지남)
+  limit: 120             # 1회 재시도 상한 (비용 유계)
+
 # 거친 종합 (MS-B — build_news_digest). 정밀 점수 폐기(M4): tone 5단 tilt 만.
 # tone = Σ(direction 부호 × magnitude × confidence/100) / Σweight → [-1,1] → 5단 매핑.
 digest:

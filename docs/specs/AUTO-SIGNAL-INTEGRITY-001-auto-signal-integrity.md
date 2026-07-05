@@ -4,7 +4,7 @@ title: 자동 신호 정합 핫픽스 — defensive 게이트·원칙수호자 �
 team: shared
 type: feature
 level: implementation
-status: draft
+status: implementing
 parent: MARKET-CONTEXT-BRAIN-001
 generates:
   - tests/test_auto_signal_integrity.py   # 후성 06-16 시나리오 재현 포함
@@ -25,7 +25,13 @@ depends_on:
 
 > **새 능력 추가가 아니라 결함 수리.** 2026-07-05 진단(부모 SPEC §1~2)에서 확인된 "배선이 약속한 것과 실제 동작의 불일치" 4건. 실사고 표본 = 후성(093370) 06-16 buy(블로우오프 고점 익일 → −12%), 06-29 buy 5건(defensive 태세 중 발령 → 07-02 반도체 급락 직격).
 >
-> ⚠️ 본 SPEC 은 초안(draft). 착수 세션에서 `/spec-interview` 로 임계·예외 케이스를 확정 후 구현.
+> **설계 확정 (2026-07-05 인터뷰, 사용자 의도 확인)**: T0-a 는 **차등 게이트** — blanket 아님.
+> defensive 면 buy 후보에 주도주·강세섹터·건강 위치·파동 생존(bear_override 와 같은 결)을 추가
+> 요구, 미충족은 **wait 강등 + 원판단 기록**(`pre_defensive_candidate`/`posture_blocked` — Tier 4
+> 채점 재료). LLM 이 `llm_deviation_reason` 사실 근거를 로그하면 buy 존중(가드레일 있는 C —
+> "공포를 기회로" 판단 경로 보존), 근거 없으면 코드가 강등(persona 는 강제 불가 교훈).
+> 근거: 사용자 철학 "급락 시 발 뺄지 공포를 기회로 삼을지 고도의 전문가적 추론"(2026-07-05) +
+> "약세장이어도 주도주 눌림목=타점"(2026-06-15) — blanket 은 그 반대라 기각.
 
 ## 결함과 수리
 

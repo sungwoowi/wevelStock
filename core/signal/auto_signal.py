@@ -64,12 +64,15 @@ class Scorecard:
     f_score: float | None = None
     buy_score: float | None = None
     distribution_day_count: int | None = None
-    # 차등 변조 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a). rs/ext 는 screen_watchlist 행에서
-    # 주입(재계산·LLM 0). sector_rs·wave 는 다음 마일스톤(LLM Haiku) — 현재 None(graceful).
+    # 차등 변조 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a + AUTO-SIGNAL-INTEGRITY-001 T0-b).
+    # rs/ext 는 screen_watchlist 행에서 주입(재계산·LLM 0). sector_rs = S-Score supply_chain
+    # 실측(theme→섹터 RS) 재사용. wave 는 결정론 anchor α(트랙별 timeframe)에서 파생.
     rs_score: float | None = None
     extension_score: float | None = None
     sector_rs_score: float | None = None
-    wave_alive: bool | None = None
+    wave_alive_daily: bool | None = None   # Track B (일봉 α)
+    wave_alive_weekly: bool | None = None  # Track A (주봉 α)
+    entry_posture: str | None = None       # 시장 진입 자세 (market_view_snapshot DB read)
     # 복합 위험 게이트 입력 (시장 전체 — 폭락 회피). change_pct·breadth 는 macro dict 무료, vix 는 us_macro DB-first.
     index_change_pct: float | None = None
     breadth_ratio: float | None = None
@@ -149,15 +152,36 @@ async def compute_scorecard(ticker: str, snapshot: Any) -> Scorecard:
     except Exception as e:  # noqa: BLE001
         sc.errors.append(f"flow_inputs:{type(e).__name__}")
 
-    # S-Score (stock_picker) — 주도주 RS·정배열
+    # S-Score (stock_picker) — 주도주 RS·정배열. supply_chain 실측 = 종목 섹터 RS 로 재사용(T0-b).
     try:
         si = await build_s_score_inputs(
             ticker=resolved, pool_tickers=pool, sector_rs=sector_rs, regime=sc.regime
         )
         sc.s_score = si.advisory_s_score
+        sc.sector_rs_score = _sector_rs_from_s_inputs(si)
         sc.md["stock_picker_s"] = render_s_score_inputs_md(si, name=sc.display_name)
     except Exception as e:  # noqa: BLE001
         sc.errors.append(f"s_score_inputs:{type(e).__name__}")
+
+    # 파동 생존 (T0-b) — 결정론 anchor α (anchor_llm_enabled=false 기본, 캐시). 트랙별 timeframe.
+    try:
+        from collectors.anchors import compute_alpha_3tf
+        from core.signal.alpha_posture import derive_wave_alive
+
+        alpha_res = await compute_alpha_3tf(resolved)
+        sc.wave_alive_daily = derive_wave_alive(alpha_res, "B")
+        sc.wave_alive_weekly = derive_wave_alive(alpha_res, "A")
+    except Exception as e:  # noqa: BLE001 — α 부재가 점수표를 막지 않음
+        sc.errors.append(f"alpha_wave:{type(e).__name__}")
+
+    # 시장 진입 자세 (T0-a) — market_view_snapshot DB read only (빌드 트리거 X, 비용 0).
+    try:
+        from collectors.market_view import get_today_view
+
+        view = get_today_view(date.today().isoformat(), market)
+        sc.entry_posture = view.entry_posture if view else None
+    except Exception as e:  # noqa: BLE001 — 스냅샷 부재가 점수표를 막지 않음
+        sc.errors.append(f"market_view:{type(e).__name__}")
 
     # buy_score (stock_picker) — CAN SLIM 7축
     try:
@@ -173,6 +197,16 @@ async def compute_scorecard(ticker: str, snapshot: Any) -> Scorecard:
     return sc
 
 
+def _sector_rs_from_s_inputs(si: Any) -> float | None:
+    """S-Score supply_chain 축 → 종목 섹터 RS (T0-b). 실측(theme_sector)일 때만 채택.
+
+    중립 fallback(5.0)은 섹터 RS 로 오인되면 안 되므로 None — AlphaPosture 가 미상으로 보수 처리.
+    """
+    if si is None or getattr(si, "supply_chain_source", None) != "theme_sector":
+        return None
+    return getattr(si, "supply_chain_score", None)
+
+
 def _market_state_md(sc: Scorecard) -> str:
     """결정론 시장상태 entry — regime + 시장 위험 원시지표 (market_state_analyzer LLM 우회).
 
@@ -182,6 +216,7 @@ def _market_state_md(sc: Scorecard) -> str:
     """
     lines = ["## [결정론 시장 상태] (자동 스크리닝 — LLM 우회, 원시 신호 보고)"]
     lines.append(f"- 시장 체제(regime): {sc.regime or '미상'}")
+    lines.append(f"- 진입 자세(entry_posture): {sc.entry_posture or '미상'}")
     if sc.distribution_day_count is not None:
         lines.append(f"- Distribution Day(25일): {sc.distribution_day_count}건")
     if sc.index_change_pct is not None:
@@ -211,8 +246,59 @@ _TRACK_BYPASSED_IDS = {
 _BYPASS_NOTE = (
     "(자동 스크리닝 배치 경로 — 이 분석가는 **의도적으로 우회**되었다. 점수=코드 + 아래 "
     "AlphaPosture 후보가 이 영역을 대체한다. **미발행/누락/호출 실패가 아니며, 이를 근거로 "
-    "verdict 를 wait 로 강등하지 말 것.**)"
+    "verdict 를 wait 로 강등하지 말 것.** 단 원칙수호자 영역 중 결정론 검증 가능한 계명"
+    "(손절선·지표 교차·데이터 기반)은 신호 발행 전 코드가 별도 체크한다.)"
 )
+
+
+def _signal_commandment_gate(rec: Any, sc: Scorecard) -> None:
+    """buy 신호 발행 전 결정론 7계명 체크 (AUTO-SIGNAL-INTEGRITY-001 T0-c).
+
+    자동 경로가 principle_guardian LLM 을 우회하므로, 위치에서 검증 가능한 계명만 기존
+    checkers/commandments 를 **그대로 재사용**해 체크한다 (신규 규칙 0):
+      계명 4 손절선 — rec.stop_loss / 계명 5 최소 3개 지표 교차 — 산출된 결정론 지표 축 /
+      계명 6 데이터 기반 — 지표 축 존재.
+    비중 계명(1·2·3)은 계좌관리자 sizing(deployment_cap)이 소유 — 여기서 중복 구현 금지.
+    violation → wait 강등 + 기록 / warning → 기록만 (체커 severity 의미 준수). in-place.
+    """
+    if rec.verdict != "buy":
+        return
+    from checkers.commandments import data_based, multi_indicator, stop_loss
+
+    indicators = [
+        name for name, v in (
+            ("s_score", sc.s_score), ("t_score", sc.t_score), ("f_score", sc.f_score),
+            ("buy_score", sc.buy_score), ("rs_score", sc.rs_score),
+            ("extension_score", sc.extension_score), ("sector_rs", sc.sector_rs_score),
+        ) if v is not None
+    ]
+    portfolio = {"positions": [{
+        "ticker": rec.ticker,
+        "stop_loss": rec.stop_loss,
+        "rationale_at_entry": indicators,
+    }]}
+    results = [
+        stop_loss.check(portfolio),
+        multi_indicator.check(portfolio),
+        data_based.check(portfolio),
+    ]
+    to_entry = lambda r: {"commandment": r.commandment_id, "title": r.title, "detail": r.detail}  # noqa: E731
+    violations = [to_entry(r) for r in results if r.is_violation]
+    warnings = [to_entry(r) for r in results if r.is_warning]
+    if warnings:
+        rec.data["commandment_warnings"] = warnings
+    if not violations:
+        return
+    rec.data["commandment_violations"] = violations
+    rec.data.setdefault("posture_blocked", "buy")  # 원판단 기록 (채점 재료)
+    rec.verdict = "wait"
+    rec.reasons.insert(
+        0,
+        "결정론 7계명 체크 위반 — 관망 강등 ("
+        + "; ".join(v["detail"] for v in violations) + ")",
+    )
+    log.info("commandment_gate_demote", ticker=rec.ticker, track=rec.track,
+             violations=[v["commandment"] for v in violations])
 
 
 def build_prefetched_entries(sc: Scorecard, track: str) -> list[dict[str, Any]]:
@@ -320,10 +406,10 @@ def _last_band_fingerprint(ticker: str, track: str) -> str | None:
 
 
 def posture_inputs_from_scorecard(sc: Scorecard, track: str) -> "PostureInputs":
-    """Scorecard → AlphaPosture 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a).
+    """Scorecard → AlphaPosture 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a + INTEGRITY T0-a/b).
 
-    rs/ext 는 screen_watchlist 행에서 주입된 값(없으면 None — graceful). sector_rs·wave 는
-    이번 마일스톤 미배선이라 None → derive 가 bullish/neutral 은 정상 처리, bear_override 만 보류.
+    rs/ext 는 screen_watchlist 행에서 주입된 값(없으면 None — graceful). sector_rs = supply_chain
+    실측 재사용, wave = 트랙별 timeframe(A=주봉/B=일봉) α 파생, entry_posture = market_view DB read.
     """
     from core.signal.alpha_posture import PostureInputs
 
@@ -338,10 +424,11 @@ def posture_inputs_from_scorecard(sc: Scorecard, track: str) -> "PostureInputs":
         extension_score=sc.extension_score,
         sector_rs_score=sc.sector_rs_score,
         distribution_day_count=sc.distribution_day_count,
-        wave_alive=sc.wave_alive,
+        wave_alive=sc.wave_alive_weekly if track == "A" else sc.wave_alive_daily,
         index_change_pct=sc.index_change_pct,
         breadth_ratio=sc.breadth_ratio,
         vix_panic=sc.vix_panic,
+        entry_posture=sc.entry_posture,
     )
 
 
@@ -569,6 +656,23 @@ async def run_signal_for_ticker(
 
     if rec is None:
         return {"ticker": ticker, "track": track, "persisted": False, "reason": last_reason}
+
+    # 방어 태세 차등 게이트 — 코드 안전핀 (AUTO-SIGNAL-INTEGRITY-001 T0-a).
+    # persona 지시만으로 LLM 분기를 강제할 수 없음(2026-06-15 교훈) → 후보가 defensive 강등인데
+    # LLM 이 사실 근거(llm_deviation_reason) 없이 buy 를 내면 코드가 wait 강등 + 원판단 기록.
+    if (
+        posture is not None
+        and posture.modulation.get("defensive_demote")
+        and rec.verdict == "buy"
+        and not rec.data.get("llm_deviation_reason")
+    ):
+        rec.data["posture_blocked"] = "buy"
+        rec.verdict = "wait"
+        rec.reasons.insert(0, "시장 방어 태세 차등 게이트 — 사실 근거 없는 매수를 관망으로 강등")
+        log.info("defensive_gate_demote", ticker=ticker, track=track)
+
+    # 결정론 7계명 체크 (T0-c) — 손절선·지표 교차·데이터 기반. violation 시 wait 강등.
+    _signal_commandment_gate(rec, sc)
 
     # cadence-keyed 멱등 id + source/cadence 태그 (point-in-time 보존, SLOT4).
     new_id = f"REC-{as_of}-{cadence}-{ticker}-{track}"

@@ -298,6 +298,65 @@ def get_news_items(
     return [_row_to_news_item(r) for r in rows]
 
 
+def get_unlabeled_items(*, since: str | None = None, limit: int = 200) -> list[NewsItem]:
+    """direction/magnitude 미라벨링 행 조회 — 백필 대상 (AUTO-SIGNAL-INTEGRITY-001 T0-d).
+
+    classify 실패분(transient 503·JSON 불량)이 NULL 라벨로 방치된 행. collected_at 이
+    NULL 인 행(수동 삽입 등)은 since 필터에서 배제하지 않는다 (놓친 백필 방지).
+    """
+    db = get_db()
+    clauses = ["(direction IS NULL OR magnitude IS NULL)"]
+    params: list[Any] = []
+    if since:
+        clauses.append("(collected_at IS NULL OR collected_at >= ?)")
+        params.append(since)
+    params.append(int(limit))
+    rows = db.fetch_all(
+        "SELECT * FROM news_source_items WHERE " + " AND ".join(clauses)
+        + " ORDER BY collected_at DESC LIMIT ?",
+        tuple(params),
+    )
+    return [_row_to_news_item(r) for r in rows]
+
+
+def _backfill_cfg() -> dict[str, Any]:
+    return (load_news_source_config().get("backfill") or {})
+
+
+async def backfill_unlabeled_news(
+    *,
+    lookback_days: int | None = None,
+    limit: int | None = None,
+    name_code_map: dict[str, str] | None = None,
+) -> dict[str, int]:
+    """미라벨링 뉴스 재분류 백필 (AUTO-SIGNAL-INTEGRITY-001 T0-d).
+
+    수집은 됐으나 라벨이 NULL 로 방치돼 신호로 변환 안 되던 결함 봉합 — 2026-06-23~26
+    메타발 AI 셀오프 기사 다수가 미라벨링으로 tone·digest 에 미반영된 사고가 표본.
+    멱등: 과거 성공 라벨은 llm_call_cache 캐시 히트(비용 0), 실패분만 실 LLM 재시도.
+
+    Returns:
+        {"candidates": 대상 수, "labeled": 이번에 라벨 채워진 수}
+    """
+    cfg = _backfill_cfg()
+    if not bool(cfg.get("enabled", True)):
+        return {"candidates": 0, "labeled": 0}
+    if lookback_days is None:
+        lookback_days = int(cfg.get("lookback_days", 7))
+    if limit is None:
+        limit = int(cfg.get("limit", 120))
+    since = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+    items = get_unlabeled_items(since=since, limit=limit)
+    if not items:
+        return {"candidates": 0, "labeled": 0}
+    out = await classify_news_items(items, name_code_map=name_code_map)
+    upsert_news_items(out)
+    labeled = sum(1 for it in out if it.direction is not None and it.magnitude is not None)
+    log.info("news_backfill_done", candidates=len(items), labeled=labeled,
+             remaining=len(items) - labeled)
+    return {"candidates": len(items), "labeled": labeled}
+
+
 # ---------------------------------------------------------------------------
 # DB — news_digest_snapshot ((scope, date) 멱등)
 #   집계 로직(build_news_digest)은 MS-B. 여기선 영속 헬퍼만 (round-trip).
