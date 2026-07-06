@@ -96,6 +96,42 @@ async def test_telegram_long_message_split(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# ②-b 가상매매 보유 배선 — briefing 이 레거시 sim_positions 만 읽어 '보유 없음' 나오던 구멍
+# ---------------------------------------------------------------------------
+def test_load_positions_includes_paper_holdings(monkeypatch):
+    """account_positions(가상매매 정본) 보유가 briefing positions 에 합류 (2026-07-07).
+
+    실측: 삼성전자우/SK하이닉스/테스 보유 중인데 브리핑은 '보유 없음' — 레거시
+    watch/sim_positions 만 읽던 배선 구멍.
+    """
+    from pipelines.market_briefing_pre.stages import load_positions as lp
+
+    class _FakeDB:
+        def fetch_all(self, sql, params=()):
+            if "account_positions" in sql:
+                return [{"account_id": "kr_long"}]
+            return []  # 레거시 watch/sim 빈 값
+
+    monkeypatch.setattr(lp, "get_db", lambda: _FakeDB())
+    monkeypatch.setattr(
+        "core.account.holdings.get_holdings",
+        lambda aid, **k: [{
+            "account_id": aid, "ticker": "005935", "display_name": "삼성전자우",
+            "track": "A", "shares": 26.15, "avg_price": 218500.0, "weight": 0.057,
+            "tranche_count": 1, "eval_price": 224000.0, "priced": True,
+            "unrealized_pnl_krw": 143000.0, "unrealized_pct": 2.52,
+            "realized_pnl_krw": 0.0, "opened_at": "2026-06-17", "holding_days": 20,
+        }],
+    )
+    paper = lp._load_paper_holdings()
+    assert len(paper) == 1
+    h = paper[0]
+    assert h["name"] == "삼성전자우"
+    assert h["unrealized_pct"] == 2.52
+    assert h["holding_days"] == 20
+
+
+# ---------------------------------------------------------------------------
 # ③ 신규 후보 결정론 메뉴 — LLM 학습 지식 회귀(유명 대형주만 추천) 구조 수리
 # ---------------------------------------------------------------------------
 _FAKE_VIEW = {
