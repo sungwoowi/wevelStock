@@ -38,6 +38,7 @@ def _format_user_prompt(
     news: list[dict],
     positions: dict,
     principles: dict,
+    candidates_menu: str | None = None,
 ) -> str:
     template = _read_prompt("briefing.md")
     if not template:
@@ -49,6 +50,7 @@ def _format_user_prompt(
                 "news": news,
                 "positions": positions,
                 "principles": principles,
+                "candidates_menu": candidates_menu,
             },
             ensure_ascii=False,
             indent=2,
@@ -60,6 +62,7 @@ def _format_user_prompt(
         news=json.dumps(news, ensure_ascii=False, indent=2),
         positions=json.dumps(positions, ensure_ascii=False, indent=2),
         principles=json.dumps(principles, ensure_ascii=False, indent=2),
+        candidates_menu=candidates_menu or "(전일 큐레이션 없음 — 이 경우에만 자체 판단으로 후보 제시, 사유 명시)",
     )
 
 
@@ -176,6 +179,16 @@ class AnalyzeStage(Stage):
             ),
         )
 
+        # 신규 후보 결정론 메뉴 (2026-07-07) — 전일 큐레이션(거래대금/거래량 × 컨셉 ×
+        # funnel)을 주입해 LLM 이 학습 지식 속 유명 대형주로 회귀하는 것을 구조로 차단.
+        candidates_menu: str | None = None
+        try:
+            from core.watchlist_view import render_candidate_menu_md
+
+            candidates_menu = render_candidate_menu_md()
+        except Exception as e:  # noqa: BLE001
+            log.warning("briefing_candidate_menu_failed", error=str(e))
+
         user_content = _format_user_prompt(
             overnight_us=overnight_us,
             macro=macro,
@@ -183,6 +196,7 @@ class AnalyzeStage(Stage):
             news=news_items,
             positions=positions,
             principles=principles,
+            candidates_menu=candidates_menu,
         )
 
         input_hash = compute_input_hash(

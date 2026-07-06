@@ -56,6 +56,37 @@ def _infer_notification_type(team_id: str, explicit: str | None) -> str | None:
     return None
 
 
+_TELEGRAM_MAX_CHARS = 4096
+
+
+def _split_for_telegram(message: str, limit: int = _TELEGRAM_MAX_CHARS) -> list[str]:
+    """텔레그램 4096자 한도 분할 — 줄 경계 우선, 내용 무손실 (이어서 마저 발송).
+
+    이전엔 초과 메시지가 통째로 400 실패 → 파일 폴백행 (사용자는 못 받음).
+    """
+    if len(message) <= limit:
+        return [message]
+    chunks: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in message.split("\n"):
+        # 한 줄 자체가 한도 초과인 극단 케이스 — 하드 분할 (내용 보존 우선)
+        while len(line) > limit:
+            if current:
+                chunks.append("\n".join(current))
+                current, size = [], 0
+            chunks.append(line[:limit])
+            line = line[limit:]
+        if size + len(line) + 1 > limit and current:
+            chunks.append("\n".join(current))
+            current, size = [], 0
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return chunks
+
+
 async def _send_telegram(message: str) -> bool:
     token = env("TELEGRAM_BOT_TOKEN")
     chat_id = env("TELEGRAM_CHAT_ID")
@@ -64,14 +95,17 @@ async def _send_telegram(message: str) -> bool:
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                url,
-                json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
-            )
-            if resp.status_code == 200:
-                return True
-            log.warning("telegram_non200", status=resp.status_code, body=resp.text[:200])
-            return False
+            for chunk in _split_for_telegram(message):
+                resp = await client.post(
+                    url,
+                    json={"chat_id": chat_id, "text": chunk, "parse_mode": "HTML"},
+                )
+                if resp.status_code != 200:
+                    log.warning(
+                        "telegram_non200", status=resp.status_code, body=resp.text[:200]
+                    )
+                    return False
+            return True
     except Exception as e:  # noqa: BLE001
         log.warning("telegram_error", error=str(e))
         return False

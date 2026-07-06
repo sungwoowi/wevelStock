@@ -169,3 +169,52 @@ def watchlist_funnel_view(
             "dates": dates,
         })
     return {"baskets": baskets, "tracks": tracks, "interest": interest}
+
+
+_STAGE_KR = {"entered": "진입", "watching": "매수대기"}
+
+
+def _menu_line(item: dict[str, Any]) -> str:
+    """메뉴 한 줄 — 이름(코드) + 등락 + 컨셉/교집합 태그 (LLM 입력이라 코드 병기 OK)."""
+    name = item.get("display_name") or item.get("ticker", "?")
+    chg = item.get("change_pct")
+    chg_s = f" {chg:+.1f}%" if isinstance(chg, (int, float)) else ""
+    tags = [_CONCEPT_LABELS.get(item.get("concept"), None)]
+    if item.get("is_dual"):
+        tags.append("거래대금∩거래량 교집합")
+    tag_s = f" [{'·'.join(t for t in tags if t)}]" if any(tags) else ""
+    return f"- {name}({item.get('ticker')}){chg_s}{tag_s}"
+
+
+def render_candidate_menu_md(*, limit_per_group: int = 8) -> str | None:
+    """장전 브리핑 `new_candidates` 용 결정론 후보 메뉴 (DB read·LLM 0).
+
+    브리핑 LLM 이 근거 데이터 없이 학습 지식 속 유명 대형주(삼성전자·한미반도체류)로
+    회귀하던 문제의 구조 수리 (2026-07-07) — 전일 시장이 실제로 보여준 후보
+    (거래대금/거래량 큐레이션 × 차트 컨셉 × funnel 단계)를 메뉴로 주입, 트레이드플랜
+    메뉴·cited_scores 구조 주입과 같은 패턴. 후보 0 이면 None (주입 생략, graceful).
+    """
+    try:
+        view = watchlist_funnel_view()
+    except Exception:  # noqa: BLE001 — 메뉴 실패가 브리핑을 막지 않음
+        return None
+    lines: list[str] = []
+    # 1) 이미 funnel 단계에 오른 종목 (전략가 판단 有) — 최우선 후보
+    for tr in view.get("tracks") or []:
+        for st in tr.get("stages") or []:
+            items = (st.get("items") or [])[:limit_per_group]
+            if not items:
+                continue
+            stage_kr = _STAGE_KR.get(st.get("stage"), st.get("stage", "?"))
+            lines.append(f"### {tr.get('label', tr.get('track', '?'))} 트랙 · {stage_kr}")
+            lines.extend(_menu_line(it) for it in items)
+    # 2) 관심 공용 — 컨셉(주도주/눌림/바닥)별
+    for grp in (view.get("interest") or {}).get("concepts") or []:
+        items = (grp.get("items") or [])[:limit_per_group]
+        if not items:
+            continue
+        lines.append(f"### 관심 · {grp.get('label', grp.get('concept', '?'))}")
+        lines.extend(_menu_line(it) for it in items)
+    if not lines:
+        return None
+    return "\n".join(lines)

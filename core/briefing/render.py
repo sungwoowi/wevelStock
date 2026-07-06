@@ -127,6 +127,24 @@ _BIAS_KR = {
 }
 
 
+def _clip_sentence(text: str, limit: int) -> str:
+    """limit 근처의 **문장 경계**에서 클립 — 중간 뚝 끊김("…미칠 것으로") 방지.
+
+    limit 안에 마지막 문장 끝('다.' 등 마침표)이 있으면 거기까지, 없으면 limit 에서
+    자르고 말줄임(…) 표기. 짧은 텍스트는 그대로 (2026-07-07 사용자 제보 수리).
+    """
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = max(head.rfind("다. "), head.rfind("다.\n"), head.rfind(". "))
+    if head.endswith("다.") or head.endswith("."):
+        cut = len(head) - 2
+    if cut >= int(limit * 0.4):  # 문장 끝이 너무 앞이면(정보 손실 과다) 말줄임으로
+        return text[: cut + 2].rstrip()
+    return head.rstrip() + "…"
+
+
 def _render_horizon_view(icon: str, label: str, view: dict) -> list[str]:
     """단기/장기 관점 블록 — 스탠스 라벨 + 실전 대응 guidance."""
     stance = (view.get("stance") or "").strip()
@@ -203,7 +221,7 @@ def render_positions(data: dict) -> str:
             reason = p.get("reason", "")
             lines.append(f"  {icon} {name} — {verdict}")
             if reason:
-                lines.append(f"     {reason[:120]}")
+                lines.append(f"     {_clip_sentence(reason, 240)}")
 
     lines.append("")
     lines.append("✨ 신규 매수 후보")
@@ -214,7 +232,7 @@ def render_positions(data: dict) -> str:
             sector = c.get("sector") or "?"
             name = c.get("name") or c.get("ticker", "?")
             reason = c.get("reason", "")
-            lines.append(f"  • [{sector}] {name} — {reason[:80]}")
+            lines.append(f"  • [{sector}] {name} — {_clip_sentence(reason, 220)}")
 
     lines.append("")
     violations = principles.get("violations") or []
