@@ -110,8 +110,37 @@ def render_overnight(data: dict) -> str:
     return "\n".join(lines)
 
 
+# 노출 단 코드 라벨 금지 — expected_open/bias 영문 enum 을 한국어로 (미매핑 값은 원문 유지).
+_EXPECTED_OPEN_KR = {
+    "gap_up_big": "큰 갭 상승",
+    "gap_up_small": "소폭 갭 상승",
+    "flat": "보합",
+    "gap_down_small": "소폭 갭 하락",
+    "gap_down_big": "큰 갭 하락",
+}
+_BIAS_KR = {
+    "bullish": "강세",
+    "neutral_positive": "중립(우호)",
+    "neutral": "중립",
+    "neutral_negative": "중립(경계)",
+    "bearish": "약세",
+}
+
+
+def _render_horizon_view(icon: str, label: str, view: dict) -> list[str]:
+    """단기/장기 관점 블록 — 스탠스 라벨 + 실전 대응 guidance."""
+    stance = (view.get("stance") or "").strip()
+    guidance = (view.get("guidance") or "").strip()
+    if not (stance or guidance):
+        return []
+    lines = ["", f"{icon} {label} — 스탠스: {stance or '?'}"]
+    if guidance:
+        lines.append(f"  {guidance[:400]}")
+    return lines
+
+
 def render_scenario(data: dict) -> str:
-    """morning_pre 'scenario' 파트 — 오늘 시나리오 + 핵심 뉴스 Top 5."""
+    """morning_pre 'scenario' 파트 — 오늘 시나리오 + 단기/장기 실전 관점 + 핵심 뉴스 Top 5."""
     scenario = data.get("scenario") or {}
     news_impact = data.get("news_impact") or []
     news_items = data.get("news_items") or []
@@ -122,11 +151,17 @@ def render_scenario(data: dict) -> str:
         expected = scenario.get("expected_open", "?")
         bias = scenario.get("bias", "?")
         conf = scenario.get("confidence", "?")
-        lines.append(f"  예상 개장: {expected}  |  바이어스: {bias}  |  신뢰 {conf}")
+        expected_kr = _EXPECTED_OPEN_KR.get(expected, expected)
+        bias_kr = _BIAS_KR.get(bias, bias)
+        lines.append(f"  예상 개장: {expected_kr}  |  바이어스: {bias_kr}  |  신뢰 {conf}")
         narrative = (scenario.get("narrative") or "").strip()
         if narrative:
             lines.append("")
             lines.append(narrative[:600])
+        # 단기/장기 관점 분리 (2026-07-06 사용자 요청) — "홀딩할지 매도할지 매수할지"
+        # 판단에 직결. 당장 행동(단기) → 큰 그림(장기) 순. 구버전 응답은 블록 생략(graceful).
+        lines.extend(_render_horizon_view("⚡", "단기 (1~2주)", scenario.get("short_term") or {}))
+        lines.extend(_render_horizon_view("🌊", "장기 (1개월+)", scenario.get("long_term") or {}))
 
     by_url = {e.get("url"): e for e in news_impact if e.get("url")}
     lines.append("")

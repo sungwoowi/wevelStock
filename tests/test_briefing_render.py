@@ -136,6 +136,49 @@ def test_render_scenario_empty_news_shows_fallback() -> None:
     assert "뉴스 수집 실패" in text
 
 
+def test_render_scenario_short_long_split() -> None:
+    """단기(1~2주)/장기(1개월+) 관점 분리 + 스탠스·실전 대응 노출 (2026-07-06 사용자 요청).
+
+    '이 시장에서 홀딩할지 매도할지 매수할지' 판단에 직결되는 구조 —
+    관점별 스탠스 라벨 + 조건부 대응 guidance 가 각각 별도 블록으로.
+    """
+    data = _scenario_fixture()
+    data["scenario"]["short_term"] = {
+        "stance": "매수 대기",
+        "guidance": "추가 상승 시 부분 매도 자리, 지난주 저점 부근 재매수 대기가 유리합니다.",
+    }
+    data["scenario"]["long_term"] = {
+        "stance": "홀딩",
+        "guidance": "이번 악재는 기존 뉴스의 재탕 — 구조 변곡이 아니므로 저점 매수분은 8월까지 기다리는 편이 낫습니다.",
+    }
+    text = render_scenario(data)
+    assert "단기 (1~2주)" in text
+    assert "장기 (1개월+)" in text
+    assert "매수 대기" in text and "재매수 대기" in text
+    assert "홀딩" in text and "재탕" in text
+    # 단기 블록이 장기보다 먼저 (당장 행동 → 큰 그림 순)
+    assert text.index("단기 (1~2주)") < text.index("장기 (1개월+)")
+
+
+def test_render_scenario_backward_compat_narrative_only() -> None:
+    """구버전 응답(short/long 없음) — 기존 narrative 렌더 유지 (graceful)."""
+    text = render_scenario(_scenario_fixture())
+    assert "반도체 섹터 주도 상승" in text
+    assert "단기 (1~2주)" not in text
+
+
+def test_render_scenario_korean_labels() -> None:
+    """expected_open/bias 코드 라벨을 한국어로 노출 (노출 단 코드 라벨 금지 원칙)."""
+    data = _scenario_fixture()
+    data["scenario"]["expected_open"] = "gap_down_big"
+    data["scenario"]["bias"] = "bearish"
+    text = render_scenario(data)
+    assert "큰 갭 하락" in text
+    assert "약세" in text
+    assert "gap_down_big" not in text
+    assert "bearish" not in text
+
+
 def test_render_positions_with_advice_and_candidate() -> None:
     text = render_positions(_positions_fixture())
     assert "보유/관심 의견" in text

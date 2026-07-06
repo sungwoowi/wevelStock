@@ -206,6 +206,11 @@ class AnalyzeStage(Stage):
             input_hash=input_hash,
             max_tokens=8000,
             temperature=0.3,
+            # Gemini-2.5 thinking 토큰이 max_output 예산을 잠식해 JSON 이 잘리던 결함
+            # 방지 ([[feedback_gemini_thinking_budget_json]]) — 2026-07-06 라이브에서
+            # 출력 506 토큰 잘림 → 파싱 실패 → 시나리오 파트 공백으로 실증. JSON 강제
+            # 호출은 전부 이 가드 (theme_match·anchors·classify·interpretation 동일).
+            thinking_budget=0,
         )
 
         parsed = _parse_llm_response(resp["content"])

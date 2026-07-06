@@ -107,12 +107,17 @@ async def test_runner_executes_with_mocks() -> None:
         patch("pipelines.market_briefing_pre.stages.collect_news.fetch_news",
               new=AsyncMock(return_value=news_mock)),
         patch("pipelines.market_briefing_pre.stages.analyze.call_llm",
-              new=AsyncMock(return_value=llm_response)),
+              new=AsyncMock(return_value=llm_response)) as llm_mock,
     ):
         runner = PipelineRunner()
         result = await runner.run(manifest, run_id="smoke-test-1")
 
     assert result.ok, f"Pipeline errored: {result.errors}"
+
+    # Gemini-2.5 thinking 토큰의 max_output 잠식 → JSON 잘림 방지 (2026-07-06 라이브
+    # 사고: thinking 이 예산을 먹어 출력 506 토큰에서 잘려 파싱 실패 → 시나리오 파트 공백.
+    # theme_match·anchors·news_classify·interpretation 과 동일 가드 — 브리핑만 빠져 있었음).
+    assert llm_mock.call_args.kwargs.get("thinking_budget") == 0
     assert set(result.stages.keys()) == set(EXPECTED_STAGES)
 
     # Core contracts
