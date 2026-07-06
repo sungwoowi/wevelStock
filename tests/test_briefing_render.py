@@ -221,6 +221,12 @@ def test_render_positions_with_advice_and_candidate() -> None:
     assert "🟢" in text
 
 
+def test_render_candidate_name_bold() -> None:
+    """신규 후보 종목명 <b> 볼드 — "약하게 보인다" (2026-07-07 사용자 요청)."""
+    text = render_positions(_positions_fixture())
+    assert "<b>SK하이닉스</b> [반도체]" in text
+
+
 def test_render_hold_icon_visible() -> None:
     """HOLD 아이콘 = 🔵 (▫ 회색 소형은 안 보임 — 2026-07-07 사용자 지적)."""
     data = _positions_fixture()

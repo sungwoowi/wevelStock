@@ -262,7 +262,8 @@ def render_positions(data: dict) -> str:
             reason = scrub_code_labels(_clip_sentence(c.get("reason", ""), 200))
             if i > 1:
                 lines.append("")
-            lines.append(f"{i}. {name} [{sector}]")
+            # 종목명 볼드 — "약하게 보인다" (2026-07-07). notification 이 <b> 보존/strip 처리.
+            lines.append(f"{i}. <b>{html.escape(str(name))}</b> [{sector}]")
             if reason:
                 lines.append(f"   └ {reason}")
 

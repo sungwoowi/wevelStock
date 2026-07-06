@@ -202,16 +202,24 @@ def test_log_fallback_strips_html_links():
 
 
 def test_format_message_preserves_anchor_tags():
-    """_format_message — body 전체 escape 속에서 render 가 심은 <a> 링크만 보존.
+    """_format_message — body 전체 escape 속에서 render 가 심은 <a>/<b> 태그만 보존.
 
     (기존엔 전부 escape → 태그 원문이 텔레그램에 노출될 뻔한 함정.)
     """
     from core.notification.service import _format_message
 
-    body = '1. ⬆️‼️ <a href="http://n/1">나스닥 &amp; 반등</a>\n2. 일반 <괄호> 텍스트'
+    body = '1. <b>심텍</b> <a href="http://n/1">나스닥 &amp; 반등</a>\n2. 일반 <괄호> 텍스트'
     msg = _format_message("market_briefing_pre", "제목", body)
     assert '<a href="http://n/1">나스닥 &amp; 반등</a>' in msg  # 링크 태그 생존
+    assert "<b>심텍</b>" in msg                                 # 볼드 태그 생존
     assert "&lt;괄호&gt;" in msg  # 그 외 <> 는 여전히 escape (HTML 파손 방지)
+
+
+def test_strip_html_removes_bold_keeps_text():
+    """DB/파일 폴백 — <b> 태그 제거·텍스트 보존 (웹앱 알림 탭 태그 노출 방지)."""
+    from core.notification.service import _strip_html_for_log
+
+    assert _strip_html_for_log("1. <b>심텍</b> [반도체]") == "1. 심텍 [반도체]"
 
 
 async def test_telegram_short_message_single_post(monkeypatch):
