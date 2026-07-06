@@ -6,6 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.logging import get_logger
+from server.schedulers.jobs.auto_signal import MISFIRE_GRACE_SEC
 
 log = get_logger(__name__)
 
@@ -94,6 +95,12 @@ def register_pipeline_schedules(scheduler: AsyncIOScheduler) -> int:
                 replace_existing=True,
                 max_instances=1,
                 coalesce=True,
+                # misfire 내성 (2026-07-06 사고): 기본 grace=1초라 발화 정각에 이벤트
+                # 루프가 1초만 바빠도(차트 캐치업 22s 청크·BGE 배치·전략가 호출) 영구
+                # 스킵 — market_briefing_now 09:30/12:30/14:30 3연속 침묵의 근본 원인.
+                # infra 잡(auto_signal·daily_refresh)과 동일한 1h 유예 (06-15 절전 보강
+                # 이 파이프라인 잡에는 누락돼 있던 빈틈 상환).
+                misfire_grace_time=MISFIRE_GRACE_SEC,
             )
             log.info("pipeline_schedule_registered", job=job_id, pipeline=pipeline.id)
             count += 1
