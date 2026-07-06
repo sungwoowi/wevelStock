@@ -174,6 +174,12 @@ def test_render_news_magnitude_korean_label() -> None:
     assert "[3]" not in text
 
 
+def test_render_news_legend_line() -> None:
+    """방향 기호 범례 — 받는 사람이 설명 없이 알 수 있게 (2026-07-07 사용자 지적)."""
+    text = render_scenario(_scenario_fixture())
+    assert "⬆️ 호재" in text and "⬇️ 악재" in text and "➡️ 중립" in text
+
+
 def test_render_scenario_korean_labels() -> None:
     """expected_open/bias 코드 라벨을 한국어로 노출 (노출 단 코드 라벨 금지 원칙)."""
     data = _scenario_fixture()

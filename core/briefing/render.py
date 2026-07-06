@@ -184,6 +184,8 @@ def render_scenario(data: dict) -> str:
     by_url = {e.get("url"): e for e in news_impact if e.get("url")}
     lines.append("")
     lines.append("📰 핵심 뉴스")
+    # 기호 범례 — 받는 사람이 설명 없이 읽게 (2026-07-07 사용자 지적: "방향은 뭐야?")
+    lines.append("(⬆️ 호재 · ⬇️ 악재 · ➡️ 중립 / 파급 소·중·대 = 시장 영향 크기)")
     top = news_items[:5]
     if not top:
         lines.append("  (뉴스 수집 실패)")
