@@ -187,6 +187,8 @@ def render_scenario(data: dict) -> str:
     top = news_items[:5]
     if not top:
         lines.append("  (뉴스 수집 실패)")
+    # 파급 규모(1~3) — 맨숫자 노출은 코드 라벨이라 한국어로 (2026-07-07 사용자 요청).
+    mag_kr = {1: "파급 소", 2: "파급 중", 3: "파급 대"}
     for i, it in enumerate(top, 1):
         url = it.get("url")
         title = it.get("title", "(제목 없음)")
@@ -194,7 +196,7 @@ def render_scenario(data: dict) -> str:
         icon = IMPACT_ICON.get(imp.get("impact_direction"), "•")
         mag = imp.get("impact_magnitude")
         note = imp.get("impact_note")
-        mag_str = f" [{mag}]" if mag else ""
+        mag_str = f" [{mag_kr.get(mag, mag)}]" if mag else ""
         lines.append(f"{i}. {icon}{mag_str} {title[:80]}")
         if note:
             lines.append(f"   └ {note[:100]}")

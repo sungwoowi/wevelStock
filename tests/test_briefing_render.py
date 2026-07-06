@@ -167,6 +167,13 @@ def test_render_scenario_backward_compat_narrative_only() -> None:
     assert "단기 (1~2주)" not in text
 
 
+def test_render_news_magnitude_korean_label() -> None:
+    """핵심 뉴스 파급 규모 — 맨숫자 [3] 대신 [파급 대] 라벨 (2026-07-07 사용자 요청)."""
+    text = render_scenario(_scenario_fixture())  # fixture impact_magnitude=3
+    assert "[파급 대]" in text
+    assert "[3]" not in text
+
+
 def test_render_scenario_korean_labels() -> None:
     """expected_open/bias 코드 라벨을 한국어로 노출 (노출 단 코드 라벨 금지 원칙)."""
     data = _scenario_fixture()
