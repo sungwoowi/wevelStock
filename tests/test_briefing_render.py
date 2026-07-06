@@ -167,17 +167,38 @@ def test_render_scenario_backward_compat_narrative_only() -> None:
     assert "단기 (1~2주)" not in text
 
 
-def test_render_news_magnitude_korean_label() -> None:
-    """핵심 뉴스 파급 규모 — 맨숫자 [3] 대신 [파급 대] 라벨 (2026-07-07 사용자 요청)."""
-    text = render_scenario(_scenario_fixture())  # fixture impact_magnitude=3
-    assert "[파급 대]" in text
-    assert "[3]" not in text
+def test_render_news_magnitude_exclamation_icons() -> None:
+    """파급 규모 = 느낌표 기호 (소=무표시·중=❗·대=‼️) — 사용자 시안 선택 (2026-07-07)."""
+    data = _scenario_fixture()
+    data["news_impact"][0]["impact_magnitude"] = 3
+    text = render_scenario(data)
+    assert "⬆️‼️" in text
+    assert "[3]" not in text and "파급 대]" not in text
 
 
 def test_render_news_legend_line() -> None:
-    """방향 기호 범례 — 받는 사람이 설명 없이 알 수 있게 (2026-07-07 사용자 지적)."""
+    """기호 범례 — 받는 사람이 설명 없이 알 수 있게 (2026-07-07 사용자 지적)."""
     text = render_scenario(_scenario_fixture())
-    assert "⬆️ 호재" in text and "⬇️ 악재" in text and "➡️ 중립" in text
+    assert "⬆️호재" in text and "⬇️악재" in text and "➡️중립" in text
+    assert "❗파급중" in text and "‼️파급대" in text
+
+
+def test_render_news_korean_headline_with_embedded_link() -> None:
+    """한국어 헤드라인 + 링크 임베드 — 🔗 줄 제거, 종목당 2줄 (사용자 시안 선택)."""
+    data = _scenario_fixture()
+    data["news_impact"][0]["headline_kr"] = "나스닥 반등, 기술주 불안 완화"
+    text = render_scenario(data)
+    assert '<a href="http://example.com/a">나스닥 반등, 기술주 불안 완화</a>' in text
+    assert "🔗 http://example.com/a" not in text  # 링크 줄 사라짐
+    assert "NVIDIA 어닝 서프라이즈" not in text    # 원제목 대신 한국어 헤드라인
+
+
+def test_render_news_headline_fallback_and_escape() -> None:
+    """headline_kr 없으면 원제목 폴백 + HTML 이스케이프 (parse_mode=HTML 파손 방지)."""
+    data = _scenario_fixture()
+    data["news_items"][0]["title"] = "A&B <급등> 소식"
+    text = render_scenario(data)
+    assert "A&amp;B &lt;급등&gt; 소식" in text  # 원제목 폴백 + escape
 
 
 def test_render_scenario_korean_labels() -> None:
@@ -198,6 +219,46 @@ def test_render_positions_with_advice_and_candidate() -> None:
     assert "삼성전자" in text
     assert "BUY_ADD" in text
     assert "🟢" in text
+
+
+def test_render_candidates_airy_layout() -> None:
+    """신규 후보 — 종목줄/이유줄 분리 + 항목 간 빈 줄 (2026-07-07 '띄어쓰기 힘들다')."""
+    data = _positions_fixture()
+    data["new_candidates"] = [
+        {"sector": "반도체", "name": "SK하이닉스", "reason": "SOX 급등 — 눌림목 반등 기대."},
+        {"sector": "반도체장비", "name": "주성엔지니어링", "reason": "장비주 수혜 — 교집합 수급."},
+    ]
+    text = render_positions(data)
+    block = text.split("신규 매수 후보")[1]
+    lines = block.splitlines()
+    # 종목명 줄과 이유 줄이 분리 (한 줄 통짜 금지)
+    name_line = next(l for l in lines if "SK하이닉스" in l)
+    assert "SOX 급등" not in name_line
+    assert any("└" in l and "SOX 급등" in l for l in lines)
+    # 항목 사이 빈 줄 (밀집 해소)
+    idx1 = next(i for i, l in enumerate(lines) if "SK하이닉스" in l)
+    idx2 = next(i for i, l in enumerate(lines) if "주성엔지니어링" in l)
+    assert any(not lines[i].strip() for i in range(idx1, idx2)), "항목 간 빈 줄 없음"
+
+
+def test_render_sector_watch_compass() -> None:
+    """섹터 관점(강세/약세·회피) 렌더 — 시장 안 좋은 날 홀딩/회피 안내 (2026-07-07 요청).
+
+    sector_watch 는 LLM 이 이미 산출하는데 렌더가 버리고 있던 필드.
+    """
+    data = _positions_fixture()
+    data["sector_watch"] = {"bullish": ["반도체", "조선"], "bearish": ["건설", "화학"]}
+    text = render_positions(data)
+    assert "섹터" in text
+    assert "반도체" in text and "조선" in text
+    assert "건설" in text and "화학" in text
+    assert "회피" in text or "비중 축소" in text  # 약세 = 행동 함의 표기
+
+
+def test_render_sector_watch_absent_graceful() -> None:
+    """sector_watch 없거나 빈 값 — 섹터 블록 생략 (구버전 응답 호환)."""
+    text = render_positions(_positions_fixture())
+    assert "약세·회피" not in text
     assert "SK하이닉스" in text
     assert "7계명 체크: 위반 없음" in text
 

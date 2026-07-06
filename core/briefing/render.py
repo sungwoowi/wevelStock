@@ -9,6 +9,8 @@ from typing import Any
 
 from core.contracts.briefing_part import BriefingPart, BriefingStatus
 
+import html
+
 IMPACT_ICON = {"bullish": "⬆️", "bearish": "⬇️", "neutral": "➡️"}
 
 VERDICT_ICON = {
@@ -183,14 +185,13 @@ def render_scenario(data: dict) -> str:
 
     by_url = {e.get("url"): e for e in news_impact if e.get("url")}
     lines.append("")
-    lines.append("📰 핵심 뉴스")
-    # 기호 범례 — 받는 사람이 설명 없이 읽게 (2026-07-07 사용자 지적: "방향은 뭐야?")
-    lines.append("(⬆️ 호재 · ⬇️ 악재 · ➡️ 중립 / 파급 소·중·대 = 시장 영향 크기)")
+    # 기호 범례 — 받는 사람이 설명 없이 읽게 + 파급=느낌표(소 무표시·중 ❗·대 ‼️),
+    # 제목=한국어 헤드라인+링크 임베드 (2026-07-07 사용자 시안 선택: 종목당 3줄→2줄).
+    lines.append("📰 핵심 뉴스  (⬆️호재 ⬇️악재 ➡️중립 · ❗파급중 ‼️파급대)")
     top = news_items[:5]
     if not top:
         lines.append("  (뉴스 수집 실패)")
-    # 파급 규모(1~3) — 맨숫자 노출은 코드 라벨이라 한국어로 (2026-07-07 사용자 요청).
-    mag_kr = {1: "파급 소", 2: "파급 중", 3: "파급 대"}
+    mag_icon = {2: "❗", 3: "‼️"}
     for i, it in enumerate(top, 1):
         url = it.get("url")
         title = it.get("title", "(제목 없음)")
@@ -198,19 +199,24 @@ def render_scenario(data: dict) -> str:
         icon = IMPACT_ICON.get(imp.get("impact_direction"), "•")
         mag = imp.get("impact_magnitude")
         note = imp.get("impact_note")
-        mag_str = f" [{mag_kr.get(mag, mag)}]" if mag else ""
-        lines.append(f"{i}. {icon}{mag_str} {title[:80]}")
+        # 한국어 헤드라인 우선(영문 원제목의 "정신없음" 해소), 없으면 원제목 폴백.
+        headline = html.escape((imp.get("headline_kr") or title)[:60])
+        if url:
+            # parse_mode=HTML — 링크를 제목에 임베드 (🔗 줄 제거). DB/파일 폴백은
+            # notification service 가 plain 으로 strip (웹앱 알림 탭 태그 노출 방지).
+            headline = f'<a href="{html.escape(url, quote=True)}">{headline}</a>'
+        lines.append(f"{i}. {icon}{mag_icon.get(mag, '')} {headline}")
         if note:
-            lines.append(f"   └ {note[:100]}")
-        lines.append(f"   🔗 {url}")
+            lines.append(f"   └ {html.escape(note[:100])}")
 
     return "\n".join(lines)
 
 
 def render_positions(data: dict) -> str:
-    """morning_pre 'positions' 파트 — 보유/관심 + 신규 후보 + 7계명 체크."""
+    """morning_pre 'positions' 파트 — 보유/관심 + 섹터 관점 + 신규 후보 + 7계명 체크."""
     positions_advice = data.get("positions_advice") or []
     new_candidates = data.get("new_candidates") or []
+    sector_watch = data.get("sector_watch") or {}
     principles = data.get("principles") or {}
 
     lines: list[str] = []
@@ -227,16 +233,37 @@ def render_positions(data: dict) -> str:
             if reason:
                 lines.append(f"     {_clip_sentence(reason, 240)}")
 
+    # 섹터 관점 (2026-07-07 사용자 요청) — LLM 이 산출하던 sector_watch 를 렌더가
+    # 버리고 있었음. 약세 = 행동 함의(신규 회피·보유 비중 축소 검토)까지 — 시장 안
+    # 좋은 날 보유가 없어도 "무엇을 피할지"가 안내되는 층.
+    bullish = [s for s in (sector_watch.get("bullish") or []) if s]
+    bearish = [s for s in (sector_watch.get("bearish") or []) if s]
+    if bullish or bearish:
+        lines.append("")
+        lines.append("🧭 섹터 관점")
+        if bullish:
+            lines.append(f"  강세: {', '.join(bullish[:5])}")
+        if bearish:
+            lines.append(f"  약세·회피: {', '.join(bearish[:5])} (신규 회피 · 보유 시 비중 축소 검토)")
+
     lines.append("")
     lines.append("✨ 신규 매수 후보")
     if not new_candidates:
         lines.append("  (오늘은 신규 후보 없음)")
     else:
-        for c in new_candidates[:3]:
+        # 종목줄/이유줄 분리 + 항목 간 빈 줄 (2026-07-07 "띄어쓰기 안 돼 힘들다").
+        # 내부 라벨(Canon: 경로·점수 코드) 누출은 결정론 스크러버 재사용으로 차단.
+        from core.intent.formatter import scrub_code_labels
+
+        for i, c in enumerate(new_candidates[:3], 1):
             sector = c.get("sector") or "?"
             name = c.get("name") or c.get("ticker", "?")
-            reason = c.get("reason", "")
-            lines.append(f"  • [{sector}] {name} — {_clip_sentence(reason, 220)}")
+            reason = scrub_code_labels(_clip_sentence(c.get("reason", ""), 200))
+            if i > 1:
+                lines.append("")
+            lines.append(f"{i}. {name} [{sector}]")
+            if reason:
+                lines.append(f"   └ {reason}")
 
     lines.append("")
     violations = principles.get("violations") or []

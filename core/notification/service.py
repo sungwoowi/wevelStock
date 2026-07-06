@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -147,6 +148,38 @@ def _log_to_db(
         )
 
 
+# render 가 심는 안전한 링크 태그 (제목 임베드 — 2026-07-07). href 는 render 가 escape 완료.
+_ANCHOR_RE = re.compile(r'<a href="([^"]+)">([^<]*)</a>')
+
+
+def _strip_html_for_log(body: str) -> str:
+    """DB 로그·파일 폴백용 plain 변환 — 웹앱 알림 탭은 텍스트 렌더라 태그 노출 방지.
+
+    <a href="url">텍스트</a> → "텍스트 (url)" (링크 정보 보존) + 잔여 엔티티 복원.
+    """
+    plain = _ANCHOR_RE.sub(lambda m: f"{m.group(2)} ({m.group(1)})", body)
+    return html.unescape(plain)
+
+
+def _escape_preserving_anchors(text: str) -> str:
+    """전체 escape 하되 render 가 심은 <a> 링크만 보존 (텔레그램 parse_mode=HTML).
+
+    전부 escape 하면 링크 태그 원문이 그대로 노출되고, escape 를 안 하면 본문의
+    <> & 가 HTML 파싱을 깨뜨림 — 링크만 스태시 후 복원.
+    """
+    anchors: list[str] = []
+
+    def _stash(m: re.Match) -> str:
+        anchors.append(m.group(0))
+        return f"\x00ANCHOR{len(anchors) - 1}\x00"
+
+    stashed = _ANCHOR_RE.sub(_stash, text)
+    escaped = html.escape(stashed, quote=False)
+    for i, tag in enumerate(anchors):
+        escaped = escaped.replace(f"\x00ANCHOR{i}\x00", tag)
+    return escaped
+
+
 def _format_message(team_id: str, title: str, body: str) -> str:
     cfg = get_config().telegram
     template = cfg.formats.get(team_id) or cfg.formats.get(
@@ -154,7 +187,7 @@ def _format_message(team_id: str, title: str, body: str) -> str:
     )
     return template.format(
         title=html.escape(title, quote=False),
-        body=html.escape(body, quote=False),
+        body=_escape_preserving_anchors(body),
     )
 
 
@@ -178,12 +211,14 @@ async def notify(
     cfg = get_config().telegram
     message = _format_message(team_id, title, body)
     ntype = _infer_notification_type(team_id, notification_type)
+    # 저장 계층(파일 폴백·DB 로그)은 plain — 웹앱 알림 탭이 텍스트 렌더라 태그 노출 방지.
+    body_plain = _strip_html_for_log(body)
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "team_id": team_id,
         "level": level,
         "title": title,
-        "body": body,
+        "body": body_plain,
         "related_run_id": related_run_id,
         "related_target": related_target,
         "notification_type": ntype,
@@ -202,7 +237,7 @@ async def notify(
             team_id=team_id,
             level=level,
             title=title,
-            body=body,
+            body=body_plain,
             channel=channel,
             delivered=sent_telegram or True,  # file fallback is "delivered"
             related_run_id=related_run_id,

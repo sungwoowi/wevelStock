@@ -41,16 +41,17 @@ def _positions_data(reason: str) -> dict:
 
 
 def test_candidate_reason_not_cut_mid_sentence():
-    """신규 후보 reason — 문장 경계에서 끝나거나 말줄임(…) 표기 (중간 뚝 끊김 금지)."""
+    """신규 후보 reason — 문장 경계에서 끝나거나 말줄임(…) 표기 (중간 뚝 끊김 금지).
+
+    2026-07-07 레이아웃 분리 후: 이유는 종목명 다음 └ 줄에 위치.
+    """
     text = render_positions(_positions_data(_LONG_REASON))
-    for line in text.splitlines():
-        if "SK하이닉스" in line:
-            assert line.rstrip().endswith(("다.", "…", "다")) or "…" in line, line
-            # 기존 80자 슬라이스보다 충분히 길게 (실전 근거가 살아남게)
-            assert len(line) > 100
-            break
-    else:
-        pytest.fail("후보 라인 없음")
+    lines = text.splitlines()
+    idx = next(i for i, l in enumerate(lines) if "SK하이닉스" in l)
+    reason_line = lines[idx + 1]
+    assert "└" in reason_line
+    assert reason_line.rstrip().endswith(("다.", "…")), reason_line
+    assert len(reason_line) > 80  # 기존 80자 슬라이스보다 충분히 길게
 
 
 def test_short_reason_untouched():
@@ -151,6 +152,30 @@ def test_briefing_prompt_includes_candidate_menu():
         candidates_menu="- 테스나(131970) +5.2% [주도주]",
     )
     assert "테스나(131970)" in out
+
+
+def test_log_fallback_strips_html_links():
+    """텔레그램용 <a> 링크가 DB 로그·파일 폴백에는 plain 으로 — 웹앱 알림 탭 태그 노출 방지."""
+    from core.notification.service import _strip_html_for_log
+
+    html_msg = '1. ⬆️‼️ <a href="http://n/1">나스닥 반등</a>\n   └ 긍정적'
+    plain = _strip_html_for_log(html_msg)
+    assert "<a" not in plain and "</a>" not in plain
+    assert "나스닥 반등" in plain
+    assert "http://n/1" in plain  # 링크 자체는 보존 (텍스트로)
+
+
+def test_format_message_preserves_anchor_tags():
+    """_format_message — body 전체 escape 속에서 render 가 심은 <a> 링크만 보존.
+
+    (기존엔 전부 escape → 태그 원문이 텔레그램에 노출될 뻔한 함정.)
+    """
+    from core.notification.service import _format_message
+
+    body = '1. ⬆️‼️ <a href="http://n/1">나스닥 &amp; 반등</a>\n2. 일반 <괄호> 텍스트'
+    msg = _format_message("market_briefing_pre", "제목", body)
+    assert '<a href="http://n/1">나스닥 &amp; 반등</a>' in msg  # 링크 태그 생존
+    assert "&lt;괄호&gt;" in msg  # 그 외 <> 는 여전히 escape (HTML 파손 방지)
 
 
 async def test_telegram_short_message_single_post(monkeypatch):
