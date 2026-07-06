@@ -221,6 +221,15 @@ def test_render_positions_with_advice_and_candidate() -> None:
     assert "🟢" in text
 
 
+def test_render_hold_icon_visible() -> None:
+    """HOLD 아이콘 = 🔵 (▫ 회색 소형은 안 보임 — 2026-07-07 사용자 지적)."""
+    data = _positions_fixture()
+    data["positions_advice"][0]["verdict"] = "HOLD"
+    text = render_positions(data)
+    assert "🔵 삼성전자 — HOLD" in text
+    assert "▫" not in text
+
+
 def test_render_candidates_airy_layout() -> None:
     """신규 후보 — 종목줄/이유줄 분리 + 항목 간 빈 줄 (2026-07-07 '띄어쓰기 힘들다')."""
     data = _positions_fixture()

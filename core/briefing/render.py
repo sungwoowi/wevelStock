@@ -14,7 +14,8 @@ import html
 IMPACT_ICON = {"bullish": "⬆️", "bearish": "⬇️", "neutral": "➡️"}
 
 VERDICT_ICON = {
-    "HOLD": "▫",
+    # HOLD ▫(회색 소형)는 다크 배경에서 안 보임 (2026-07-07 사용자) — 색 원 계열로 통일.
+    "HOLD": "🔵",
     "BUY_ADD": "🟢",
     "SELL_PART": "🟡",
     "SELL_ALL": "🔴",
