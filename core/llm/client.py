@@ -94,10 +94,15 @@ def _build_anthropic_client():
 # ---------------------------------------------------------------------------
 
 _GEMINI_COSTS = {
-    # Free tier: $0. Paid tier (per 1M tokens).
-    "gemini-2.5-flash": {"in": 0.075, "out": 0.30},
+    # Free tier: $0. Paid tier (per 1M tokens), verified vs
+    # https://ai.google.dev/gemini-api/docs/pricing (2026-07-12).
+    # NOTE 낡은 값 정정: 2.5-flash 는 0.075/0.30(구 1.5/2.0-lite 요금)으로 박혀 있어
+    #   실비를 1/3 로 축소 보고했음. GA 정식 요금으로 교체.
+    "gemini-2.5-flash": {"in": 0.30, "out": 2.50},
+    "gemini-2.5-flash-lite": {"in": 0.10, "out": 0.40},
+    # 2.5-pro: >200k 프롬프트는 2.50/15.0 이나 본 시스템 호출은 ≤200k 라 기본 티어만 반영.
     "gemini-2.5-pro": {"in": 1.25, "out": 10.0},
-    "gemini-2.0-flash": {"in": 0.10, "out": 0.40},
+    "gemini-2.0-flash": {"in": 0.10, "out": 0.40},  # 2026-06-01 shut down; legacy 행 대비 유지
 }
 
 
@@ -190,7 +195,7 @@ async def _call_gemini_real(
     # output rate 로 과금된다. 비용 정확성 위해 cost 에 포함 (candidates 와 별도 surface).
     tokens_thinking = (getattr(usage, "thoughts_token_count", 0) if usage else 0) or 0
 
-    rates = _GEMINI_COSTS.get(model, {"in": 0.075, "out": 0.30})
+    rates = _GEMINI_COSTS.get(model, {"in": 0.30, "out": 2.50})
     cost = (tokens_in * rates["in"] + (tokens_out + tokens_thinking) * rates["out"]) / 1_000_000
 
     return {
@@ -680,7 +685,7 @@ async def _stream_gemini(
 
     tokens_in = getattr(last_usage, "prompt_token_count", 0) if last_usage else 0
     tokens_out = getattr(last_usage, "candidates_token_count", 0) if last_usage else 0
-    rates = _GEMINI_COSTS.get(model, {"in": 0.075, "out": 0.30})
+    rates = _GEMINI_COSTS.get(model, {"in": 0.30, "out": 2.50})
     cost = (tokens_in * rates["in"] + tokens_out * rates["out"]) / 1_000_000
     yield {
         "type": "metadata",
