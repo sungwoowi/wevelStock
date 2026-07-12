@@ -19,6 +19,13 @@ router = APIRouter()
 
 
 @router.get("/watchlist/funnel")
-async def watchlist_funnel(limit: int = 50, within_days: int = 30) -> dict:
-    """관심종목 funnel — 리스트별 → 단계별(진입▸매수대기▸관심) 그룹."""
-    return watchlist_funnel_view(limit=limit, within_days=within_days)
+async def watchlist_funnel(
+    limit: int = 50, within_days: int = 30, per_date_limit: int = 10
+) -> dict:
+    """관심종목 funnel — 리스트별 → 단계별(진입▸매수대기▸관심) 그룹.
+
+    per_date_limit: 바스킷 일자당 표시 종목 상한 (거래대금 순 상위 N, 0=무제한).
+    """
+    return watchlist_funnel_view(
+        limit=limit, within_days=within_days, per_date_limit=per_date_limit
+    )

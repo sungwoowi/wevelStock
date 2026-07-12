@@ -72,7 +72,8 @@ def _build_item(
 
 
 def watchlist_funnel_view(
-    *, limit: int = 60, within_days: int = 30, list_window_days: int = 10
+    *, limit: int = 60, within_days: int = 30, list_window_days: int = 10,
+    per_date_limit: int = 10,
 ) -> dict[str, Any]:
     """관심종목 페이지 — 후보 바스킷(소스 요약) + 트랙별(장기/단기) 단계 그룹(진입▸매수대기▸관심).
 
@@ -157,8 +158,10 @@ def watchlist_funnel_view(
                 items.sort(key=lambda x: x.get("trade_amount") or 0, reverse=True)
             else:
                 items.sort(key=lambda x: x.get("rank") if x.get("rank") is not None else 9999)
+        # 일자당 표시 상한(per_date_limit) — 정렬 후 상위 N 만 노출. total 로 전체 수 보존.
         dates = [
-            {"date": d, "count": len(its), "items": its}
+            {"date": d, "count": min(len(its), per_date_limit), "total": len(its),
+             "items": its[:per_date_limit] if per_date_limit > 0 else its}
             for d, its in sorted(by_date.items(), reverse=True)
         ]
         baskets.append({
