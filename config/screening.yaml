@@ -75,7 +75,7 @@ signal_gate:
   #   직전 cadence 와 같으면 전략가 재호출 스킵(직전 verdict 유지). 비용 ∝ 밴드 넘은 종목 수.
   #   경계 = 전략가 의사결정 임계(새 magic number X). 경계 진동 hysteresis = SLOT.
   band_gate_enabled: true
-  band_score_width: 1.0   # 점수 양자화 폭(정수 버킷). 클수록 둔감(비용↓)
+  band_score_width: 2.0   # 점수 양자화 폭(정수 버킷). 클수록 둔감(비용↓). 2026-07-12 1.0→2.0 (호출 횟수↓)
 
 # 결정론 차등 변조 (BRAIN-ALPHA-FLEXIBILITY-001 M1, core/signal/alpha_posture.py).
 #   regime 을 blanket 게이트가 아니라 baseline 으로 — 섹터RS·주도주·파동·과열도가 종목별로

@@ -22,7 +22,9 @@ log = get_logger(__name__)
 # 장중 cadence (라벨, 시(KST), 분). 시각=스냅샷 갱신 직후. 비활성/조정은 config 마스터 스위치.
 INTRADAY_CADENCES: list[tuple[str, int, int]] = [
     ("intraday1", 9, 35),
-    ("intraday2", 12, 35),
+    # ("intraday2", 12, 35),  # 2026-07-12 제거: LLM 비용 절감(호출 횟수↓). 점심 회차는
+    #   개장·마감 회차와 중복 판단이 많아 band_gate 로도 다 못 걸러 비용 대비 정보량 낮음.
+    #   되살리려면 주석 해제. (postclose 18:05 은 daily_refresh 내부 별도 스케줄)
     ("intraday3", 14, 35),
 ]
 

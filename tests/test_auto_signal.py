@@ -686,6 +686,7 @@ async def test_run_signal_cadence_empty_watchlist(monkeypatch):
 # ===========================================================================
 
 from core.signal.auto_signal import _band, band_fingerprint  # noqa: E402
+from collectors.screening import get_band_score_width  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -748,7 +749,7 @@ async def test_gate_skips_when_fingerprint_matches(monkeypatch):
 
     monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
     sc = _sample_scorecard()
-    fp = band_fingerprint(sc, "A", score_width=1.0)
+    fp = band_fingerprint(sc, "A", score_width=get_band_score_width())  # 게이트와 동일 폭(config)
     r = await run_signal_for_ticker(
         ticker="005930", track="A", snapshot=None, cadence="intraday2",
         as_of="2026-06-15", scorecard=sc, strategist_runner=_runner,
@@ -773,7 +774,9 @@ async def test_gate_proceeds_when_fingerprint_differs(monkeypatch):
     )
     assert r["persisted"] is True
     # 지문이 rec.data 에 박혀 다음 cadence 비교 기준이 됨
-    assert captured["rec"].data["band_fingerprint"] == band_fingerprint(_sample_scorecard(), "A")
+    assert captured["rec"].data["band_fingerprint"] == band_fingerprint(
+        _sample_scorecard(), "A", score_width=get_band_score_width()
+    )
 
 
 async def test_gate_disabled_always_calls(monkeypatch):
@@ -805,9 +808,10 @@ from server.schedulers.jobs import auto_signal as _job  # noqa: E402
 from server.schedulers.jobs.auto_signal import INTRADAY_CADENCES  # noqa: E402
 
 
-def test_intraday_cadences_are_three_after_snapshot_refresh():
+def test_intraday_cadences_open_and_preclose():
+    # 2026-07-12 점심(12:35) 회차 제거 — LLM 비용 절감(호출 횟수↓). 개장·마감 전 회차만 유지.
     assert INTRADAY_CADENCES == [
-        ("intraday1", 9, 35), ("intraday2", 12, 35), ("intraday3", 14, 35),
+        ("intraday1", 9, 35), ("intraday3", 14, 35),
     ]
 
 
