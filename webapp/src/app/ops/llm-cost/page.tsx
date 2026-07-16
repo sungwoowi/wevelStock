@@ -2,9 +2,88 @@
 
 // 운영자 화면 — LLM 비용 원장 (LLM-COST-LEDGER-001).
 // 유저 비노출 예정 URL. 일단위 × 벤더 × 모델 × 질의영역 지출을 한 화면에.
-import { API_BASE, fetcher, type LlmCostRow, type LlmCostSummary } from "@/lib/api";
+import {
+  API_BASE,
+  fetcher,
+  setLlmProvider,
+  type LlmCostRow,
+  type LlmCostSummary,
+  type LlmProviderInfo,
+} from "@/lib/api";
 import { useState } from "react";
 import useSWR from "swr";
+
+const PROVIDER_LABEL: Record<string, string> = {
+  gemini: "Gemini (유료 티어·토큰당 과금)",
+  claude_code: "Claude Code (로컬 구독·사용량 한도)",
+  anthropic: "Anthropic API (토큰당 과금)",
+  mock: "Mock (개발/CI)",
+};
+
+/** LLM provider 토글 — 클릭 시 runtime.yaml 핫리로드로 즉시 전환. */
+function ProviderToggle() {
+  const { data, mutate } = useSWR<LlmProviderInfo>(
+    "/api/ops/llm-provider",
+    fetcher,
+    OPTS,
+  );
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  if (!data) return null;
+
+  async function pick(p: string) {
+    if (p === data!.provider || busy) return;
+    setBusy(p);
+    try {
+      const r = await setLlmProvider(p);
+      setNote(r.note);
+      await mutate();
+    } catch (e) {
+      setNote(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="mb-1 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-foreground">LLM 백엔드 (provider)</h2>
+        <span className="text-xs text-faint">클릭 시 즉시 전환 (핫리로드·재시작 불필요)</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {data.options.map((p) => {
+          const active = p === data.provider;
+          const avail = data.availability?.[p] ?? true;
+          return (
+            <button
+              key={p}
+              onClick={() => pick(p)}
+              disabled={busy !== null || !avail}
+              title={!avail ? "키/환경 미설정" : PROVIDER_LABEL[p]}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : avail
+                    ? "border-border text-foreground hover:border-primary"
+                    : "border-border text-faint opacity-50"
+              }`}
+            >
+              {busy === p ? "전환 중…" : PROVIDER_LABEL[p] ?? p}
+              {!avail && " ⚠"}
+            </button>
+          );
+        })}
+      </div>
+      {data.env_override && (
+        <p className="mt-2 text-xs text-amber">
+          ⚠ .env LLM_PROVIDER={data.env_override} 고정 — 여기서 바꿔도 재기동 시 무시됩니다.
+        </p>
+      )}
+      {note && <p className="mt-2 text-xs text-faint">{note}</p>}
+    </div>
+  );
+}
 
 const OPTS = { refreshInterval: 60_000, revalidateOnFocus: false } as const;
 const RANGES = [7, 14, 30] as const;
@@ -108,6 +187,8 @@ export default function LlmCostPage() {
           ))}
         </div>
       </div>
+
+      <ProviderToggle />
 
       {error ? (
         <div className="rounded-2xl border border-border bg-card p-6">

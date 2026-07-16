@@ -30,13 +30,14 @@ from typing import Any
 from collectors.scoring import map_to_axis
 from core.db import get_db
 from core.llm.client import call_llm, parse_json_response
+from core.llm.tiers import resolve_model_for_area
 from core.logging import get_logger
 
 log = get_logger(__name__)
 
-# FAST tier 급 (테마 분류는 단순 선택 — 비용 의식, memory feedback_llm_tier_strategy).
-# anchors.py _STAGE2_MODEL_DEFAULT mirror (tier area 등록은 본 SPEC scope 밖, minor 후속).
-_STAGE2_MODEL_DEFAULT = "claude-haiku-4-5"
+# FAST tier — resolve_model_for_area("theme_match") 가 현재 provider(gemini/claude_code/anthropic)에
+# 맞는 모델을 반환. 과거 claude-haiku 하드코딩 + provider 미지정 → Gemini 한도 도달 시 claude_code 로
+# 무성(silent) 폴백하며 22~41K 토큰 낭비하던 누수(2026-07-14~16)를 봉합.
 
 _NET_KEYS = (
     "foreign_net",
@@ -211,13 +212,16 @@ async def classify_theme(
     # 4) Stage 2 LLM
     name = _ticker_name(ticker)
     prompt = _format_theme_prompt(ticker, name, taxonomy)
+    # 현재 provider 에 맞는 (provider, model) — provider 를 명시해 넘겨 무성 cross-provider 폴백 차단.
+    _provider, _model = resolve_model_for_area("theme_match")
     try:
         resp = await call_llm(
             call_type="theme_match",
             target=ticker,
             system="You are a deterministic stock theme classifier. Output only valid JSON.",
             messages=[{"role": "user", "content": prompt}],
-            model=_STAGE2_MODEL_DEFAULT,
+            provider=_provider,
+            model=_model,
             max_tokens=512,
             temperature=0.0,
             # Gemini-2.5 thinking 비활성 — thinking 토큰이 max_output 예산을 잠식해
@@ -242,7 +246,7 @@ async def classify_theme(
         _store_cached_theme(
             input_hash,
             {"theme": theme, "reasoning": reasoning},
-            model=_STAGE2_MODEL_DEFAULT,
+            model=resp.get("model") or _model,
             tokens_in=int(resp.get("tokens_in", 0)),
             tokens_out=int(resp.get("tokens_out", 0)),
             cost_usd=float(resp.get("cost_usd", 0.0)),

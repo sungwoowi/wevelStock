@@ -91,6 +91,7 @@ class LLMAreas(BaseModel):
 
     intent_classifier: TierName = "fast"
     answer_formatter: TierName = "fast"
+    theme_match: TierName = "fast"  # 결정론 테마 분류 = 경량. tier 미등록 시 balanced 로 새던 것 봉합.
     analyst: TierName = "balanced"
     strategist: TierName = "balanced"
     anchors_stage2: TierName = "balanced"

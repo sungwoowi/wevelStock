@@ -421,3 +421,32 @@ export type LlmCostSummary = {
   by_day: LlmCostRow[];
   by_day_provider: LlmCostRow[];
 };
+
+// --- 운영자: LLM provider 토글 (GET/POST /api/ops/llm-provider) -----------------
+
+export type LlmProviderInfo = {
+  provider: string;
+  options: string[];
+  availability: Record<string, boolean>;
+  env_override: string | null;
+};
+
+export type LlmProviderSetResult = {
+  provider: string;
+  applied: boolean;
+  env_override_wins: string | null;
+  note: string;
+};
+
+/** POST /api/ops/llm-provider — provider 전환(runtime.yaml 핫리로드). */
+export async function setLlmProvider(
+  provider: string,
+): Promise<LlmProviderSetResult> {
+  const res = await fetch(`${API_BASE}/api/ops/llm-provider`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider }),
+  });
+  if (!res.ok) throw new Error(`provider 전환 실패 (${res.status})`);
+  return res.json();
+}

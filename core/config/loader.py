@@ -138,6 +138,11 @@ def load_config() -> RuntimeConfig:
     if sm := os.environ.get("SOURCE_MODE"):
         if sm in ("seed", "live"):
             merged["source_mode"] = sm
+    # LLM provider 토글 — .env `LLM_PROVIDER` 가 llm.provider 를 오버라이드 (gemini↔claude_code 등).
+    #   웹UI 토글은 runtime.yaml 을 쓰고(핫리로드), .env 는 서버 기동 시 고정 오버라이드.
+    if lp := os.environ.get("LLM_PROVIDER"):
+        if lp in ("gemini", "claude_code", "anthropic", "mock"):
+            merged.setdefault("llm", {})["provider"] = lp
 
     return RuntimeConfig(**merged)
 

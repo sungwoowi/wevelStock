@@ -9,7 +9,7 @@
     (데스크가 그날 권고를 체결하도록). 본 모듈의 run_auto_signal_job("postclose").
 
 마스터 스위치 = config signal_gate.auto_run_enabled (false → 전체 no-op, 비용 부담 시 즉시 OFF).
-production 경로 = provider="gemini" · mock_fallback_allowed=False (실 배포 모델, silent mock 금지).
+production 경로 = provider=config(llm.provider) · mock_fallback_allowed=False (실 배포, silent mock 금지).
 """
 from __future__ import annotations
 
@@ -49,10 +49,14 @@ async def run_auto_signal_job(cadence: str = "postclose") -> dict[str, Any]:
 
     log.info("auto_signal_job_start", cadence=cadence)
     try:
+        from core.config import get_config
         from core.signal.auto_signal import run_signal_cadence
 
+        # provider 는 config(llm.provider) 를 따른다 — 웹UI/.env 토글로 gemini↔claude_code 전환.
+        # 명시 전달이라 allow_fallback=False 유지(무성 cross-provider 폴백 없음). mock 금지(실 배포).
+        provider = get_config().llm.provider
         summary = await run_signal_cadence(
-            cadence=cadence, provider="gemini", mock_fallback_allowed=False
+            cadence=cadence, provider=provider, mock_fallback_allowed=False
         )
         log.info(
             "auto_signal_job_done",
