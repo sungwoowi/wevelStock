@@ -18,7 +18,7 @@
 # LLM 백엔드: gemini (Google AI Studio 무료 티어) 사용 중
 # GOOGLE_AI_API_KEY .env에 설정됨. 무료 한도: 일 1,500회 Flash / 50회 Pro
 llm:
-  provider: gemini
+  provider: claude_code
   gemini:
     # 2026-05-06: lite 가 503 high demand 발생 → flash 로 승격
     model: gemini-2.5-flash

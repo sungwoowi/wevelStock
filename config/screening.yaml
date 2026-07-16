@@ -66,7 +66,7 @@ regime_thresholds:
 signal_gate:
   auto_run_enabled: true  # 자동 권고 cron 마스터 스위치 (false = 4 cadence 잡 전체 no-op)
   min_score: 5.0          # screening_score(0~10) 이 이상만 전략가 대상 (중앙값 = 위쪽 절반)
-  max_candidates: 20      # Stage 1 상한 (cadence당). 0/음수 = 무제한
+  max_candidates: 5       # Stage 1 상한 (cadence당). 0/음수 = 무제한. 2026-07-17 20→5 (LLM 콜·구독쿼터 절감)
   # 종목 병렬 처리 (asyncio 코루틴 — CPU·RAM 영향 거의 없음, I/O 대기 겹침). 제약=KIS rate-limit.
   #   8GB·서버 동시 가동 고려 보수 기본 3. 부하 시 1~2 로, 여유 시 ↑. 1 = 순차.
   concurrency: 3
