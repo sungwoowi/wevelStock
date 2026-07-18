@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.config import get_config
 from core.executive import synthesize_executive
 from core.intent import (
     classify_intent,
@@ -50,7 +51,10 @@ class ProductionChatRequest(BaseModel):
     skip_stage2: bool = False  # Stage 1 만 검증 (테스트용)
     manual_override: dict[str, Any] | None = None  # IntentFallback drop-down 결과
     skip_formatter: bool = False  # raw 만 반환 (PROD-UX-1 호환 모드)
-    executive_mode: bool = False  # ARCHITECTURE-HYBRID-EXECUTIVE-001 — formatter 대신 임원 종합
+    # ARCHITECTURE-HYBRID-EXECUTIVE-001 — formatter 대신 임원 종합.
+    # None = config chat.executive_mode_default 를 따름 (2026-07-18 부터 기본 임원).
+    # True/False 명시 = 요청이 우선 (R&D Off/Flash/Pro 토글).
+    executive_mode: bool | None = None
     # 임원 종합 tier 수동 선택 (Pro 자동 발동 라우팅 = SLOT S7). "deep" = Pro override,
     # None/"balanced" = config area 기본값 (Flash). webapp Off/Flash/Pro 토글이 설정.
     executive_tier: Literal["balanced", "deep"] | None = None
@@ -61,6 +65,13 @@ def _executive_model_override(tier: Literal["balanced", "deep"] | None) -> str |
     if tier == "deep":
         return model_for_tier("deep")
     return None
+
+
+def _resolve_executive_mode(payload: ProductionChatRequest) -> bool:
+    """payload 명시가 우선, 미명시(None)면 config chat.executive_mode_default."""
+    if payload.executive_mode is not None:
+        return payload.executive_mode
+    return get_config().chat.executive_mode_default
 
 
 def _is_discovery(classification: Any) -> bool:
@@ -158,8 +169,9 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
             r for r in route_resp.agent_responses
             if r.get("kind") in ("strategist", "refuse_or_guide", "pending_ms5")
         ]
+        executive_mode = _resolve_executive_mode(payload)
         try:
-            if payload.executive_mode:
+            if executive_mode:
                 fmt = await synthesize_executive(
                     user_input=last_user,
                     analyst_outputs=analyst_outputs,
@@ -189,7 +201,7 @@ async def post_production_chat(payload: ProductionChatRequest) -> ProductionChat
                 upstream_error=fmt.upstream_error,
             )
         except Exception as e:  # noqa: BLE001
-            log.error("synthesis_dispatch_failed", error=str(e), executive_mode=payload.executive_mode)
+            log.error("synthesis_dispatch_failed", error=str(e), executive_mode=executive_mode)
 
     return ProductionChatResponse(
         classification=route_resp.classification,
@@ -305,8 +317,9 @@ async def post_production_chat_stream(payload: ProductionChatRequest) -> Streami
 
             # 모든 agent stream 종료 후 formatter 호출 (SSE 마지막 event 로 추가)
             if not payload.skip_formatter:
+                executive_mode = _resolve_executive_mode(payload)
                 try:
-                    if payload.executive_mode:
+                    if executive_mode:
                         fmt = await synthesize_executive(
                             user_input=last_user,
                             analyst_outputs=list(analyst_buffer.values()),

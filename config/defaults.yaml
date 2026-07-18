@@ -112,6 +112,13 @@ server:
     allowed_origins:
       - http://localhost:3000
 
+# Production 채팅 종합 계층 (ARCHITECTURE-HYBRID-EXECUTIVE-001, 2026-07-18 임원 기본 승격)
+chat:
+  # true = 임원 종합(통찰 서술·시나리오·행동) 기본 / false = formatter(3줄 압축기) 기본.
+  # 요청 payload 의 executive_mode 명시가 우선 (R&D Off/Flash/Pro 토글은 영향 없음).
+  # runtime.yaml 에서 hot reload — 재시작 불필요.
+  executive_mode_default: true
+
 # WAVE-ALPHA anchor 산출 정책 (LLM-COST-LEDGER-001, 2026-07-04)
 alpha:
   # false=결정론 anchor 픽커 기본. 실 Gemini 성공 픽과 α 소수점까지 동일 검증 +

@@ -841,8 +841,10 @@ async def test_job_calls_cadence_with_production_provider(monkeypatch):
     out = await _job.run_auto_signal_job("postclose")
     assert out["persisted"] == 3
     assert captured["cadence"] == "postclose"
-    # production 경로 = 실 배포 모델, silent mock 금지
-    assert captured["provider"] == "gemini"
+    # production 경로 = config(llm.provider) 의 실 배포 모델, silent mock 금지
+    from core.config import get_config
+
+    assert captured["provider"] == get_config().llm.provider
     assert captured["mock_fallback_allowed"] is False
 
 

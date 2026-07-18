@@ -247,6 +247,17 @@ class AlphaConfig(BaseModel):
     anchor_llm_enabled: bool = False
 
 
+class ChatConfig(BaseModel):
+    """Production 채팅 종합 계층 정책 (ARCHITECTURE-HYBRID-EXECUTIVE-001).
+
+    executive_mode_default=True (2026-07-18): 최종 답변 = 임원 종합(synthesize_executive,
+      통찰 서술·시나리오·행동 지침). False 면 formatter(≤3줄 압축기).
+      요청 payload 가 executive_mode 를 명시하면 그 값이 우선 (R&D Off/Flash/Pro 토글).
+    """
+
+    executive_mode_default: bool = True
+
+
 class RuntimeConfig(BaseModel):
     """Top-level merged config."""
 
@@ -262,5 +273,6 @@ class RuntimeConfig(BaseModel):
     teams: TeamsConfig = Field(default_factory=TeamsConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     alpha: AlphaConfig = Field(default_factory=AlphaConfig)
+    chat: ChatConfig = Field(default_factory=ChatConfig)
 
     model_config = {"populate_by_name": True}
