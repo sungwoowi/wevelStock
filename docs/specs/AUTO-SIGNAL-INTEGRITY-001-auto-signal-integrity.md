@@ -64,3 +64,32 @@ depends_on:
 ## 재사용 영향도 (가드 #11)
 
 신규 테이블 0·신규 모듈 0(테스트 제외). 전부 기존 파일 수정: auto_signal.py 게이트 추가, scorecard 필드 채움(필드 자체는 기존), checkers/ 기존 순수 규칙 패턴 재사용, news_source.py 재시도 로직. 게이트 임계는 `config/screening.yaml` 외부화(watchdog 반영).
+
+---
+
+## 개정 — 분산일 blanket → 소프트 밴드 (2026-08-11)
+
+**증상**: `track_b` 560건 **전부 wait, buy·sell 역대 0건**. `track_a` 468 wait / 12 buy (97.5%).
+
+**원인**: `dd_kill` 절대 임계가 시장 기저율 한가운데 박혀 있었다. KOSPI 25일 분산일 60일 표본 =
+분포 3~8 · **중앙값 6** · 평균 5.8. `dd_kill=6`(06-15 에 4→6 상향한 값) 은 **55% 의 날에 blanket
+발동**하고, 최근 40영업일은 **100%** 초과라 LLM 판단과 무관하게 코드가 매수를 원천 봉쇄했다.
+06-15 에 "완만한 분산에 전부 wait" 을 고쳤다고 봤지만, 임계를 4→6 으로 **옮겼을 뿐** 성질(절대
+blanket)은 그대로여서 시장 기저율이 올라오자 같은 증상이 재발했다.
+
+**조치** — 임계 상향이 아니라 **성질 변경**. 9 이상으로 올리면 표본 0% 라 폭락 방어를 잃는다.
+
+| 밴드 | 동작 |
+|---|---|
+| `dd < dd_soft(6)` | 무영향 |
+| `dd_soft ≤ dd < dd_kill` | **blanket 아님** — `_apply_defensive_gate` 로 이관. 주도주·강세섹터·눌림목·파동 정렬 요구 (defensive 태세와 동일 잣대). 미충족 시 wait 강등 + `pre_defensive_candidate` 기록 |
+| `dd ≥ dd_kill(9)` | blanket (표본 최대 8 초과 = 진짜 이례적 악화) |
+
+빠른 신호(당일 급락·breadth 붕괴·VIX 패닉)는 **blanket 그대로** — 폭락 방어 무손상.
+
+**교훈**: 시장 지표의 절대 임계는 기저율이 이동하면 조용히 blanket 이 된다. 임계를 옮기지 말고
+**차등 경로로 이관**하거나 상대화(분위수)해야 한다. 이 결함이 두 달 안 보인 이유는
+[AUTO-SIGNAL-DIGEST-001](AUTO-SIGNAL-DIGEST-001-daily-summary-notification.md) §5 관측 구멍 3겹.
+
+검증: `tests/test_alpha_posture.py` +6(경계·정렬통과·미정렬강등·극단blanket·빠른신호보존·태세합성),
+기존 2건 갱신(옛 동작 고정 테스트). 전체 **1466 passed**.

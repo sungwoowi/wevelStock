@@ -94,11 +94,14 @@ def test_mild_distribution_no_longer_blanket_blocks() -> None:
     assert p.modulation.get("danger_gate") is not True
 
 
-def test_sustained_distribution_hard_threshold_blocks() -> None:
-    # 지속 분산(dd ≥ dd_kill=6) = 진짜 천장 경고 → blanket 방어.
+def test_soft_band_lower_boundary_is_not_blanket() -> None:
+    # 2026-08-11 재보정: dd=6(= dd_soft 하단)은 더 이상 blanket 이 아니다.
+    #   60일 표본 중앙값이 6 이라 여기서 막으면 절반의 날에 매수가 원천 봉쇄된다.
+    #   대신 차등 요구(주도주·강세섹터·눌림목·파동)로 이관 — 정렬된 우량주는 통과.
     p = derive_alpha_posture(_strong_a(distribution_day_count=6))
-    assert p.verdict_candidate == "wait"
-    assert p.modulation.get("danger_gate") is True
+    assert p.modulation.get("danger_gate") is not True
+    assert p.modulation.get("distribution_elevated") is True
+    assert p.verdict_candidate == "buy"
 
 
 def test_same_day_crash_blocks_even_strong_stock(monkeypatch) -> None:
@@ -241,7 +244,8 @@ def test_load_posture_config_reads_yaml_section() -> None:
     cfg = load_posture_config()
     assert isinstance(cfg, PostureConfig)
     assert cfg.enabled is True
-    assert cfg.dd_kill == 6
+    assert cfg.dd_soft == 6   # 분산 고조 진입 = 차등 요구 (blanket 아님)
+    assert cfg.dd_kill == 9   # blanket = 표본 최대(8) 초과 시에만
     assert cfg.crash_change_pct == -2.5
 
 
@@ -388,3 +392,64 @@ def test_funnel_stage_serializes() -> None:
 def test_watching_margin_in_config_from_dict() -> None:
     cfg = posture_config_from_dict({"watching_score_margin": 1.5})
     assert cfg.watching_score_margin == 1.5
+
+
+# --- 분산일 재보정 (2026-08-11) — 절대 blanket → 차등 밴드 --------------------
+#
+# 실측 근거: KOSPI 25일 분산일 60일 표본의 **중앙값이 정확히 6** (분포 3~8, 평균 5.8).
+# dd_kill=6 은 임계가 시장 기저율 한가운데 박힌 것이라 55% 의 날에 발동하고,
+# 최근 40영업일은 100% 초과 → track_b 는 560건 전부 wait(buy 역대 0건)이었다.
+# 임계만 올리면(9 이상 = 표본 0%) 폭락 방어를 잃으므로, **소프트 밴드**로 이관한다:
+#   dd < dd_soft            → 무영향
+#   dd_soft ≤ dd < dd_kill  → blanket 아님. 차등 요구(주도주·강세섹터·눌림목·파동)
+#   dd ≥ dd_kill            → blanket (표본 최대 8 초과 = 진짜 이례적 악화)
+
+
+def test_elevated_distribution_allows_aligned_leader_to_buy() -> None:
+    """소프트 밴드(dd 6~8): 주도주·강세섹터·눌림목·파동 전부 정렬이면 buy 유지.
+
+    이전엔 dd=7 이 무조건 blanket wait 였다 — 매수가 한 건도 안 나오던 직접 원인.
+    """
+    p = derive_alpha_posture(_strong_a(distribution_day_count=7))
+    assert p.verdict_candidate == "buy"
+    assert p.modulation.get("danger_gate") is not True
+    assert p.modulation.get("distribution_elevated") is True
+
+
+def test_elevated_distribution_demotes_unaligned_candidate() -> None:
+    """소프트 밴드인데 품질 미정렬(섹터 약함) → wait 강등 + 원판단 기록."""
+    p = derive_alpha_posture(_strong_a(distribution_day_count=7, sector_rs_score=3.0))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is not True
+    assert p.modulation.get("distribution_elevated") is True
+    assert p.modulation.get("pre_defensive_candidate") == "buy"   # 채점 재료 보존
+    assert any("강세섹터" in r for r in p.selection_reason)
+
+
+def test_extreme_distribution_still_blanket_blocks() -> None:
+    """dd ≥ dd_kill(9) = 표본 최대(8) 초과 = 진짜 이례적 → blanket 유지."""
+    p = derive_alpha_posture(_strong_a(distribution_day_count=9))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is True
+    assert p.modulation.get("danger_signal") == "distribution"
+
+
+def test_below_soft_band_distribution_is_untouched() -> None:
+    p = derive_alpha_posture(_strong_a(distribution_day_count=5))
+    assert p.verdict_candidate == "buy"
+    assert p.modulation.get("distribution_elevated") is not True
+
+
+def test_fast_danger_signals_remain_blanket_in_soft_band() -> None:
+    """분산일이 소프트 밴드여도 당일 급락은 여전히 blanket — 폭락 방어 보존."""
+    p = derive_alpha_posture(_strong_a(distribution_day_count=7, index_change_pct=-3.2))
+    assert p.verdict_candidate == "wait"
+    assert p.modulation.get("danger_gate") is True
+    assert p.modulation.get("danger_signal") == "crash"
+
+
+def test_elevated_distribution_and_defensive_posture_compose() -> None:
+    """분산 소프트 밴드 + defensive 태세 동시 — 요구 조건은 같으므로 정렬되면 통과."""
+    p = derive_alpha_posture(_strong_a(distribution_day_count=7, entry_posture="defensive"))
+    assert p.verdict_candidate == "buy"
+    assert p.modulation.get("defensive_pass") is True

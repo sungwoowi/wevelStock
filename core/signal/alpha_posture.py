@@ -53,7 +53,12 @@ class PostureConfig:
     # dd 단독 blanket(4)은 완만한 분산에도 전부 wait + 당일 급락은 못 잡는 최악 조합. 교체.
     crash_change_pct: float = -2.5    # 당일 지수 등락률 이 이하 = 폭락장(반대매매·프로그램 매도)
     breadth_collapse: float = 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
-    dd_kill: int = 6                  # 25일 분산일 이 이상 = 지속 천장(오닐 5~6). 4→6 상향(완만 분산 통과)
+    # 분산일 2단 밴드 (2026-08-11 재보정). 실측: KOSPI 25일 분산일 60일 표본 = 분포 3~8·
+    #   **중앙값 6**·평균 5.8. 구 dd_kill=6 은 임계가 시장 기저율 한가운데라 55% 의 날에
+    #   발동했고 최근 40영업일은 100% → track_b 560건 전부 wait(buy 역대 0건)의 직접 원인.
+    #   임계만 올리면(9 = 표본 0%) 폭락 방어를 잃으므로 소프트 밴드로 이관한다.
+    dd_soft: int = 6                  # 이 이상 = 분산 고조. blanket 아님 — 차등 요구로 이관
+    dd_kill: int = 9                  # 이 이상 = 표본 최대(8) 초과 = 진짜 이례적 → blanket
     # 방어 태세 차등 게이트 (AUTO-SIGNAL-INTEGRITY-001 T0-a) — blanket 아님:
     # entry_posture=defensive 면 buy 후보에 주도주·강세섹터·건강 위치·파동 생존을 추가 요구.
     # (2026-06-29 라이브: defensive 인데 buy 5건 발령 → 07-02 급락 직격이 근거 사고.)
@@ -111,7 +116,7 @@ class FunnelStage:
 
 
 _BOOL_FIELDS = frozenset({"enabled", "require_wave_for_bear_override", "defensive_gate_enabled"})
-_INT_FIELDS = frozenset({"dd_kill"})
+_INT_FIELDS = frozenset({"dd_kill", "dd_soft"})
 
 
 def posture_config_from_dict(raw: dict[str, Any] | None) -> PostureConfig:
@@ -329,13 +334,19 @@ def _apply_defensive_gate(
     wait 강등 + 원판단 기록(pre_defensive_candidate) — 채점·설명가능성 보존
     (사용자 결정 2026-07-05: 차등 게이트 + wait 강등·원판단 기록).
     """
+    mod = posture.modulation
+    # 발동 조건 2가지 — ① 시장 방어 태세 ② 분산일 고조(소프트 밴드, 2026-08-11 재보정).
+    #   ②는 구 blanket kill 을 대체한다. 요구 조건이 동일해 한 경로로 합친다.
+    gate_reason = (
+        "defensive" if inp.entry_posture == "defensive"
+        else ("distribution" if mod.get("distribution_elevated") else None)
+    )
     if (
         not cfg.defensive_gate_enabled
-        or inp.entry_posture != "defensive"
+        or gate_reason is None
         or posture.verdict_candidate != "buy"
     ):
         return posture
-    mod = posture.modulation
     wave_req_ok = mod.get("wave_ok") is True or not cfg.require_wave_for_bear_override
     missing = [
         label for ok, label in (
@@ -345,18 +356,23 @@ def _apply_defensive_gate(
             (wave_req_ok, "파동 생존"),
         ) if not ok
     ]
+    label = (
+        "시장 방어 태세(defensive)" if gate_reason == "defensive"
+        else f"25일 분산일 {mod.get('distribution_count')}건(분산 고조)"
+    )
     if not missing:
         mod["defensive_pass"] = True
+        mod["defensive_gate_reason"] = gate_reason
         posture.selection_reason.append(
-            "시장 방어 태세(defensive)이나 주도주·강세섹터·눌림목·파동 전부 충족 — buy 유지"
+            f"{label}이나 주도주·강세섹터·눌림목·파동 전부 충족 — buy 유지"
         )
         return posture
     mod["defensive_demote"] = True
+    mod["defensive_gate_reason"] = gate_reason
     mod["pre_defensive_candidate"] = "buy"  # 원판단 기록 (Tier 4 채점 재료)
     posture.verdict_candidate = "wait"
     posture.selection_reason.append(
-        "시장 방어 태세(defensive) — 차등 게이트 미충족, 관망 강등 (미충족: "
-        + ", ".join(missing) + ")"
+        f"{label} — 차등 게이트 미충족, 관망 강등 (미충족: " + ", ".join(missing) + ")"
     )
     posture.conditional_entry = _cond_entry(
         "defensive_release",
@@ -397,6 +413,11 @@ def _derive_base(inp: PostureInputs, cfg: PostureConfig) -> AlphaPosture:
         danger_signal = "vix_panic"
     elif dd >= cfg.dd_kill:
         danger_signal = "distribution"
+    # 소프트 밴드(dd_soft ≤ dd < dd_kill) = blanket 아님. 차등 게이트로 이관해
+    # 주도주·강세섹터·눌림목·파동 정렬을 요구한다 (defensive 태세와 같은 잣대).
+    if danger_signal is None and dd >= cfg.dd_soft:
+        mod["distribution_elevated"] = True
+        mod["distribution_count"] = dd
     if danger_signal is not None:
         mod["danger_gate"] = True
         mod["danger_signal"] = danger_signal

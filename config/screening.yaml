@@ -101,7 +101,11 @@ alpha_posture:
   #   dd 4→6 상향: 완만한 분산(4~5)은 차등 통과, 오닐 천장(6+)만 blanket. SLOT — 라이브 캘리브레이션.
   crash_change_pct: -2.5    # 당일 지수 등락률(%) 이 이하 = 폭락장
   breadth_collapse: 0.20    # 당일 상승종목 비율 이 이하 = 폭 붕괴
-  dd_kill: 6                # 25일 분산일 이 이상 = 지속 천장 경고
+  # 분산일 2단 밴드 (2026-08-11 재보정). 실측: KOSPI 25일 분산일 60일 표본 분포 3~8·중앙값 6.
+  #   구 dd_kill=6 은 임계가 기저율 한가운데라 55% 의 날에 blanket 발동(최근 40영업일은 100%)
+  #   → track_b 560건 전부 wait(buy 역대 0건). 소프트 밴드로 이관해 차등 요구로 바꿨다.
+  dd_soft: 6                # 이 이상 = 분산 고조. blanket 아님 — 주도주·강세섹터·눌림목·파동 요구
+  dd_kill: 9                # 이 이상 = 표본 최대(8) 초과 = 진짜 이례적 → blanket 방어
   # 단계 라벨(TRADE-PLAN-LIFECYCLE-001 2단계) — wait 인데 1차 점수가 min − margin 이상 +
   #   conditional_entry 존재 → "매수대기" 단계 승격(관심 → 매수대기). SLOT.
   watching_score_margin: 1.0
