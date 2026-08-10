@@ -4,7 +4,7 @@ title: 자동 권고 일일 요약 알림 — 숫자만 보내던 것을 종목�
 team: shared
 type: feature
 level: implementation
-status: implementing
+status: verified
 parent: AUTO-SIGNAL-GENERATION-001
 generates:
   - core/signal/daily_digest.py            # summary dict → 알림 본문 (순수 함수, LLM 0·DB 0)
