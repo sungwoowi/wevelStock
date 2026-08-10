@@ -9,8 +9,8 @@ parent: PROJECT-NORTH-STAR-001
 generates: []
 children:
   - KNOWLEDGE-INTAKE-001        # P1: 지식 반입 동적화 — 자료 드롭→LLM 정제→승인→canon 반영 (미작성)
-  - FUNNEL-TOPDOWN-001          # P3a: 탑다운 배선 — 섹터 신호→종목 압축 연결 + regime 슬롯 (미작성)
-  - DEEP-DIVE-REPORT-001        # P3b: 압축 생존자 심층 리포트 — 위원회 YAML→임원식 종합 (미작성)
+  - ADVISOR-CORE-001            # P3a+P3b 통합: 시장 판세 트랙(2회/일) + 전략가 Track C(1콜 2관점).
+                                #   2026-08-11 사용자 재정의로 FUNNEL-TOPDOWN-001·DEEP-DIVE-REPORT-001 흡수
   - LENS-REGISTRY-001           # P4: 렌즈 레지스트리 — 판단 구조의 제한 선언형 데이터화 (미작성)
 depends_on:
   - PROJECT-NORTH-STAR-001 (부모 — 마스터 로드맵)
