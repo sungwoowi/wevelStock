@@ -201,14 +201,54 @@ DB 대조 결과 사라진 5건은 전부 Track A(중장기)다:
 
 회귀: `TESTING=1 pytest` 전체.
 
-## 5. Track A 미산출 진단 (읽기 전용 · 실 LLM 호출 0)
+## 5. Track A 미산출 진단 — 결과 (2026-08-11)
 
-1. `data/strategist_queries/` · `data/logs/` 에서 track_a 실패 로그 → `no_yaml` 인지 예외인지 구분
-2. `llm_call_cache` 에 track_a 응답 원문이 남아 있으면 어디서 YAML 파싱이 깨지는지 대조
-3. 7월(40건/일) → 8월(0건) 급락 시점 특정 → 그 사이
-   `agents/strategists/track_a/persona.md` · `parse_recommendation` · `config/` 변경을
-   `git log` 로 대조
-4. **원인 보고까지.** 수정은 원인에 따라 갈리므로 보고 후 별도 판단.
+### 원인 확정: `claude_code` 타임아웃 90초에 Track A 가 걸린다
+
+| 측정 (2026-08-11 라이브 1콜씩, 유휴 장비) | Track A | Track B |
+|---|---|---|
+| 응답 지연 | **87.69초** | 39.32초 |
+| 입력 토큰 | 78,813 | 54,983 |
+| 출력 토큰 | 6,349 | 2,481 |
+| system 프롬프트 | 50,505자 · 7블록 | 38,009자 · 6블록 |
+| `llm.claude_code.timeout_sec` | **90** (`config/defaults.yaml:31`) | 90 |
+
+**Track A 는 유휴 장비에서도 한도까지 2.3초 남기고 통과한다.** cadence 는 종목 병렬
+`concurrency: 3` 으로 돌고, 게다가 08-10 회차는 절전 미스파이어 따라잡기로 3 cadence 가
+23:46~00:00 사이에 몰려 실행됐다. 그 부하에서 90초를 넘기면
+`claude_code timed out after 90s` 예외 → 그 종목·트랙만 실패.
+
+`_is_transient` 가 "timeout" 을 일시적으로 보고 1회 재시도하지만, 원인이 부하가 아니라
+**구조적으로 한도에 붙어 있는 것**이라 재시도도 같이 죽는다.
+
+### 회귀 시점
+
+`0a23704`(2026-07-17) `provider→claude_code + max_candidates 20→5`. 그 전 Gemini 시절
+Track A 출력은 1,136~1,460 토큰으로 빨랐다(07-14). 전환 이후 Track A 는 07-24 1건 ·
+08-03 1건 · 08-04 1건 · 08-07 3건 · 08-10 **0건** — 가끔 90초 안에 들어올 때만 산다.
+같은 기간 Track B 는 3~7건/일로 안정. **하루 40건 → 5건 급감은 두 원인의 합**이다:
+`max_candidates` 20→5 (의도된 비용 절감) + Track A 타임아웃 (의도 안 된 결함).
+
+### 왜 두 달 가까이 안 보였나 — 관측 구멍 2개
+
+1. **비용 원장이 실패를 기록할 수 없다.** `core/llm/client.py` `_record_ledger` 가
+   `success=True` 를 **하드코딩**한다. 실패는 예외로 빠져나가 원장에 행 자체가 안 남는다.
+   `llm_cost_ledger` 에 `success=0` 행이 **역대 0건**인 이유.
+2. **로그가 안 남는다.** `core/logging/__init__.py` 가 `PrintLoggerFactory` — stdout 전용,
+   파일 미기록. 08-10 실제 예외 문구는 복구 불가.
+
+여기에 **요약 알림에 실패 버킷이 없던 것**(§1-c)이 겹쳐, 세 겹으로 가려졌다.
+
+### 후속 (본 SPEC 범위 밖 — 사용자 판단 대기)
+
+| # | 조치 | 성격 |
+|---|---|---|
+| F1 | `llm.claude_code.timeout_sec` 90 → 180 상향 (config 값, 코드 변경 0) | 즉효·최소 |
+| F2 | Track A system 프롬프트 축소 (78.8k 토큰 = canon·RAG 주입량 재검) | 근본 |
+| F3 | `_record_ledger` 가 실패도 기록 (`success=0`) — LLM-COST-LEDGER-001 소관 | 관측 |
+| F4 | 로그 파일 핸들러 추가 | 관측 |
+
+F3·F4 는 이번 알림 개선이 사후적으로 드러내 준 것과 같은 종류의 구멍이다.
 
 ## 6. 재사용 영향도 (CLAUDE.md #11)
 

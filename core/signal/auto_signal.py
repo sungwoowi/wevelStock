@@ -416,6 +416,23 @@ def _last_band_fingerprint(ticker: str, track: str) -> str | None:
         return None
 
 
+def _last_verdict(ticker: str, track: str) -> str | None:
+    """직전 persist 된 (ticker, track) 권고의 verdict (없으면 None).
+
+    밴드 게이트 스킵은 "판단 없음"이 아니라 "직전 판단이 그대로 유효"라는 뜻이다 —
+    알림이 그 직전 판단을 보여줘야 스킵이 실종처럼 읽히지 않는다 (AUTO-SIGNAL-DIGEST-001).
+    """
+    team_id = _TRACK_ID.get(track)
+    if team_id is None:
+        return None
+    row = get_db().fetch_one(
+        "SELECT verdict FROM team_outputs "
+        "WHERE team_id = ? AND target = ? ORDER BY timestamp DESC LIMIT 1",
+        (team_id, ticker),
+    )
+    return row["verdict"] if row else None
+
+
 def posture_inputs_from_scorecard(sc: Scorecard, track: str) -> "PostureInputs":
     """Scorecard → AlphaPosture 입력 (BRAIN-ALPHA-FLEXIBILITY-001 M3a + INTEGRITY T0-a/b).
 
@@ -489,14 +506,27 @@ async def _emit_trade_signal(rec: StrategistRecommendation, cadence: str) -> Non
         log.warning("trade_signal_notify_failed", ticker=rec.ticker, error=str(e))
 
 
+def _kill_switch_dd() -> int | None:
+    """분산일 kill switch 임계 (config/market_view.yaml). 하드코딩 금지 — graceful."""
+    try:
+        from collectors.market_view import load_market_view_config
+
+        v = (load_market_view_config().get("entry_posture") or {}).get("kill_switch_dd")
+        return int(v) if isinstance(v, (int, float)) else None
+    except Exception as e:  # noqa: BLE001 — 임계 조회 실패가 cadence 를 막지 않음
+        log.warning("kill_switch_dd_lookup_failed", error=str(e))
+        return None
+
+
 async def _emit_daily_summary(summary: dict[str, Any]) -> None:
-    """🔵 일일 요약 1건 (market_briefing tab=시장/하루 정량). postclose cadence 후 1회."""
-    body = (
-        f"관심종목 {summary.get('screened', 0)}종 평가 → "
-        f"매수 {summary.get('buys', 0)} · 매도 {summary.get('sells', 0)} · "
-        f"관망 {summary.get('waits', 0)} · 밴드 스킵 {summary.get('skipped_band', 0)}\n"
-        f"시장 체제: {summary.get('regime') or '미상'}"
-    )
+    """🔵 일일 요약 1건 (market_briefing tab=시장/하루 정량). postclose cadence 후 1회.
+
+    본문 조립은 `daily_digest.render_daily_digest` 순수 함수에 위임 (AUTO-SIGNAL-DIGEST-001).
+    이전엔 카운트만 렌더해 종목을 알 수 없었고 실패 버킷이 통째로 빠져 있었다.
+    """
+    from core.signal.daily_digest import render_daily_digest
+
+    body = render_daily_digest(summary)
     try:
         await notify(
             team_id="auto_signal", level="info",
@@ -583,6 +613,8 @@ async def run_signal_for_ticker(
             return {
                 "ticker": ticker, "track": track, "persisted": False,
                 "skipped": True, "reason": "band_unchanged",
+                "display_name": sc.display_name,
+                "prev_verdict": _last_verdict(ticker, track),
             }
 
     entries = build_prefetched_entries(sc, track)
@@ -662,7 +694,8 @@ async def run_signal_for_ticker(
             if attempt < retries and _is_transient(e):
                 await asyncio.sleep(_RETRY_BACKOFF_S * (attempt + 1))
                 continue
-            return {"ticker": ticker, "track": track, "persisted": False, "reason": last_reason}
+            return {"ticker": ticker, "track": track, "persisted": False,
+                    "display_name": sc.display_name, "reason": last_reason}
 
         rec = parse_recommendation(getattr(resp, "text", "") or "")
         if rec is not None:
@@ -672,7 +705,8 @@ async def run_signal_for_ticker(
             await asyncio.sleep(_RETRY_BACKOFF_S * (attempt + 1))
 
     if rec is None:
-        return {"ticker": ticker, "track": track, "persisted": False, "reason": last_reason}
+        return {"ticker": ticker, "track": track, "persisted": False,
+                "display_name": sc.display_name, "reason": last_reason}
 
     # 방어 태세 차등 게이트 — 코드 안전핀 (AUTO-SIGNAL-INTEGRITY-001 T0-a).
     # persona 지시만으로 LLM 분기를 강제할 수 없음(2026-06-15 교훈) → 후보가 defensive 강등인데
@@ -718,9 +752,23 @@ async def run_signal_for_ticker(
     # 🟢 매수/매도 개별 알림 (어느 cadence든 buy/sell 뜨면 즉시 — 출근 중 포착).
     if ok and notify_signals and rec.verdict in ("buy", "sell"):
         await _emit_trade_signal(rec, cadence)
+
+    from collectors.universe_membership import resolve_stock_name
+
+    # 일일 요약 알림 재료 (AUTO-SIGNAL-DIGEST-001) — 이미 메모리에 있는 rec 값을 버리지 않고
+    # 넘기기만 한다(추가 계산·추가 호출 0). 렌더는 core/signal/daily_digest.py 순수 함수가 담당.
     return {
         "ticker": ticker, "track": track, "verdict": rec.verdict,
         "persisted": ok, "recommendation_id": new_id,
+        "display_name": resolve_stock_name(rec.ticker, rec.display_name or sc.display_name),
+        "confidence": rec.confidence,
+        "headline_reason": rec.reasons[0] if rec.reasons else "",
+        "funnel_stage": rec.data.get("funnel_stage"),
+        "conditional_entry": (rec.data.get("alpha_posture") or {}).get("conditional_entry"),
+        "scores": dict(rec.cited_scores),
+        "entry_price": rec.entry_price,
+        "stop_loss": rec.stop_loss,
+        "target_prices": list(rec.target_prices),
     }
 
 
@@ -769,6 +817,10 @@ async def run_signal_cadence(
 
     sem = asyncio.Semaphore(max(1, get_signal_concurrency()))
 
+    # 일일 요약 헤더용 시장 컨텍스트 (AUTO-SIGNAL-DIGEST-001) — Scorecard 가 이미 계산해 둔
+    # 시장 전체값이라 최초 1건만 승계(추가 조회 0). asyncio 단일 스레드라 경합 없음.
+    market_ctx: dict[str, Any] = {}
+
     async def _process_ticker(row: dict[str, Any]) -> list[dict[str, Any]]:
         ticker = row["ticker"]
         async with sem:
@@ -776,11 +828,19 @@ async def run_signal_cadence(
                 sc = await compute_scorecard(ticker, snapshot)
             except Exception as e:  # noqa: BLE001 — 점수표 실패 종목만 skip
                 log.warning("signal_scorecard_failed", ticker=ticker, error=str(e))
+                from collectors.universe_membership import resolve_stock_name
+
                 return [
                     {"ticker": ticker, "track": t, "persisted": False,
+                     "display_name": resolve_stock_name(ticker, ""),
                      "reason": f"scorecard:{type(e).__name__}"}
                     for t in tracks
                 ]
+            if not market_ctx:
+                market_ctx.update({
+                    "entry_posture": sc.entry_posture,
+                    "distribution_day_count": sc.distribution_day_count,
+                })
             # 차등 변조 입력 — screen_watchlist 행의 결정론 RS·과열도 주입(재계산·LLM 0).
             if sc.rs_score is None:
                 sc.rs_score = row.get("rs_score")
@@ -817,7 +877,12 @@ async def run_signal_cadence(
         "evaluated": len(results), "persisted": len(persisted),
         "buys": len(buys), "sells": len(sells), "waits": len(waits),
         "skipped_band": len(skipped),
+        # 미산출 = persist 도 skip 도 아닌 결과. 이전엔 어느 카운트에도 안 잡혀
+        # 요약 숫자 합이 evaluated 와 안 맞았고, 그래서 Track A 전건 실패가 안 보였다.
+        "failed": len(results) - len(persisted) - len(skipped),
         "regime": regime, "results": results,
+        "kill_switch_dd": _kill_switch_dd(),
+        **market_ctx,
     }
     # 🔵 일일 요약 1건 — postclose cadence 후에만 (장중 cadence 는 요약 push 안 함, 스팸 방지).
     if notify_signals and cadence == "postclose":
@@ -827,5 +892,6 @@ async def run_signal_cadence(
         cadence=cadence, as_of=as_of, watchlist=len(watchlist),
         screened=len(passers), persisted=len(persisted),
         buys=len(buys), sells=len(sells), skipped_band=len(skipped),
+        failed=summary["failed"],
     )
     return summary

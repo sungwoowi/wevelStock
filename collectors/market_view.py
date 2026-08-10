@@ -50,7 +50,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MARKET_VIEW_PATH = REPO_ROOT / "config" / "market_view.yaml"
 
 # regime → 한국어 (one_liner / md). market_state_analyzer 톤 정합.
-_REGIME_KR: dict[str, str] = {
+# public — 알림 렌더(core/signal/daily_digest.py) 등 외부 소비자가 재사용 (중복 정의 금지).
+REGIME_KR: dict[str, str] = {
     "parabolic": "과열(폭주)",
     "strong_bull": "강한 강세",
     "moderate_bull": "완만한 강세",
@@ -58,7 +59,7 @@ _REGIME_KR: dict[str, str] = {
     "moderate_bear": "약세",
     "strong_bear": "강한 약세",
 }
-_POSTURE_KR: dict[str, str] = {
+POSTURE_KR: dict[str, str] = {
     "aggressive": "공격",
     "neutral": "중립",
     "defensive": "방어",
@@ -368,12 +369,12 @@ def build_one_liner(
     posture: str,
 ) -> str:
     """formatter prepend용 결정론 한 줄. 빈 축 생략 (ANSWER-FIDELITY F2 정신)."""
-    parts = [f"오늘 시장: {_REGIME_KR.get(regime, regime)}"]
+    parts = [f"오늘 시장: {REGIME_KR.get(regime, regime)}"]
     if leading_sectors:
         parts.append(f"주도 {leading_sectors[0]['sector']}")
     if rotation.strength != "none" and rotation.direction != "—":
         parts.append(f"순환 {rotation.direction}")
-    parts.append(f"진입 {_POSTURE_KR.get(posture, posture)}")
+    parts.append(f"진입 {POSTURE_KR.get(posture, posture)}")
     return " · ".join(parts)
 
 
@@ -421,7 +422,7 @@ def synthesize_market_view(
     one_liner = build_one_liner(regime, leading, rotation, posture)
 
     reasons: list[str] = [
-        f"체제 {_REGIME_KR.get(regime, regime)}(regime={regime}) → 진입 {_POSTURE_KR.get(posture, posture)}",
+        f"체제 {REGIME_KR.get(regime, regime)}(regime={regime}) → 진입 {POSTURE_KR.get(posture, posture)}",
     ]
     if rotation.strength != "none":
         reasons.append(f"순환매 {rotation.direction} (강도={rotation.strength}, 검증={rotation.method})")
@@ -854,8 +855,8 @@ def render_market_view_md(view: MarketView) -> str:
     lines: list[str] = []
     lines.append("## [7] 시장관 종합 (MARKET-VIEW-SYNTHESIS-001)")
     lines.append("")
-    lines.append(f"**시장**: {view.market} | **날짜**: {view.date} | **체제(regime)**: {_REGIME_KR.get(view.regime, view.regime)} (`{view.regime}`)")
-    lines.append(f"**진입 자세**: {_POSTURE_KR.get(view.entry_posture, view.entry_posture)} (`{view.entry_posture}`) | **신뢰도**: {view.confidence}")
+    lines.append(f"**시장**: {view.market} | **날짜**: {view.date} | **체제(regime)**: {REGIME_KR.get(view.regime, view.regime)} (`{view.regime}`)")
+    lines.append(f"**진입 자세**: {POSTURE_KR.get(view.entry_posture, view.entry_posture)} (`{view.entry_posture}`) | **신뢰도**: {view.confidence}")
     if view.leading_sectors:
         lead = ", ".join(
             f"{s['sector']}(rs {s['rs_score']}{_fmt_change(s.get('rs_change_nd'))})"

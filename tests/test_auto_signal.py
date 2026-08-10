@@ -1129,3 +1129,123 @@ async def test_cadence_scorecard_failure_isolated(monkeypatch):
     assert summary["persisted"] == 2  # 005930 × 2 트랙
     bad = [r for r in summary["results"] if r["ticker"] == "BADXXX"]
     assert len(bad) == 2 and all("scorecard" in r["reason"] for r in bad)
+
+
+# ===========================================================================
+# AUTO-SIGNAL-DIGEST-001 — 일일 요약 알림 재료 배선
+#   렌더 규칙 자체는 tests/test_daily_digest.py (순수 함수). 여기서는 "재료가
+#   반환 dict 에 실려 나가는가" + "알림이 그 렌더 결과를 보내는가" 만 검증.
+# ===========================================================================
+
+
+async def test_result_row_carries_digest_material(monkeypatch, captured_notify):
+    """권고 성공 행에 종목명·신뢰도·사유·점수·플랜이 실린다 (알림이 버리지 않게)."""
+    monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
+    r = await run_signal_for_ticker(
+        ticker="005930", track="B", snapshot=None, cadence="postclose",
+        as_of="2026-06-15", scorecard=_sample_scorecard(),
+        strategist_runner=_stub_runner(_REC_BUY_B), band_gate=False,
+    )
+    assert r["display_name"] == "삼성전자"
+    assert r["confidence"] == 62
+    assert r["headline_reason"] == "테스트 매수 사유"
+    assert r["scores"]["t_score"] == 7.5
+    assert r["entry_price"] == 70000
+    assert r["stop_loss"] == 66000
+    assert r["target_prices"] == [77000]
+
+
+async def test_failed_row_carries_display_name(monkeypatch, captured_notify):
+    """미산출 행도 종목명을 실어야 알림에서 '어느 종목이 실패했는지' 가 보인다."""
+    monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-15", scorecard=_sample_scorecard(),
+        strategist_runner=_stub_runner("YAML 없는 응답"), band_gate=False, retries=0,
+    )
+    assert r["persisted"] is False
+    assert r["reason"] == "no_yaml"
+    assert r["display_name"] == "삼성전자"
+
+
+async def test_band_skipped_row_carries_previous_verdict(monkeypatch, captured_notify):
+    """밴드 스킵 = 판단 실종이 아니라 직전 판단 유효 — 그 직전 판단을 실어 보낸다."""
+    monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
+    monkeypatch.setattr(asig, "_last_verdict", lambda t, tr: "buy")
+    sc = _sample_scorecard()
+    fp = band_fingerprint(sc, "A", score_width=get_band_score_width())
+    r = await run_signal_for_ticker(
+        ticker="005930", track="A", snapshot=None, cadence="postclose",
+        as_of="2026-06-15", scorecard=sc, strategist_runner=_stub_runner(_REC_WAIT),
+        band_gate=True, last_fingerprint_reader=lambda t, tr: fp,
+    )
+    assert r["skipped"] is True
+    assert r["display_name"] == "삼성전자"
+    assert r["prev_verdict"] == "buy"
+
+
+async def test_summary_counts_reconcile_with_evaluated(monkeypatch, captured_notify):
+    """failed 버킷 신설 — persisted + skipped + failed = evaluated (숨는 건이 없다)."""
+    async def _watchlist(**kw):
+        return ["005930"]
+
+    async def _scorecard(ticker, snapshot):
+        return Scorecard(ticker=ticker, display_name="삼성전자", s_score=7.0, buy_score=6.5,
+                         entry_posture="defensive", distribution_day_count=7)
+
+    async def _half_broken(track_id, messages, **kw):
+        # Track A 만 YAML 미발행 (실제 관측된 8월 증상 재현)
+        return SimpleNamespace(text="YAML 없음" if track_id == "track_a" else _REC_BUY_B)
+
+    monkeypatch.setattr(asig, "build_watchlist", _watchlist)
+    monkeypatch.setattr(asig, "get_current_regime", lambda as_of: "moderate_bear")
+    monkeypatch.setattr(
+        asig, "screen_watchlist",
+        lambda wlist, regime, **kw: [{"ticker": "005930", "screening_score": 7.5}],
+    )
+    monkeypatch.setattr(asig, "compute_scorecard", _scorecard)
+    monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
+
+    summary = await run_signal_cadence(
+        cadence="postclose", as_of="2026-06-15", snapshot=object(),
+        strategist_runner=_half_broken, band_gate=False,
+    )
+    assert summary["evaluated"] == 2
+    assert summary["failed"] == 1
+    assert (
+        summary["persisted"] + summary["skipped_band"] + summary["failed"]
+        == summary["evaluated"]
+    )
+    # 시장 컨텍스트 승계 (요약 헤더용)
+    assert summary["entry_posture"] == "defensive"
+    assert summary["distribution_day_count"] == 7
+
+
+async def test_daily_summary_body_names_stocks_not_just_counts(monkeypatch, captured_notify):
+    """🔵 일일 요약 본문 = 렌더러 결과. 종목명이 들어가고 종목코드는 안 나간다."""
+    async def _watchlist(**kw):
+        return ["005930"]
+
+    async def _scorecard(ticker, snapshot):
+        return Scorecard(ticker=ticker, display_name="삼성전자", s_score=7.0, buy_score=6.5,
+                         entry_posture="defensive", distribution_day_count=7)
+
+    monkeypatch.setattr(asig, "build_watchlist", _watchlist)
+    monkeypatch.setattr(asig, "get_current_regime", lambda as_of: "moderate_bear")
+    monkeypatch.setattr(
+        asig, "screen_watchlist",
+        lambda wlist, regime, **kw: [{"ticker": "005930", "screening_score": 7.5}],
+    )
+    monkeypatch.setattr(asig, "compute_scorecard", _scorecard)
+    monkeypatch.setattr(asig, "persist_recommendation", lambda rec: True)
+
+    await run_signal_cadence(
+        cadence="postclose", as_of="2026-06-15", snapshot=object(),
+        strategist_runner=_stub_runner(_REC_BUY_B), band_gate=False,
+    )
+    body = [n for n in captured_notify if n["notification_type"] == "market_briefing"][0]["body"]
+    assert "삼성전자" in body
+    assert "005930" not in body
+    assert "테스트 매수 사유" in body
+    assert "약세(moderate_bear)" in body
+    assert "진입 자세: 방어" in body
