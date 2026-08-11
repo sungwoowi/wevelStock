@@ -10,11 +10,23 @@ generates:
   - agents/strategists/track_c/persona.md      # ≤4,000자 (하드 상한, 테스트로 강제)
   - agents/strategists/track_c/manifest.yaml   # canon_categories 선별 주입
   - core/signal/market_stance.py               # 판세 판단 LLM 1콜 + 영속 (2회/일)
+  - collectors/short_sale.py                   # M1-b 공매도·신용잔고 (KIS FHPST04830000/04760000)
+  - collectors/program_trade.py                # M1-b 프로그램매매 (KIS FHPPG04650100)
+  - collectors/orderbook_depth.py              # M1-d 호가 10단 잔량 (KIS FHKST01010200, 장중 N회)
+  - server/schedulers/jobs/orderbook_intraday.py  # M1-d 장중 수집 cron
   - tests/test_market_stance.py
+  - tests/test_short_sale.py
+  - tests/test_program_trade.py
+  - tests/test_orderbook_depth.py
   - tests/test_track_c.py
 modifies:
-  - core/db/schema.sql                         # market_view_snapshot 컬럼 확장(신규 테이블 0)
+  - core/db/schema.sql                         # market_view_snapshot·stock_supply_history 확장 + orderbook_depth_snapshot 신설(§7-e 근거)
   - collectors/market_view.py                  # session 축 + narrative 필드 read/write
+  - collectors/sector_rs.py                    # M1-c 코스닥 섹터 ETF 8종 + 벤치마크 분리
+  - collectors/kr_sectors.py                   # M1-c 코스닥 테마 ETF 추가
+  - collectors/stock_supply.py                 # M1-b 공매도·프로그램 컬럼 + 2026-06-29 이후 적재 중단 복구
+  - collectors/kr_futures_supply_demand.py     # M1-a 선물 3주체 DB 저장(현재 스냅샷 계산만)
+  - connectors/kis/client.py                   # M1-b/d 신규 엔드포인트 4종 (probe 완료)
   - core/signal/auto_signal.py                 # _TRACK_ID/_TRACK_LABEL 에 C + 판세 md 주입
   - core/strategist/run_strategist.py          # market_stance_md 슬롯 (news_digest_md 와 같은 패턴)
   - core/signal/daily_digest.py                # 2관점 렌더 (중기/단기)
@@ -237,3 +249,90 @@ M1 부터 가는 이유: 판세가 C 의 입력이고, 그 자체로 사용자�
 - **뉴스 다이제스트 10,781 → 4,000 압축** — M2 안에서 하되, 압축 규칙은 결정론(격상 이벤트 우선).
 - **분석가 9** — 당분간 미운용(사용자 결정). 폴더·페르소나는 보존, 채팅 경로에서만 사용.
 - **F2 근본(프롬프트 지연)** — Track C 가 ~1/3 크기라 87.7초 문제도 함께 해소될 전망. M2 에서 실측.
+
+---
+
+## 7. M1 확장 — 공매도·호가·프로그램·코스닥 섹터 (사용자 지시 2026-08-11)
+
+샘플 v1 검토에서 사용자 지적: *"섹터별 뭐가 강세인지, 금이 강세인지, 어떤 섹터를 피하라던지,
+야간선물 무너졌으니 시초가 하락 예상이라던지, 코스닥 호가가 얇아서 숏커버링이나 기관 매수세
+나오면 강한 반등이 예상된다던지, 상승/하락 종목 개수 —"*
+
+v1 이 얇았던 원인은 데이터가 아니라 **설계 순서**였다. 출력 틀을 먼저 잡고 데이터를 맞췄다.
+v2 는 "시장을 읽으려면 뭐가 필요한가"에서 출발했다.
+
+### 7-a. 있는데 안 쓰던 것 (신규 수집 0 — v2 샘플에 전량 반영)
+
+| 재료 | 현재 | M1 |
+|---|---|---|
+| **코스닥 전체** | 코스피만 해석 | 양대 시장 — 8/10 코스닥 상승 1,431/하락 236(86%)·분산일 10 |
+| **상승/하락 종목 개수** | 비율만 | 절대 개수 + 양 시장 대비 → 대형↔중소형 갈림 판별 |
+| **KOSPI200 야간선물** | 저장만 | **시초가 예상 블록** — 미 지수선물과 결합 |
+| 미 SOX·금·유가·금리·달러 | VIX 게이트만 | **자산군 해석** — 실물 선호 ↔ 성장주 회피 동기화 |
+| 섹터 RS 15종 | 상하위 요약 | **강세/중립/회피 3밴드 전량** — "피할 섹터" 명시 |
+| 시장 5주체 수급 | 당일값만 | 5일 연속성·누적 → 물량 이전 판별 |
+| **외인 선물 3주체** | 스냅샷 계산만·**DB 미저장** | **DB 저장 + 현물↔선물 엇갈림 해석**. 8/10 현물 −8.8조 / 선물 **+5,470억** — 가장 큰 누락 |
+
+### 7-b. 신규 수집 — KIS 실측 probe 완료 (2026-08-11)
+
+메모리의 "KRX STAT Akamai 봇차단 영구 불가"는 유효하나, **같은 데이터가 KIS 로는 열린다.**
+추측 대신 실호출로 확인:
+
+| 데이터 | TR | probe 결과 | 핵심 필드 |
+|---|---|---|---|
+| 공매도 일별 | `FHPST04830000` | ✅ 6행 | `ssts_cntg_qty`(공매도량) · `ssts_vol_rlim`(비중%) · `acml_ssts_cntg_qty_rlim`(누적비중) |
+| 호가 10단 잔량 | `FHKST01010200` | ✅ | `total_askp_rsqn` · `total_bidp_rsqn` · `ntby_aspr_rsqn`(불균형) · 단별 `askp_rsqn1~10` |
+| 프로그램매매 | `FHPPG04650100` | ✅ 30행 | `whol_smtn_ntby_qty` · `whol_smtn_ntby_tr_pbmn` (시간대별) |
+| 신용/대차잔고 | `FHPST04760000` | ✅ 30행 | `whol_loan_new_stcn` 등 |
+| 프로그램(시장 집계) | `FHPPG04600101` | ❌ `INVALID FID_COND_MRKT_DIV_CODE` | 파라미터 재확인 필요 — 종목 순회로 대체 가능 |
+
+실측 표본(삼성전자 2026-08-10): 공매도 비중 **7.14%**(8/7 은 11.39%), 누적 9.08% /
+총매도잔량 532,187 vs 총매수 374,648 → 잔량 불균형 **−157,539**.
+
+### 7-c. ⚠ 호가의 구조적 제약 — 판세 트랙에 그냥 못 붙인다
+
+호가 잔량은 **장중 실시간 스냅샷**이다. 18:00 판세 시점엔 종가 시점 잔량이고 07:05 엔 시장이
+닫혀 있어 무의미하다. *"코스닥 호가가 얇아 기관 매수 시 강한 반등"* 판단을 하려면
+**장중 N회 수집해 두께 시계열**을 쌓아야 한다.
+
+→ 호가는 판세 LLM 의 입력이 아니라 **별도 장중 수집 잡**이 선행되어야 한다.
+   판세는 그 시계열의 **집계값**(평균 두께·잔량 불균형 추이)을 읽는다.
+
+### 7-d. 코스닥 섹터 RS
+
+현재 `sector_rs_snapshot` 은 KOSPI 15종만. 코스닥이 더 강한 국면인데 섹터를 못 본다.
+KIS `etf_price` probe 로 후보 8종 전부 유효 확인:
+`229200 KODEX 코스닥150` · `261070 TIGER 코스닥150바이오테크` · `445290 KODEX 게임산업` ·
+`266370 KODEX IT` · `091230 TIGER 반도체` · `244580 KODEX 바이오` · `396510 KODEX 로봇액티브` ·
+`228790 TIGER 화장품`.
+
+RS 벤치마크도 분리한다 — 현재는 전부 KOSPI 대비(`kospi_return_60d`). 코스닥 테마는
+**코스닥 지수 대비** 초과수익이 맞다.
+
+### 7-e. 저장 (가드 #11)
+
+| 데이터 | 판정 |
+|---|---|
+| 공매도 · 프로그램매매 | **`stock_supply_history` 컬럼 확장** — 종목×일자 수급 지표로 도메인 동일. 신규 테이블 0. **단 이 테이블은 2026-06-29 이후 적재 중단 상태 — M1 에서 복구 포함** |
+| 호가 두께 | **신규 테이블 `orderbook_depth_snapshot`** — 일 N회 장중 시계열로 기존 어느 테이블과도 입도(粒度)가 다름(기존은 전부 일 1행). 확장 불가 근거 명시 |
+| 코스닥 섹터 RS | `sector_rs_snapshot` **기존 스키마 그대로** — `market` 컬럼에 KOSDAQ 행 추가 + 벤치마크 컬럼 의미 확장 |
+| 외인 선물 3주체 | `supply_demand_history` **컬럼 확장**(선물 3주체) 또는 `market='FUTURES'` 행 — 구현 시 판단 |
+
+### 7-f. M1 범위 갱신
+
+| 단계 | 내용 |
+|---|---|
+| M1-a | 있는 것 배선 (7-a) — 코스닥·야간선물·섹터 3밴드·자산군·선물 엇갈림 + `market_view_snapshot` 확장 |
+| M1-b | 신규 수집 (7-b) — 공매도·프로그램·신용잔고 collector + `stock_supply_history` 확장·**적재 복구** |
+| M1-c | 코스닥 섹터 RS (7-d) — ETF 8종 + 벤치마크 분리 |
+| M1-d | 호가 장중 수집 잡 (7-c) — `orderbook_depth_snapshot` + 장중 cron + 집계 함수 |
+| M1-e | 판세 LLM (`market_stance.py`) — 위 전부를 사실로 주입, 18:00·07:05 발행 + 알림 |
+
+M1-d 는 장중 수집이라 **다음 거래일에야 첫 데이터가 쌓인다**. M1-e 는 호가 없이도 발행되게
+graceful 설계(호가 블록은 데이터 있을 때만) — 그래야 M1-d 를 기다리지 않고 판세가 나간다.
+
+### 7-g. 미해결
+
+- **제도·규제 이벤트**(단일종목 레버리지 규제 등) — 뉴스 텍스트로만 존재, 수급 함의로 구조화 안 됨.
+  `news_source` 분류에 `regulation` 레인 추가가 후보. **M1 범위 밖.**
+- 프로그램매매 시장 집계 TR 파라미터 — 종목 순회 집계로 우회 가능하나 콜 수 증가. 구현 시 판단.
