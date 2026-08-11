@@ -44,6 +44,26 @@ _BREADTH_INDEX_CODE = {"KOSPI": "0001", "KOSDAQ": "1001"}
 # 으로 실패한다 (2026-06-11 chart_refresh 배치 전수 실패의 근본 원인).
 _KST = timezone(timedelta(hours=9))
 
+
+def _as_int(v: Any) -> int | None:
+    """KIS 응답 문자열 → int. 빈값·파싱 실패는 None (0 과 구분 — 미제공 ≠ 0)."""
+    if v in (None, "", "-"):
+        return None
+    try:
+        return int(float(str(v).replace(",", "")))
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_float(v: Any) -> float | None:
+    if v in (None, "", "-"):
+        return None
+    try:
+        return float(str(v).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
 # 만료 시각보다 이만큼 일찍 선제 재발급 (clock skew + 네트워크 지연 안전 마진).
 _TOKEN_REFRESH_MARGIN = timedelta(minutes=10)
 
@@ -922,4 +942,101 @@ class KISClient:
                 "top_30_raw": kosdaq_top,
             },
             "note": "상위 30개 합산 기준. 시장 전체 정확한 합계 아님.",
+        }
+
+    # ------------------------------------------------------------------
+    # ADVISOR-CORE-001 M1-b — 공매도 · 신용/대주 잔고 · 프로그램매매
+    #   KRX STAT 계열은 Akamai 봇차단(2026-05-31 확인)이지만 같은 데이터가 KIS 로 열린다.
+    #   2026-08-11 실호출 probe 로 4 엔드포인트 전부 확인 후 배선.
+    # ------------------------------------------------------------------
+
+    async def daily_short_sale(
+        self, ticker: str, start_date: str, end_date: str
+    ) -> list[dict[str, Any]]:
+        """종목 일별 공매도 (FHPST04830000). 날짜는 YYYYMMDD.
+
+        Returns:
+            [{"date": "2026-08-10", "short_volume": int(주),
+              "short_ratio": float(당일 공매도 비중 %),
+              "short_cum_ratio": float(누적 공매도 비중 %)}]
+            오류 시 [] (collector graceful).
+        """
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/daily-short-sale",
+            tr_id="FHPST04830000",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker,
+                "FID_INPUT_DATE_1": start_date, "FID_INPUT_DATE_2": end_date,
+            },
+        )
+        if data.get("rt_cd") != "0":
+            return []
+        out: list[dict[str, Any]] = []
+        for it in data.get("output2", []) or []:
+            raw_d = str(it.get("stck_bsop_date", ""))
+            if len(raw_d) != 8:
+                continue
+            out.append({
+                "date": f"{raw_d[0:4]}-{raw_d[4:6]}-{raw_d[6:8]}",
+                "short_volume": _as_int(it.get("ssts_cntg_qty")),
+                "short_ratio": _as_float(it.get("ssts_vol_rlim")),
+                "short_cum_ratio": _as_float(it.get("acml_ssts_cntg_qty_rlim")),
+            })
+        return out
+
+    async def daily_credit_balance(
+        self, ticker: str, base_date: str
+    ) -> list[dict[str, Any]]:
+        """종목 일별 융자·대주 잔고 (FHPST04760000). base_date=YYYYMMDD.
+
+        대주(貸株) 잔고 = 빌려서 판 물량 → **숏커버링 압력**의 실측 재료.
+        융자 잔고 = 빚내서 산 물량 → 하락 시 반대매매 압력.
+        """
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/daily-credit-balance",
+            tr_id="FHPST04760000",
+            params={
+                "FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker,
+                "FID_INPUT_DATE_1": base_date, "FID_COND_SCR_DIV_CODE": "20476",
+            },
+        )
+        if data.get("rt_cd") != "0":
+            return []
+        rows = data.get("output") or data.get("output1") or []
+        if isinstance(rows, dict):
+            rows = [rows]
+        out: list[dict[str, Any]] = []
+        for it in rows:
+            raw_d = str(it.get("deal_date", ""))
+            if len(raw_d) != 8:
+                continue
+            out.append({
+                "date": f"{raw_d[0:4]}-{raw_d[4:6]}-{raw_d[6:8]}",
+                "loan_balance_qty": _as_int(it.get("whol_loan_rmnd_stcn")),
+                "short_balance_qty": _as_int(it.get("whol_stln_rmnd_stcn")),
+            })
+        return out
+
+    async def program_trade_by_stock(self, ticker: str) -> dict[str, Any] | None:
+        """종목 프로그램매매 당일 누적 (FHPPG04650100). 최신 시간대 1행.
+
+        output 은 시간대별 누적이라 **가장 최근 행**이 당일 최종 누적치.
+        Returns {"net_qty": int(주), "net_amount": int(백만원)} / 없으면 None.
+        """
+        data = await self._get(
+            "/uapi/domestic-stock/v1/quotations/program-trade-by-stock",
+            tr_id="FHPPG04650100",
+            params={"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker},
+        )
+        if data.get("rt_cd") != "0":
+            return None
+        rows = data.get("output") or []
+        if not rows:
+            return None
+        latest = rows[0]  # KIS 는 최신 시간대를 선두로 반환
+        amt = _as_int(latest.get("whol_smtn_ntby_tr_pbmn"))
+        return {
+            "net_qty": _as_int(latest.get("whol_smtn_ntby_qty")),
+            # 원 단위 → 백만원 (stock_supply_history 의 금액 단위와 정합)
+            "net_amount": int(amt / 1_000_000) if amt is not None else None,
         }

@@ -102,6 +102,20 @@ class AssetRead:
 
 
 @dataclass
+class ShortRead:
+    """숏 압력 (M1-b) — 공매도·대주잔고·프로그램. 미수집이면 전부 None."""
+
+    covered_tickers: int = 0
+    avg_short_ratio: float | None = None
+    max_short_ratio: float | None = None
+    top_short_name: str | None = None
+    total_short_balance: int | None = None
+    short_balance_date: str | None = None
+    short_balance_change: int | None = None
+    program_net_amount: int | None = None
+
+
+@dataclass
 class StanceFacts:
     as_of: str
     session: str
@@ -110,6 +124,7 @@ class StanceFacts:
     sectors: SectorBands = field(default_factory=SectorBands)
     flows: FlowRead = field(default_factory=FlowRead)
     assets: AssetRead = field(default_factory=AssetRead)
+    shorts: ShortRead = field(default_factory=ShortRead)
 
     def to_dict(self) -> dict[str, Any]:
         """facts_json 영속용 — point-in-time 리플레이 재현."""
@@ -292,7 +307,33 @@ def build_stance_facts(as_of: str, session: str) -> StanceFacts:
         sectors=_collect_sectors(db, as_of),
         flows=_collect_flows(db, as_of),
         assets=_collect_assets(db, as_of),
+        shorts=_collect_shorts(as_of),
     )
+
+
+def _collect_shorts(as_of: str) -> ShortRead:
+    """숏 압력 집계 (M1-b). 미수집이면 빈 ShortRead — 판세는 그래도 발행된다."""
+    try:
+        from collectors.short_sale import summarize_short_pressure
+        from collectors.universe_membership import resolve_stock_name
+
+        s = summarize_short_pressure(as_of)
+        return ShortRead(
+            covered_tickers=s.covered_tickers,
+            avg_short_ratio=s.avg_short_ratio,
+            max_short_ratio=s.max_short_ratio,
+            # 사람·LLM 노출단은 종목명 (feedback_no_stock_code_in_display)
+            top_short_name=(
+                resolve_stock_name(s.top_short_ticker, "") if s.top_short_ticker else None
+            ),
+            total_short_balance=s.total_short_balance,
+            short_balance_date=s.short_balance_date,
+            short_balance_change=s.short_balance_change,
+            program_net_amount=s.total_program_net_amount,
+        )
+    except Exception as e:  # noqa: BLE001 — 숏 층 부재가 판세를 막지 않음
+        log.warning("stance_shorts_failed", as_of=as_of, error=str(e))
+        return ShortRead()
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +451,27 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
                 "- **엇갈림**: 외국인 현물과 선물의 방향이 반대다 — 헤지 청산이나 "
                 "단기 반등 대비일 수 있어 추세 전환 확정으로 읽지 말 것."
             )
+
+    # 숏 압력 (M1-b) — 수집분이 있을 때만. 숏커버링 반등 판단의 재료.
+    sh = facts.shorts
+    if sh.covered_tickers:
+        L.append("\n### 숏 압력")
+        bits = [f"평균 공매도 비중 {sh.avg_short_ratio}%"] if sh.avg_short_ratio is not None else []
+        if sh.max_short_ratio is not None:
+            top = f" ({sh.top_short_name})" if sh.top_short_name else ""
+            bits.append(f"최고 {sh.max_short_ratio}%{top}")
+        if bits:
+            L.append(f"- {' · '.join(bits)} · 표본 {sh.covered_tickers}종")
+        if sh.total_short_balance is not None:
+            # 수준보다 증감이 신호 — 줄면 숏커버링 진행, 늘면 압력 축적.
+            delta = ""
+            if sh.short_balance_change is not None:
+                word = "감소(커버링 진행)" if sh.short_balance_change < 0 else "증가(압력 축적)"
+                delta = f" · 직전 대비 {sh.short_balance_change:+,}주 {word}"
+            asof = f" [{sh.short_balance_date} 결제 기준]" if sh.short_balance_date else ""
+            L.append(f"- 대주 잔고 합 {sh.total_short_balance:,}주{delta}{asof}")
+        if sh.program_net_amount is not None:
+            L.append(f"- 프로그램 순매수 {_eok(sh.program_net_amount)}")
 
     # 자산군
     a = facts.assets

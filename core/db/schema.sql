@@ -441,6 +441,15 @@ CREATE TABLE IF NOT EXISTS stock_supply_history (
     financial_inv_net INTEGER NOT NULL,
     pension_net     INTEGER NOT NULL,
     source          TEXT NOT NULL DEFAULT 'krx',
+    -- v22 (ADVISOR-CORE-001 M1-b): 숏 압력·프로그램 — 같은 "종목×일자 수급 지표" 도메인이라
+    --   신규 테이블 없이 컬럼 확장 (가드 #11). 전부 nullable = 미수집과 0 을 구분.
+    short_volume      INTEGER,   -- 공매도 체결수량(주)
+    short_ratio       REAL,      -- 당일 공매도 비중(%)
+    short_cum_ratio   REAL,      -- 누적 공매도 비중(%)
+    loan_balance_qty  INTEGER,   -- 융자 잔고(주) — 하락 시 반대매매 압력
+    short_balance_qty INTEGER,   -- 대주 잔고(주) — 숏커버링 압력
+    program_net_qty   INTEGER,   -- 프로그램 순매수(주)
+    program_net_amount INTEGER,  -- 프로그램 순매수(백만원)
     PRIMARY KEY (ticker, date)
 );
 CREATE INDEX IF NOT EXISTS idx_stock_supply_ticker_date ON stock_supply_history(ticker, date);

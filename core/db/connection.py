@@ -151,6 +151,25 @@ class Database:
         except Exception:  # noqa: BLE001
             pass
 
+        # v22 — stock_supply_history 숏 압력·프로그램 확장 (ADVISOR-CORE-001 M1-b).
+        #   공매도/융자·대주 잔고/프로그램매매 = 같은 "종목×일자 수급 지표" 도메인 → 컬럼 확장.
+        #   nullable 유지 = 미수집과 0 을 구분(숏 잔고 0 은 실제 정보).
+        _v22_columns = (
+            ("stock_supply_history", "short_volume", "INTEGER"),
+            ("stock_supply_history", "short_ratio", "REAL"),
+            ("stock_supply_history", "short_cum_ratio", "REAL"),
+            ("stock_supply_history", "loan_balance_qty", "INTEGER"),
+            ("stock_supply_history", "short_balance_qty", "INTEGER"),
+            ("stock_supply_history", "program_net_qty", "INTEGER"),
+            ("stock_supply_history", "program_net_amount", "INTEGER"),
+        )
+        for table, col, ddl in _v22_columns:
+            try:
+                if not _column_exists(conn, table, col):
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+                pass
+
         # v21 — market_view_snapshot 판세 확장 (ADVISOR-CORE-001 M1-a).
         #   하루 2회(장마감 18:00 / 아침 07:05) 발행이라 PK 에 session 이 필요하다.
         #   SQLite 는 PK ALTER 미지원 → 신규 테이블 생성 후 데이터 이관(기존 행 = postclose).
