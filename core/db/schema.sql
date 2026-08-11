@@ -496,7 +496,15 @@ CREATE TABLE IF NOT EXISTS market_view_snapshot (
     reasons_json    TEXT,
     source          TEXT,                    -- db | computed | stale
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (date, market)
+    -- v21 (ADVISOR-CORE-001 M1-a): 판세 트랙 — 하루 2회(장마감/아침) 발행 + LLM 서술.
+    --   session 이 PK 에 들어가 같은 날 두 세션이 공존한다. narrative~stance 는 M1-e 가 채움.
+    session         TEXT NOT NULL DEFAULT 'postclose',  -- postclose(18:00) | premarket(07:05)
+    narrative       TEXT,                    -- 판세 서술 (기술주↔가치주·매크로 소화)
+    rotation_read   TEXT,                    -- 섹터 선행/후행 해석
+    risk_read       TEXT,                    -- 무너질 조짐인가 눌림인가
+    stance          TEXT,                    -- 기민한 선별 | 관망 | 회피
+    facts_json      TEXT,                    -- 결정론 팩트 스냅샷 (리플레이 재현용)
+    PRIMARY KEY (date, market, session)
 );
 CREATE INDEX IF NOT EXISTS idx_market_view_date ON market_view_snapshot(date);
 

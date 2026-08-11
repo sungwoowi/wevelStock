@@ -22,6 +22,39 @@ def _column_exists(conn, table: str, column: str) -> bool:
     return any(r["name"] == column for r in rows)
 
 
+def _table_exists(conn, table: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
+# v21 recreate 용 DDL — schema.sql 의 market_view_snapshot 정의와 **반드시 동일**하게 유지.
+_MARKET_VIEW_V21_DDL = """
+CREATE TABLE IF NOT EXISTS market_view_snapshot (
+    date            TEXT NOT NULL,
+    market          TEXT NOT NULL,
+    regime          TEXT,
+    leading_json    TEXT,
+    fading_json     TEXT,
+    rotation_json   TEXT,
+    entry_posture   TEXT,
+    one_liner       TEXT,
+    confidence      INTEGER,
+    reasons_json    TEXT,
+    source          TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    session         TEXT NOT NULL DEFAULT 'postclose',
+    narrative       TEXT,
+    rotation_read   TEXT,
+    risk_read       TEXT,
+    stance          TEXT,
+    facts_json      TEXT,
+    PRIMARY KEY (date, market, session)
+);
+CREATE INDEX IF NOT EXISTS idx_market_view_date ON market_view_snapshot(date);
+"""
+
+
 class Database:
     """Lightweight SQLite facade (sync — okay for our IO volume)."""
 
@@ -116,6 +149,35 @@ class Database:
             if not _column_exists(conn, "universe_membership", "volume"):
                 conn.execute("ALTER TABLE universe_membership ADD COLUMN volume INTEGER")
         except Exception:  # noqa: BLE001
+            pass
+
+        # v21 — market_view_snapshot 판세 확장 (ADVISOR-CORE-001 M1-a).
+        #   하루 2회(장마감 18:00 / 아침 07:05) 발행이라 PK 에 session 이 필요하다.
+        #   SQLite 는 PK ALTER 미지원 → 신규 테이블 생성 후 데이터 이관(기존 행 = postclose).
+        #   컬럼만 있고 PK 가 옛것이면 여전히 recreate 대상이므로 PK 자체를 확인한다.
+        try:
+            if _table_exists(conn, "market_view_snapshot"):
+                pk = [r["name"] for r in conn.execute(
+                    "PRAGMA table_info(market_view_snapshot)"
+                ).fetchall() if r["pk"]]
+                if "session" not in pk:
+                    conn.execute("ALTER TABLE market_view_snapshot RENAME TO _mvs_v20")
+                    conn.executescript(_MARKET_VIEW_V21_DDL)
+                    old_cols = [r["name"] for r in conn.execute(
+                        "PRAGMA table_info(_mvs_v20)"
+                    ).fetchall()]
+                    carry = [c for c in (
+                        "date", "market", "regime", "leading_json", "fading_json",
+                        "rotation_json", "entry_posture", "one_liner", "confidence",
+                        "reasons_json", "source", "created_at",
+                    ) if c in old_cols]
+                    cols = ", ".join(carry)
+                    conn.execute(
+                        f"INSERT INTO market_view_snapshot ({cols}, session) "
+                        f"SELECT {cols}, 'postclose' FROM _mvs_v20"
+                    )
+                    conn.execute("DROP TABLE _mvs_v20")
+        except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
             pass
 
         # v20 — news_digest_snapshot.elevated_events_json (NEWS-EVENT-INTERPRETATION-001).

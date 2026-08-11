@@ -513,26 +513,45 @@ def get_cached_one_liner(market: str = "KOSPI", date_str: str | None = None) -> 
     return view.one_liner if view and view.one_liner else None
 
 
-def get_today_view(date_str: str, market: str) -> MarketView | None:
-    """오늘 market_view_snapshot row → MarketView(source='db'). 없으면 None."""
+def get_today_view(
+    date_str: str, market: str, *, session: str | None = None
+) -> MarketView | None:
+    """오늘 market_view_snapshot row → MarketView(source='db'). 없으면 None.
+
+    session=None 이면 **가장 최근 세션**을 반환한다(아침 07:05 발행분이 있으면 그것,
+    없으면 장마감분). 기존 호출부는 그대로 최신값을 받는다 — 하루 2회 발행(M1-a) 이후에도
+    "지금 시점의 시장관"이 자연스럽게 이어지도록.
+    """
     db = get_db()
-    row = db.fetch_one(
-        "SELECT * FROM market_view_snapshot WHERE date = ? AND market = ?",
-        (date_str, market),
-    )
+    if session is not None:
+        row = db.fetch_one(
+            "SELECT * FROM market_view_snapshot WHERE date = ? AND market = ? AND session = ?",
+            (date_str, market, session),
+        )
+    else:
+        # premarket(07:05) > postclose(18:00) — 같은 날이면 나중에 쓰인 것이 최신.
+        row = db.fetch_one(
+            "SELECT * FROM market_view_snapshot WHERE date = ? AND market = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (date_str, market),
+        )
     return _row_to_view(row) if row is not None else None
 
 
-def upsert_market_view(view: MarketView) -> None:
-    """market_view_snapshot ON CONFLICT REPLACE 멱등 upsert."""
+def upsert_market_view(view: MarketView, *, session: str = "postclose") -> None:
+    """market_view_snapshot ON CONFLICT REPLACE 멱등 upsert.
+
+    session (ADVISOR-CORE-001 M1-a) = PK 3번째 축. 판세 트랙이 하루 2회(장마감/아침)
+    발행하므로 같은 날 두 행이 공존한다. 기존 18:05 결정론 시장관 경로는 'postclose' 기본값.
+    """
     db = get_db()
     with db.connect() as conn:
         conn.execute(
             "INSERT INTO market_view_snapshot "
             "(date, market, regime, leading_json, fading_json, rotation_json, "
-            " entry_posture, one_liner, confidence, reasons_json, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(date, market) DO UPDATE SET "
+            " entry_posture, one_liner, confidence, reasons_json, source, session) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(date, market, session) DO UPDATE SET "
             " regime=excluded.regime, leading_json=excluded.leading_json, "
             " fading_json=excluded.fading_json, rotation_json=excluded.rotation_json, "
             " entry_posture=excluded.entry_posture, one_liner=excluded.one_liner, "
@@ -550,6 +569,7 @@ def upsert_market_view(view: MarketView) -> None:
                 view.confidence,
                 json.dumps(view.reasons, ensure_ascii=False),
                 "computed",
+                session,
             ),
         )
 
