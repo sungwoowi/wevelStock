@@ -388,3 +388,309 @@ def test_upsert_is_idempotent_within_session(db, monkeypatch) -> None:
     mv.upsert_market_view(_view(mv, one_liner="갱신"), session="postclose")
     rows = db.fetch_all("SELECT one_liner FROM market_view_snapshot WHERE date='2026-08-10'")
     assert len(rows) == 1 and rows[0]["one_liner"] == "갱신"
+
+
+# ===========================================================================
+# M1-e — 판세 LLM + 영속 + 알림
+#   실 LLM 호출 0 (call_llm stub). 결정론 팩트(M1-a~c)는 위 테스트가 담당.
+# ===========================================================================
+
+_STANCE_JSON = """{
+  "headline": "대형 반도체만 무너지는 중 — 회피가 아니라 갈아타기 국면.",
+  "narrative": "지수는 20일선 아래지만 상승종목이 8할이다. 시총 상위가 지수를 눌렀다.",
+  "rotation_read": "기술주에서 가치·방어로 자금이 옮겨간다. 반도체 반등 근거는 아직 없다.",
+  "risk_read": "무너짐이 아니라 눌림. 상승종목 비율 50% 붕괴가 경계선.",
+  "stance": "selective",
+  "scenarios": [
+    {"trigger": "야간선물 -0.5% 붕괴", "action": "갭하락 대응, 시초 추격 금지", "kind": "risk"},
+    {"trigger": "외국인 현물 순매수 전환", "action": "반도체 재평가 시작", "kind": "opportunity"}
+  ]
+}"""
+
+
+@pytest.fixture()
+def stub_llm(monkeypatch):
+    """call_llm 치환 — 호출 인자 캡처 + 고정 응답."""
+    calls: list[dict] = []
+
+    async def _fake(**kw):
+        calls.append(kw)
+        return {"content": _STANCE_JSON, "tokens_in": 1200, "tokens_out": 300,
+                "model": "gemini-2.5-flash", "cost_usd": 0.001, "raw": {}}
+
+    monkeypatch.setattr(ms, "call_llm", _fake)
+    return calls
+
+
+def _seed_day(db, day="2026-08-10"):
+    _macro(db, day, "KOSPI")
+    _macro(db, day, "KOSDAQ", index_close=798.81, change_pct=-0.36,
+           advancing=1431, declining=236, breadth_ratio=0.858, distribution_count_25d=10)
+    _sector(db, day, "KOSPI", "화장품", 27.4)
+    _sector(db, day, "KOSPI", "반도체", -10.7)
+    _flow(db, day, "KOSPI", -1490868)
+    _usm(db, day)
+
+
+async def test_generate_persists_stance_and_facts(db, stub_llm) -> None:
+    _seed_day(db)
+    out = await ms.generate_market_stance("2026-08-10", "postclose")
+    assert out is not None and out.stance == "selective"
+
+    row = db.fetch_one(
+        "SELECT * FROM market_view_snapshot WHERE date='2026-08-10' "
+        "AND market='KOSPI' AND session='postclose'"
+    )
+    assert row["narrative"]
+    assert row["rotation_read"]
+    assert row["risk_read"]
+    assert row["stance"] == "selective"
+    assert row["facts_json"], "리플레이 재현용 팩트 스냅샷이 없다"
+
+
+async def test_llm_receives_deterministic_facts(db, stub_llm) -> None:
+    """LLM 프롬프트에 결정론 사실이 실려야 한다 — 지어내지 않게."""
+    _seed_day(db)
+    await ms.generate_market_stance("2026-08-10", "postclose")
+    user_msg = stub_llm[0]["messages"][0]["content"]
+    for token in ("코스피", "코스닥", "1,431", "화장품", "야간선물"):
+        assert token in user_msg, f"{token} 누락"
+
+
+async def test_llm_call_is_budget_shaped(db, stub_llm) -> None:
+    """판세는 1콜·소형. thinking 예산 잠식으로 JSON 잘리는 사고 방지."""
+    _seed_day(db)
+    await ms.generate_market_stance("2026-08-10", "postclose")
+    assert len(stub_llm) == 1
+    kw = stub_llm[0]
+    assert kw["call_type"] == "market_stance"
+    assert kw.get("thinking_budget") == 0
+    assert kw.get("max_tokens", 0) >= 1024
+
+
+async def test_two_sessions_do_not_overwrite(db, stub_llm) -> None:
+    _seed_day(db)
+    await ms.generate_market_stance("2026-08-10", "postclose")
+    await ms.generate_market_stance("2026-08-10", "premarket")
+    rows = db.fetch_all(
+        "SELECT session FROM market_view_snapshot WHERE date='2026-08-10' AND market='KOSPI'"
+    )
+    assert {r["session"] for r in rows} == {"postclose", "premarket"}
+
+
+async def test_llm_failure_is_graceful(db, monkeypatch) -> None:
+    """LLM 이 죽어도 크래시 없이 None — 결정론 팩트는 이미 영속돼 있다."""
+    _seed_day(db)
+
+    async def _boom(**kw):
+        raise RuntimeError("upstream down")
+
+    monkeypatch.setattr(ms, "call_llm", _boom)
+    assert await ms.generate_market_stance("2026-08-10", "postclose") is None
+
+
+async def test_bad_json_is_graceful(db, monkeypatch) -> None:
+    _seed_day(db)
+
+    async def _junk(**kw):
+        return {"content": "이건 JSON 이 아니다", "tokens_in": 1, "tokens_out": 1, "raw": {}}
+
+    monkeypatch.setattr(ms, "call_llm", _junk)
+    assert await ms.generate_market_stance("2026-08-10", "postclose") is None
+
+
+# --- 알림 렌더 --------------------------------------------------------------
+
+
+def test_notification_body_has_every_section() -> None:
+    stance = ms.MarketStance(
+        as_of="2026-08-10", session="postclose",
+        headline="대형 반도체만 무너지는 중 — 회피가 아니라 갈아타기 국면.",
+        narrative="지수는 20일선 아래지만 상승종목이 8할이다.",
+        rotation_read="기술주에서 가치·방어로 자금이 옮겨간다.",
+        risk_read="무너짐이 아니라 눌림.",
+        stance="selective",
+        scenarios=[{"trigger": "야간선물 -0.5% 붕괴", "action": "갭하락 대응", "kind": "risk"}],
+        facts_md="### 지수\n- 코스피 6,258.77 -0.60%",
+    )
+    body = ms.render_stance_notification(stance)
+    assert "갈아타기" in body
+    assert "기민한 선별" in body          # stance 코드 → 한국어
+    assert "selective" not in body        # 코드 라벨 노출 금지
+    assert "야간선물 -0.5% 붕괴" in body
+    assert "갭하락 대응" in body
+    assert "코스피" in body               # 사실 블록 동반
+
+
+def test_notification_stance_labels_are_korean() -> None:
+    for code, kr in (("selective", "기민한 선별"), ("watch", "관망"), ("avoid", "회피")):
+        s = ms.MarketStance(as_of="d", session="postclose", headline="h", narrative="n",
+                            rotation_read="r", risk_read="k", stance=code, scenarios=[],
+                            facts_md="")
+        assert kr in ms.render_stance_notification(s)
+
+
+def test_notification_without_scenarios_is_graceful() -> None:
+    s = ms.MarketStance(as_of="d", session="postclose", headline="h", narrative="n",
+                        rotation_read="r", risk_read="k", stance="watch", scenarios=[],
+                        facts_md="")
+    assert ms.render_stance_notification(s)
+
+
+async def test_emit_sends_notification(db, stub_llm, monkeypatch) -> None:
+    sent: list[dict] = []
+
+    async def _fake_notify(**kw):
+        sent.append(kw)
+        return {"channel": "test"}
+
+    monkeypatch.setattr(ms, "notify", _fake_notify)
+    _seed_day(db)
+    await ms.run_market_stance("2026-08-10", "postclose")
+    assert len(sent) == 1
+    assert sent[0]["notification_type"] == "market_briefing"
+    assert "판세" in sent[0]["title"]
+    assert "장마감" in sent[0]["title"]
+
+
+async def test_emit_skipped_when_llm_fails(db, monkeypatch) -> None:
+    sent: list[dict] = []
+
+    async def _fake_notify(**kw):
+        sent.append(kw)
+        return {"channel": "test"}
+
+    async def _boom(**kw):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(ms, "notify", _fake_notify)
+    monkeypatch.setattr(ms, "call_llm", _boom)
+    _seed_day(db)
+    await ms.run_market_stance("2026-08-10", "postclose")
+    assert sent == []   # 빈 판세를 보내느니 안 보낸다
+
+
+# --- cron 등록 --------------------------------------------------------------
+
+
+def test_stance_cron_registered_at_both_sessions() -> None:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    from server.schedulers.jobs import register_infra_jobs
+    from server.schedulers.jobs.auto_signal import MISFIRE_GRACE_SEC
+
+    sched = AsyncIOScheduler(timezone="Asia/Seoul")
+    register_infra_jobs(sched)
+
+    for session, hour, minute in (("postclose", 18, 0), ("premarket", 7, 5)):
+        job = sched.get_job(f"market_stance::{session}")
+        assert job is not None, f"{session} 미등록"
+        assert tuple(job.args) == (session,)
+        assert job.misfire_grace_time == MISFIRE_GRACE_SEC
+        assert job.coalesce is True and job.max_instances == 1
+        assert job.trigger.fields[job.trigger.FIELD_NAMES.index("hour")].expressions[0].first == hour
+        assert job.trigger.fields[job.trigger.FIELD_NAMES.index("minute")].expressions[0].first == minute
+
+
+def test_stance_runs_before_auto_signal() -> None:
+    """판세(18:00)가 자동 권고(18:05)보다 앞 — 판세가 권고의 입력이어야 한다."""
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    from server.schedulers.jobs import register_infra_jobs
+
+    sched = AsyncIOScheduler(timezone="Asia/Seoul")
+    register_infra_jobs(sched)
+
+    def _hm(job_id: str) -> tuple[int, int]:
+        j = sched.get_job(job_id)
+        names = j.trigger.FIELD_NAMES
+        return (
+            j.trigger.fields[names.index("hour")].expressions[0].first,
+            j.trigger.fields[names.index("minute")].expressions[0].first,
+        )
+
+    assert _hm("market_stance::postclose") < _hm("infra::daily_refresh")
+
+
+async def test_stance_job_returns_published_flag(db, stub_llm, monkeypatch) -> None:
+    from server.schedulers.jobs.market_stance import run_market_stance_job
+
+    monkeypatch.setattr(ms, "notify", lambda **kw: _noop())
+    _seed_day(db, "2026-08-10")
+    monkeypatch.setattr(
+        "server.schedulers.jobs.market_stance.datetime",
+        _FrozenDatetime,
+    )
+    out = await run_market_stance_job("postclose")
+    assert out["session"] == "postclose"
+    assert out["published"] is True
+    assert out["stance"] == "selective"
+
+
+async def _noop():
+    return {"channel": "test"}
+
+
+class _FrozenDatetime:
+    @staticmethod
+    def now(tz=None):
+        import datetime as _dt
+
+        return _dt.datetime(2026, 8, 10, 18, 0, tzinfo=tz)
+
+
+# --- 시나리오 정규화 (LLM 출력 형태가 흔들려도 버리지 않는다) ------------------
+
+
+def test_scenarios_accept_object_form() -> None:
+    out = ms._coerce_scenarios(
+        [{"trigger": "상승종목 50% 붕괴", "action": "비중 축소", "kind": "reduce"}]
+    )
+    assert out == [{"trigger": "상승종목 50% 붕괴", "action": "비중 축소", "kind": "reduce"}]
+
+
+def test_scenarios_accept_string_form() -> None:
+    """실측: claude_code 가 객체 대신 'A 시 → B' 문자열 배열을 낸다."""
+    out = ms._coerce_scenarios(["외국인 5일 누적 순매수 전환 시 → 반도체 재평가 시작"])
+    assert len(out) == 1
+    assert "외국인 5일 누적 순매수 전환" in out[0]["trigger"]
+    assert out[0]["action"] == "반도체 재평가 시작"
+    assert out[0]["kind"] == "opportunity"     # "전환" 힌트
+
+
+def test_scenarios_string_without_separator_kept_as_trigger() -> None:
+    out = ms._coerce_scenarios(["분산일 12건 도달"])
+    assert out[0]["trigger"] == "분산일 12건 도달" and out[0]["action"] == ""
+
+
+def test_scenarios_drop_empty_and_bad_types() -> None:
+    assert ms._coerce_scenarios([None, 3, "", {"action": "x"}]) == []
+    assert ms._coerce_scenarios(None) == []
+
+
+def test_scenario_kind_defaults_to_risk() -> None:
+    assert ms._coerce_scenarios(["지수 급락 시 → 대기"])[0]["kind"] == "risk"
+
+
+def test_render_scenario_without_action() -> None:
+    s = ms.MarketStance(as_of="d", session="postclose", headline="h", narrative="",
+                        rotation_read="", risk_read="", stance="watch",
+                        scenarios=[{"trigger": "분산일 12건", "action": "", "kind": "risk"}],
+                        facts_md="")
+    body = ms.render_stance_notification(s)
+    assert "분산일 12건" in body and "→" not in body.split("■ 시나리오")[1]
+
+
+def test_scenario_kind_prefers_reduce_over_mixed_words() -> None:
+    """실측 오분류: '이탈폭 확대 → 방어적 비중 축소' 가 opportunity 로 갔다."""
+    out = ms._coerce_scenarios(
+        ["갭업이 되밀리며 코스피 20일선 이탈폭이 확대되면 → 분산일 누적 경계, 방어적 비중 축소"]
+    )
+    assert out[0]["kind"] == "reduce"
+
+
+def test_scenario_kind_uses_action_over_trigger() -> None:
+    out = ms._coerce_scenarios(
+        [{"trigger": "지수 급락", "action": "낙폭과대 반등 노려 비중 확대"}]
+    )
+    assert out[0]["kind"] == "opportunity"

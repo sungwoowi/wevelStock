@@ -17,6 +17,7 @@ from server.schedulers.jobs.charts import run_chart_refresh
 from server.schedulers.jobs.daily_refresh import run_daily_refresh
 from server.schedulers.jobs.daily_rollup import run_daily_rollup
 from server.schedulers.jobs.fundamentals import run_fundamentals_refresh
+from server.schedulers.jobs.market_stance import run_market_stance_job
 from server.schedulers.jobs.memory_cleanup import run_memory_cleanup
 from server.schedulers.jobs.monthly_rollup import run_monthly_rollup
 from server.schedulers.jobs.news_ingest import run_news_ingest
@@ -123,6 +124,23 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
                 timezone=tz,
             ),
             id="news_ingest::premarket",
+            replace_existing=True,
+            misfire_grace_time=MISFIRE_GRACE_SEC,
+            coalesce=True,
+            max_instances=1,
+        )
+        registered += 1
+
+    # ADVISOR-CORE-001 M1-e — 시장 판세 하루 2회 (18:00 장마감 / 07:05 아침, KST 평일).
+    #   18:00 = macro·섹터RS·수급 갱신 직후이자 18:05 자동 권고 **앞** — 판세가 권고의 입력.
+    #   07:05 = 미장·야간선물·뉴스(06:40 ingest) 수집 후 — 사람이 그날 판단하는 데 쓴다.
+    #   시장 1건이라 종목 수와 무관하게 하루 2콜.
+    for _stance_session, _h, _m in (("postclose", 18, 0), ("premarket", 7, 5)):
+        scheduler.add_job(
+            run_market_stance_job,
+            CronTrigger(day_of_week="mon-fri", hour=_h, minute=_m, timezone=tz),
+            id=f"market_stance::{_stance_session}",
+            args=[_stance_session],
             replace_existing=True,
             misfire_grace_time=MISFIRE_GRACE_SEC,
             coalesce=True,

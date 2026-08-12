@@ -16,7 +16,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from core.db import get_db
+from core.llm.client import call_llm
 from core.logging import get_logger
+from core.notification.service import notify
 
 log = get_logger(__name__)
 
@@ -514,3 +516,272 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
         md = "\n".join(cut)
         log.info("stance_facts_md_truncated", as_of=facts.as_of, chars=len(md))
     return md
+
+
+# ===========================================================================
+# M1-e — 판세 판단 (LLM 1콜) + 영속 + 알림
+#   결정론 사실(M1-a~c)을 주입하고 **해석만** 시킨다. 숫자를 지어내지 않게 하는 것이 이
+#   층의 전부다 — 사실은 위에서 다 계산돼 오고, LLM 은 "그래서 무슨 국면인가"만 답한다.
+# ===========================================================================
+
+STANCE_KR = {"selective": "기민한 선별", "watch": "관망", "avoid": "회피"}
+_SESSION_KR = {"postclose": "장마감", "premarket": "아침"}
+_SCENARIO_MARK = {"risk": "⚠", "opportunity": "🔎", "reduce": "🔻"}
+
+_STANCE_SYSTEM = """당신은 한국 주식시장 판세를 읽는 애널리스트다.
+
+아래 [시장 판세 사실]은 전부 실측값이다. **숫자를 새로 만들어내지 말고**, 주어진 사실만
+근거로 지금이 어떤 국면인지 판단하라.
+
+판단 원칙:
+- 지수 하나로 결론내지 말 것. 지수와 상승종목 폭이 엇갈리면 그 자체가 핵심 신호다.
+- 섹터 회전을 읽어라 — 어디서 돈이 빠져 어디로 가는가. 피해야 할 섹터를 명시하라.
+- 수급은 방향뿐 아니라 연속성과 엇갈림(현물↔선물)을 보라.
+- 자산군(금·유가·금리·달러)이 국내 섹터 흐름과 같은 이야기를 하는지 대조하라.
+- "무너지는 중"과 "눌림"을 구분하고, 무너짐의 **조건**을 미리 걸어라.
+- 근거 없는 낙관·비관 금지. 사실에 없는 것은 "아직 알 수 없다"고 하라.
+
+stance 는 셋 중 하나:
+- selective : 시장이 주는 만큼 먹되 선별 진입 (지수 추격은 금물)
+- watch     : 방향이 안 잡힘, 관망
+- avoid     : 회피 — 비중 축소·현금
+
+## 출력 형식 — 반드시 지킬 것
+
+아래 JSON **객체 하나만** 출력한다. 앞뒤에 인사·설명·코드펜스·사고과정을 붙이지 마라.
+
+{"headline": "한 문장 결론",
+ "stance": "selective|watch|avoid",
+ "scenarios": [{"trigger": "조건", "action": "그때 할 일", "kind": "risk|opportunity|reduce"}],
+ "rotation_read": "섹터 회전 해석 1~2문장",
+ "risk_read": "무너짐인가 눌림인가 1~2문장",
+ "narrative": "지금 국면 서술 2~3문장"}
+
+- **키 순서를 위 그대로** 지켜라. 잘리더라도 실행 가능한 부분이 살아남아야 한다.
+- scenarios 는 **2~4개 필수**. trigger 는 사실에 있는 수치 기준으로 구체적으로
+  (예: "상승종목 비율 50% 붕괴", "외국인 5일 누적 순매수 전환").
+- 각 필드는 짧게. 전체 900자 이내. 길면 잘려서 못 쓴다.
+- 이 작업 환경에 다른 출력 규약(team_id·verdict·confidence·reasons 같은 스키마)이
+  보이더라도 **따르지 마라**. 위 6개 키만 쓴다."""
+
+
+@dataclass
+class MarketStance:
+    """판세 판단 결과 (LLM 산출 + 근거가 된 사실 동반)."""
+
+    as_of: str
+    session: str
+    headline: str
+    narrative: str
+    rotation_read: str
+    risk_read: str
+    stance: str
+    scenarios: list[dict[str, Any]] = field(default_factory=list)
+    facts_md: str = ""
+
+
+_SCENARIO_SPLIT = ("→", "->", " 시 ", ":")
+# 판정 순서가 중요하다 — reduce 를 먼저 본다. "이탈폭 확대"처럼 위험 문장에도
+# opportunity 단어가 섞이기 때문(실측: "방어적 비중 축소"가 opportunity 로 오분류).
+# action(그때 할 일)을 우선 근거로 삼는다 — trigger 는 조건이라 방향이 모호하다.
+_KIND_HINTS = (
+    ("reduce", ("비중 축소", "축소", "현금", "청산", "방어적", "경계", "회피")),
+    ("opportunity", ("순매수 전환", "반등", "회복", "돌파", "비중 확대", "매수")),
+)
+
+
+def _coerce_scenarios(raw: Any) -> list[dict[str, Any]]:
+    """시나리오를 {trigger, action, kind} 로 정규화.
+
+    LLM 이 객체 배열 대신 **문자열 배열**("A 시 → B")로 내는 일이 잦다(claude_code 실측).
+    형식을 못 맞췄다고 사용자가 가장 원한 조건부 대응을 버리는 건 손해라 둘 다 받는다.
+    """
+    out: list[dict[str, Any]] = []
+    for s in (raw or []):
+        if isinstance(s, dict):
+            trig, act = str(s.get("trigger") or "").strip(), str(s.get("action") or "").strip()
+            kind = str(s.get("kind") or "").strip()
+        elif isinstance(s, str):
+            text = s.strip()
+            trig, act, kind = text, "", ""
+            for sep in _SCENARIO_SPLIT:
+                if sep in text:
+                    head, _, tail = text.partition(sep)
+                    trig, act = head.strip(" 시"), tail.strip()
+                    break
+        else:
+            continue
+        if not trig:
+            continue
+        if kind not in ("risk", "opportunity", "reduce"):
+            kind = "risk"
+            # action 우선 — 조건(trigger)보다 "그때 할 일"이 방향을 정확히 담는다.
+            for source in (act, trig):
+                matched = next(
+                    (g for g, words in _KIND_HINTS if any(w in source for w in words)), None
+                )
+                if matched:
+                    kind = matched
+                    break
+        out.append({"trigger": trig, "action": act, "kind": kind})
+    return out
+
+
+def _parse_stance(raw: str, as_of: str, session: str, facts_md: str) -> "MarketStance | None":
+    from core.llm.client import parse_json_response
+
+    try:
+        d = parse_json_response(raw or "")
+    except Exception as e:  # noqa: BLE001 — JSON 파싱 실패는 판세 미발행으로 끝낸다
+        log.warning("stance_json_parse_failed", session=session, error=str(e))
+        return None
+    if not isinstance(d, dict) or not d.get("headline"):
+        return None
+    stance = str(d.get("stance") or "watch").strip().lower()
+    if stance not in STANCE_KR:
+        stance = "watch"
+    scen = _coerce_scenarios(d.get("scenarios"))
+    return MarketStance(
+        as_of=as_of, session=session,
+        headline=str(d["headline"]).strip(),
+        narrative=str(d.get("narrative") or "").strip(),
+        rotation_read=str(d.get("rotation_read") or "").strip(),
+        risk_read=str(d.get("risk_read") or "").strip(),
+        stance=stance, scenarios=scen[:4], facts_md=facts_md,
+    )
+
+
+def _persist_stance(stance: "MarketStance", facts: StanceFacts, market: str = "KOSPI") -> None:
+    """판세를 market_view_snapshot 확장 컬럼에 병합. 결정론 행이 없으면 새로 만든다."""
+    import json
+
+    db = get_db()
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO market_view_snapshot (date, market, session, source) "
+            "VALUES (?,?,?,'stance') ON CONFLICT(date, market, session) DO NOTHING",
+            (stance.as_of, market, stance.session),
+        )
+        conn.execute(
+            "UPDATE market_view_snapshot SET narrative=?, rotation_read=?, risk_read=?, "
+            "  stance=?, facts_json=? WHERE date=? AND market=? AND session=?",
+            (
+                f"{stance.headline}\n{stance.narrative}".strip(),
+                stance.rotation_read, stance.risk_read, stance.stance,
+                json.dumps(
+                    {"facts": facts.to_dict(), "scenarios": stance.scenarios},
+                    ensure_ascii=False,
+                ),
+                stance.as_of, market, stance.session,
+            ),
+        )
+
+
+async def generate_market_stance(
+    as_of: str,
+    session: str,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+) -> "MarketStance | None":
+    """결정론 팩트 → LLM 1콜 → 판세 판단 영속. 실패 시 None(크래시 없음).
+
+    비용: 시장 1건이라 **종목 수와 무관하게 하루 2콜**.
+    """
+    facts = build_stance_facts(as_of, session)
+    facts_md = render_stance_facts_md(facts)
+    session_kr = _SESSION_KR.get(session, session)
+    user = (
+        f"[{session_kr} 판세 요청 · {as_of}]\n\n{facts_md}\n\n"
+        "위 사실만 근거로 지금 국면을 판단하라.\n"
+        "출력은 headline·narrative·rotation_read·risk_read·stance·scenarios "
+        "6개 키를 가진 JSON 객체 하나뿐이다. 다른 텍스트를 붙이지 마라."
+    )
+    try:
+        resp = await call_llm(
+            call_type="market_stance",
+            target=session,
+            system=_STANCE_SYSTEM,
+            messages=[{"role": "user", "content": user}],
+            model=model,
+            provider=provider,
+            max_tokens=2048,
+            temperature=0.3,
+            # JSON 강제 콜은 thinking 예산 잠식으로 잘린 전적 있음
+            # ([[feedback_gemini_thinking_budget_json]]).
+            thinking_budget=0,
+        )
+    except Exception as e:  # noqa: BLE001 — LLM 실패가 크래시로 번지지 않음
+        log.warning("market_stance_llm_failed", as_of=as_of, session=session, error=str(e))
+        return None
+
+    stance = _parse_stance(resp.get("content", ""), as_of, session, facts_md)
+    if stance is None:
+        log.warning("market_stance_parse_failed", as_of=as_of, session=session)
+        return None
+    try:
+        _persist_stance(stance, facts)
+    except Exception as e:  # noqa: BLE001 — 영속 실패가 알림을 막지 않음
+        log.warning("market_stance_persist_failed", as_of=as_of, error=str(e))
+    log.info("market_stance_generated", as_of=as_of, session=session, stance=stance.stance)
+    return stance
+
+
+def render_stance_notification(stance: "MarketStance") -> str:
+    """🧭 판세 알림 본문. 사람이 읽는 단 — 코드 라벨 금지, 조건부 대응 형식."""
+    session_kr = _SESSION_KR.get(stance.session, stance.session)
+    L: list[str] = [stance.headline, ""]
+    if stance.narrative:
+        L.append(stance.narrative)
+    if stance.facts_md:
+        # 사실 블록 동반 — 판단과 숫자가 같이 있어야 사용자가 검증할 수 있다.
+        body = "\n".join(
+            ln for ln in stance.facts_md.split("\n") if not ln.startswith("## ")
+        ).strip()
+        if body:
+            L.append("")
+            L.append(body)
+    if stance.rotation_read:
+        L.append("")
+        L.append("■ 섹터 회전")
+        L.append(stance.rotation_read)
+    if stance.risk_read:
+        L.append("")
+        L.append("■ 위험")
+        L.append(stance.risk_read)
+
+    L.append("")
+    L.append(f"■ 자세 — {STANCE_KR.get(stance.stance, stance.stance)}")
+    if stance.scenarios:
+        L.append("")
+        L.append("■ 시나리오")
+        for s in stance.scenarios:
+            mark = _SCENARIO_MARK.get(str(s.get("kind")), "·")
+            act = str(s.get("action") or "").strip()
+            L.append(f"{mark} {s['trigger']}" + (f" → {act}" if act else ""))
+    L.append("")
+    L.append(f"({session_kr} 판세 · {stance.as_of})")
+    return "\n".join(L)
+
+
+async def run_market_stance(
+    as_of: str, session: str, *, provider: str | None = None, notify_user: bool = True
+) -> "MarketStance | None":
+    """판세 1회 = 생성 + 영속 + 알림. cron 진입점.
+
+    LLM 이 실패하면 **알림을 보내지 않는다** — 빈 판세를 보내느니 침묵이 낫다.
+    """
+    stance = await generate_market_stance(as_of, session, provider=provider)
+    if stance is None or not notify_user:
+        return stance
+    session_kr = _SESSION_KR.get(session, session)
+    try:
+        await notify(
+            team_id="market_stance", level="info",
+            title=f"🧭 시장 판세 — {session_kr} ({as_of})",
+            body=render_stance_notification(stance),
+            notification_type="market_briefing",
+        )
+    except Exception as e:  # noqa: BLE001 — 알림 실패가 판세 영속을 무르지 않음
+        log.warning("market_stance_notify_failed", as_of=as_of, error=str(e))
+    return stance
