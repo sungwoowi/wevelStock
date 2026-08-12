@@ -405,7 +405,10 @@ CREATE TABLE IF NOT EXISTS market_macro_snapshot (
     is_distribution_day  INTEGER NOT NULL DEFAULT 0,
     change_pct      REAL,
     volume_change_pct REAL,
-    distribution_count_25d INTEGER,            -- v9: 25일 분산일 카운트 (regime/buy_score M축 입력)
+    distribution_count_25d INTEGER,
+    -- v23 (ADVISOR-CORE-001 F1): 그날 **주간** 선물 종가 = 야간 등락의 기준선.
+    --   KIS 선물 일봉은 하루 1행(주간+야간 합산)이라 여기서 따로 잡아둬야 정확해진다.
+    k200_futures_day_close REAL,            -- v9: 25일 분산일 카운트 (regime/buy_score M축 입력)
     breadth_source  TEXT,                      -- v9: "krx"|"kis_index"|"kis_volrank_top30"|"unavailable"
     kospi200_night_change_pct REAL,            -- v16: KOSPI200 야간선물 (KIS best-effort, null 가능)
     PRIMARY KEY (date, market)

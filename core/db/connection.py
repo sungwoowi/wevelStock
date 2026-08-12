@@ -151,6 +151,17 @@ class Database:
         except Exception:  # noqa: BLE001
             pass
 
+        # v23 — 주간 선물 종가 (ADVISOR-CORE-001 F1). 야간 등락의 **기준선**.
+        #   KIS 선물 일봉은 하루 1행이라 주간/야간이 합쳐져 주간 종가를 못 뽑는다(실측).
+        #   그래서 주간 세션에 계산될 때 우리가 저장해 둔다. 없으면 야간 등락은 근사 또는 None.
+        try:
+            if not _column_exists(conn, "market_macro_snapshot", "k200_futures_day_close"):
+                conn.execute(
+                    "ALTER TABLE market_macro_snapshot ADD COLUMN k200_futures_day_close REAL"
+                )
+        except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+            pass
+
         # v22 — stock_supply_history 숏 압력·프로그램 확장 (ADVISOR-CORE-001 M1-b).
         #   공매도/융자·대주 잔고/프로그램매매 = 같은 "종목×일자 수급 지표" 도메인 → 컬럼 확장.
         #   nullable 유지 = 미수집과 0 을 구분(숏 잔고 0 은 실제 정보).

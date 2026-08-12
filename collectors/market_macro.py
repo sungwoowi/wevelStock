@@ -91,6 +91,7 @@ class MarketMacro:
     #   KOSPI 행만 채워질 수 있음 (KOSDAQ·미설정·실패 시 None). 야간 전용 시세 REST 부재라
     #   env KIS_KOSPI200_FUTURES_SYMBOL 로 게이팅 — 백로그 강등.
     kospi200_night_change_pct: float | None = None
+    k200_futures_day_close: float | None = None    # 야간 등락 기준선 (F1)
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +430,11 @@ def _get_today_macro(date_str: str, market: str) -> MarketMacro | None:
         recent_distribution_days=[],
         source="db",
         breadth_source=row["breadth_source"],
+        k200_futures_day_close=(
+            float(row["k200_futures_day_close"])
+            if row["k200_futures_day_close"] is not None
+            else None
+        ),
         kospi200_night_change_pct=(
             float(row["kospi200_night_change_pct"])
             if row["kospi200_night_change_pct"] is not None
@@ -447,8 +453,9 @@ def upsert_market_macro(macro: MarketMacro) -> None:
             " ma_20d, ma_60d, ma20_slope_pct_5d, ma60_slope_pct_20d, trend, "
             " advancing, declining, unchanged, breadth_ratio, "
             " is_distribution_day, change_pct, volume_change_pct, "
-            " distribution_count_25d, breadth_source, kospi200_night_change_pct) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            " distribution_count_25d, breadth_source, kospi200_night_change_pct, "
+            " k200_futures_day_close) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(date, market) DO UPDATE SET "
             " index_close=excluded.index_close, "
             " ma_36m=excluded.ma_36m, ma_60m=excluded.ma_60m, position=excluded.position, "
@@ -461,7 +468,8 @@ def upsert_market_macro(macro: MarketMacro) -> None:
             " change_pct=excluded.change_pct, volume_change_pct=excluded.volume_change_pct, "
             " distribution_count_25d=excluded.distribution_count_25d, "
             " breadth_source=excluded.breadth_source, "
-            " kospi200_night_change_pct=excluded.kospi200_night_change_pct",
+            " kospi200_night_change_pct=excluded.kospi200_night_change_pct, "
+            " k200_futures_day_close=COALESCE(excluded.k200_futures_day_close, market_macro_snapshot.k200_futures_day_close)",
             (
                 macro.date,
                 macro.market,
@@ -484,6 +492,7 @@ def upsert_market_macro(macro: MarketMacro) -> None:
                 macro.distribution_count_25d,
                 macro.breadth_source,
                 macro.kospi200_night_change_pct,
+                macro.k200_futures_day_close,
             ),
         )
 
@@ -553,29 +562,65 @@ def _today_kst_str() -> str:
     return datetime.now(_KST).strftime("%Y-%m-%d")
 
 
-async def _fetch_kospi200_night_change_pct() -> float | None:
-    """KOSPI200 야간선물 등락률 best-effort (INFRA-MARKET-ASSETS-002).
+async def _fetch_kospi200_futures(
+    date_str: str,
+) -> tuple[float | None, float | None]:
+    """KOSPI200 야간선물 **순수 이동률** + 주간 선물 종가 (ADVISOR-CORE-001 F1).
 
-    KIS 에 야간 전용 시세 REST 가 없어, 일반 선물 inquire-price(FHMIF10000000)를
-    env `KIS_KOSPI200_FUTURES_SYMBOL`(최근월물 계약코드) 설정 시에만 호출한다.
-    야간 세션(18:00~05:00 KST)이면 야간가가 반환된다(세션 무구분). 미설정·실패 시 None
-    (전체 macro 실패 금지 — 미국 야간자산·국장 매크로는 정상). 백로그 강등 상태.
+    2026-08-12 사고 정정: 이전엔 KIS `change_pct`(전일 종가 대비 누적)를 그대로
+    "야간선물"로 썼다. 그날 주간에 이미 +4.26% 오른 게 통째로 섞여 "+4.31% → 갭상승"
+    이라는 틀린 판단이 나갔다(실제 야간 이동은 +0.34%). 세션 구분도 없어 주간 14:30 에
+    호출해도 "야간선물"이라 불렀다.
+
+    지금은 `collectors.night_futures` 가 세션을 인식하고, 그날 **주간 선물 종가** 대비로
+    계산한다. 주간 세션에는 값 자체를 내지 않고, 주간 종가가 없으면 현물 대비 근사,
+    근사조차 불가하면 None (아는 척하지 않는다).
+
+    Returns:
+        (야간 순수 이동률 %, 그날 주간 선물 종가) — 둘 다 없을 수 있음.
     """
     import os
 
+    from collectors.night_futures import compute_night_change, session_of
+
     symbol = os.getenv("KIS_KOSPI200_FUTURES_SYMBOL", "").strip()
     if not symbol:
-        return None
+        return None, None
     try:
         async with KISClient() as kis:
-            result = await kis.index_futures_price(symbol)
-    except Exception as exc:  # noqa: BLE001 — best-effort, 막지 않음
-        log.info("kospi200_night_futures_failed", symbol=symbol, error=str(exc))
+            fut = await kis.index_futures_price(symbol)
+    except Exception as exc:  # noqa: BLE001 — best-effort, macro 전체를 막지 않음
+        log.info("kospi200_futures_failed", symbol=symbol, error=str(exc))
+        return None, None
+    if "error" in fut:
+        log.info("kospi200_futures_error", symbol=symbol, msg=fut.get("error"))
+        return None, None
+
+    price = fut.get("price")
+    session = session_of()
+    # 주간 세션이면 지금 가격이 곧 그날 주간 선물가 — 마감 기준선으로 저장해 둔다.
+    day_close = float(price) if (session == "day" and price) else _load_futures_day_close(date_str)
+
+    night = compute_night_change(
+        futures_price=price,
+        day_close=day_close if session != "day" else None,
+        allow_closed_session=True,   # 07:05 아침 판세도 직전 야간 결과를 읽는다
+    )
+    if night.pct is not None:
+        log.info("kospi200_night_change", pct=night.pct, basis=night.basis)
+    return night.pct, day_close
+
+
+def _load_futures_day_close(date_str: str) -> float | None:
+    """그날 저장해 둔 주간 선물 종가 (없으면 None)."""
+    row = get_db().fetch_one(
+        "SELECT k200_futures_day_close AS v FROM market_macro_snapshot "
+        "WHERE date = ? AND market = 'KOSPI'", (date_str,),
+    )
+    try:
+        return float(row["v"]) if row and row["v"] is not None else None
+    except (TypeError, ValueError):
         return None
-    if "error" in result:
-        log.info("kospi200_night_futures_error", symbol=symbol, msg=result.get("error"))
-        return None
-    return result.get("change_pct")
 
 
 async def compute_market_macro(
@@ -612,7 +657,9 @@ async def compute_market_macro(
     dd = compute_distribution_days(daily_df)
     breadth = await _fetch_breadth(market)
     # KOSPI200 야간선물 — KOSPI 행만 best-effort (env 심볼 게이팅, 미설정/실패 null).
-    night_change = await _fetch_kospi200_night_change_pct() if market == "KOSPI" else None
+    night_change, futures_day_close = (
+        await _fetch_kospi200_futures(today_str) if market == "KOSPI" else (None, None)
+    )
 
     macro = MarketMacro(
         date=today_str,
@@ -638,6 +685,7 @@ async def compute_market_macro(
         recent_distribution_days=dd["recent_distribution_days"],
         source="computed",
         kospi200_night_change_pct=night_change,
+        k200_futures_day_close=futures_day_close,
     )
 
     # DB upsert — 부분 발행도 적재 (다음 호출 DB hit)

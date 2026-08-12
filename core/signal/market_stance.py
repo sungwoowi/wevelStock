@@ -197,15 +197,12 @@ def _collect_night(db: Any, as_of: str, legs: list[MarketLeg]) -> NightRead:
         nq_futures_pct=_f(usm["nq"]) if usm else None,
         es_futures_pct=_f(usm["es"]) if usm else None,
     )
-    v = night.k200_night_pct
-    if v is None:
-        night.gap_call = "unknown"
-    elif v <= -GAP_THRESHOLD:
-        night.gap_call = "gap_down"
-    elif v >= GAP_THRESHOLD:
-        night.gap_call = "gap_up"
-    else:
-        night.gap_call = "flat"
+    # 갭 판정 = 야간 **순수 이동** 기준 (collectors.night_futures 단일 출처).
+    #   2026-08-12 사고: 전일 대비 누적(+4.6%)을 야간 이동으로 오인해 "갭상승 우위"를
+    #   발행했다. 실제 야간 이동은 +0.34%. 임계도 그쪽 모듈이 소유한다.
+    from collectors.night_futures import gap_call_from
+
+    night.gap_call = gap_call_from(night.k200_night_pct)
     return night
 
 
