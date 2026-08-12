@@ -4,7 +4,7 @@ title: 전용 투자 어드바이저 코어 — 시장 판세 트랙(2회/일) +
 team: shared
 type: feature
 level: implementation
-status: draft
+status: implementing
 parent: ENGINE-FUNNEL-REWIRE-001
 generates:
   - agents/strategists/track_c/persona.md      # ≤4,000자 (하드 상한, 테스트로 강제)
