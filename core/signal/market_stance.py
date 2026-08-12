@@ -127,6 +127,10 @@ class StanceFacts:
     flows: FlowRead = field(default_factory=FlowRead)
     assets: AssetRead = field(default_factory=AssetRead)
     shorts: ShortRead = field(default_factory=ShortRead)
+    # 신선도 (2026-08-12 사고) — 지수 차트가 5일 멈췄는데 breadth·야간선물은 실시간이라
+    # "반쯤 신선한" 판세가 나갔다. 완전히 죽었으면 알아챘을 것을 반쯤 살아서 못 잡았다.
+    index_data_date: str | None = None
+    stale_axes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """facts_json 영속용 — point-in-time 리플레이 재현."""
@@ -311,14 +315,58 @@ def _collect_assets(db: Any, as_of: str) -> AssetRead:
     )
 
 
+INDEX_BENCHMARK_TICKER = "0001"
+
+
+_INDEX_MATCH_TOL = 0.5   # 지수 포인트. 반올림·시점 차 흡수, 며칠치 괴리는 못 넘김
+
+
+def _index_freshness(
+    db: Any, as_of: str, legs: list[MarketLeg]
+) -> tuple[str | None, list[str]]:
+    """판세가 **실제로 읽는 값**이 오늘 것인지 검증.
+
+    2026-08-12 사고: `chart_ohlcv` 지수가 08-07 에 멈춘 사이 `market_macro_snapshot` 은
+    08-08~08-12 행을 매일 만들면서 **08-07 종가를 그대로 복사**했다. 행 날짜만 오늘이라
+    날짜 검사로는 안 잡힌다. breadth·야간선물은 KIS 실시간이라 신선해서 "반쯤 신선한"
+    판세가 그럴듯하게 나갔다.
+
+    그래서 두 겹으로 본다:
+      ① 원천(chart_ohlcv)에 as_of 봉이 있는가
+      ② 판세가 쓰는 index_close 가 그 봉의 종가와 **일치**하는가
+    ②가 핵심이다 — 원천만 고쳐도 소비 스냅샷이 낡았으면 똑같이 틀린다.
+    """
+    row = db.fetch_one(
+        "SELECT MAX(date) AS d FROM chart_ohlcv WHERE ticker = ?", (INDEX_BENCHMARK_TICKER,)
+    )
+    latest = str(row["d"]) if row and row["d"] else None
+    if not latest or latest < as_of:
+        return latest, ["index_ohlcv"]
+
+    bar = db.fetch_one(
+        "SELECT close FROM chart_ohlcv WHERE ticker = ? AND date = ?",
+        (INDEX_BENCHMARK_TICKER, as_of),
+    )
+    kospi = next((l for l in legs if l.market == "KOSPI"), None)
+    if bar is None or kospi is None or kospi.close is None:
+        return latest, []
+    if abs(float(bar["close"]) - kospi.close) > _INDEX_MATCH_TOL:
+        return latest, ["index_snapshot_mismatch"]
+    return latest, []
+
+
 def build_stance_facts(as_of: str, session: str) -> StanceFacts:
     """판세 결정론 팩트 수집 — DB read only. LLM 0 · 외부 호출 0.
 
     각 축은 독립 graceful — 한 축이 비어도 나머지는 채워진다(판세가 안 나가는 것보다 낫다).
+    단 **신선도는 별개** — 낡은 값으로 아는 척하는 건 빈 판세보다 나쁘다.
     """
     db = get_db()
     legs = _collect_legs(db, as_of)
+    index_date, stale = _index_freshness(db, as_of, legs)
     return StanceFacts(
+        index_data_date=index_date,
+        stale_axes=stale,
         as_of=as_of, session=session, legs=legs,
         night=_collect_night(db, as_of, legs),
         sectors=_collect_sectors(db, as_of),
@@ -395,6 +443,12 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
     핵심 신호라 사실 층에서 이름을 붙여 준다.
     """
     L: list[str] = [f"## [시장 판세 사실] {facts.as_of} · {facts.session}"]
+    if facts.stale_axes:
+        # LLM 이 못 지나치게 최상단에 박는다 — 낡은 값으로 단정하는 것이 최악.
+        L.append(
+            f"\n⚠ **데이터가 낡았다**: 지수 차트 최신일이 {facts.index_data_date or '없음'} "
+            f"(요청일 {facts.as_of}). 지수·추세·이격 수치를 오늘 값으로 단정하지 말 것."
+        )
 
     # 양대 시장
     if facts.legs:
@@ -689,6 +743,14 @@ async def generate_market_stance(
     비용: 시장 1건이라 **종목 수와 무관하게 하루 2콜**.
     """
     facts = build_stance_facts(as_of, session)
+    if facts.stale_axes:
+        # 핵심 축(지수)이 낡으면 **LLM 을 호출하지도 않는다** — 틀린 판세보다 침묵이 낫고,
+        # 낡은 입력에 돈을 쓸 이유도 없다 (2026-08-12 사고).
+        log.warning(
+            "market_stance_stale_input", as_of=as_of, session=session,
+            stale=facts.stale_axes, index_data_date=facts.index_data_date,
+        )
+        return None
     facts_md = render_stance_facts_md(facts)
     session_kr = _SESSION_KR.get(session, session)
     user = (

@@ -423,6 +423,12 @@ def stub_llm(monkeypatch):
 
 
 def _seed_day(db, day="2026-08-10"):
+    # 지수 차트도 당일치로 — 신선도 가드가 통과해야 판세가 발행된다.
+    db.execute(
+        "INSERT OR REPLACE INTO chart_ohlcv "
+        "(ticker, date, open, high, low, close, volume, fetched_at) "
+        "VALUES ('0001',?,6258.77,6258.77,6258.77,6258.77,1000,'2026-08-12T18:00:00')", (day,),
+    )
     _macro(db, day, "KOSPI")
     _macro(db, day, "KOSDAQ", index_close=798.81, change_pct=-0.36,
            advancing=1431, declining=236, breadth_ratio=0.858, distribution_count_25d=10)
@@ -694,3 +700,108 @@ def test_scenario_kind_uses_action_over_trigger() -> None:
         [{"trigger": "지수 급락", "action": "낙폭과대 반등 노려 비중 확대"}]
     )
     assert out[0]["kind"] == "opportunity"
+
+
+# ===========================================================================
+# 신선도 가드 (2026-08-12 사고) — 지수 OHLCV 가 08-07 에서 멈췄는데 breadth·야간선물은
+#   실시간이라 "반쯤 신선한" 판세가 나갔다. 실제 KOSPI +3.75% 급반등인데 판세는
+#   "지수는 밀렸지만"이라고 서술. 완전히 죽었으면 알아챘을 것을 반쯤 살아서 못 잡았다.
+#   → 모르는 걸 아는 척하지 않는다 (투자 7계명 #6).
+# ===========================================================================
+
+
+def _index_ohlcv(db, ticker: str, date: str, close: float) -> None:
+    db.execute(
+        "INSERT OR REPLACE INTO chart_ohlcv "
+        "(ticker, date, open, high, low, close, volume, fetched_at) "
+        "VALUES (?,?,?,?,?,?,1000,'2026-08-12T18:00:00')",
+        (ticker, date, close, close, close, close),
+    )
+
+
+def test_fresh_index_is_not_flagged(db) -> None:
+    _macro(db, "2026-08-12", "KOSPI", index_close=6584.41)
+    _index_ohlcv(db, "0001", "2026-08-12", 6584.41)
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.stale_axes == []
+    assert f.index_data_date == "2026-08-12"
+
+
+def test_stale_index_is_flagged(db) -> None:
+    """지수 차트가 as_of 보다 낡으면 축 이름과 실제 날짜를 남긴다."""
+    _macro(db, "2026-08-12", "KOSPI")
+    _index_ohlcv(db, "0001", "2026-08-07", 6258.77)
+    db.execute("DELETE FROM chart_ohlcv WHERE ticker='0001' AND date='2026-08-12'")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert "index_ohlcv" in f.stale_axes
+    assert f.index_data_date == "2026-08-07"
+
+
+def test_missing_index_chart_is_flagged(db) -> None:
+    _macro(db, "2026-08-12", "KOSPI")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert "index_ohlcv" in f.stale_axes
+
+
+def test_stale_warning_appears_at_top_of_md(db) -> None:
+    """LLM 이 못 지나치게 사실 md 최상단에 경고를 박는다."""
+    _macro(db, "2026-08-12", "KOSPI")
+    _index_ohlcv(db, "0001", "2026-08-07", 6258.77)
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    head = md.split("\n")[:4]
+    assert any("낡" in ln or "stale" in ln.lower() or "⚠" in ln for ln in head), head
+    assert "2026-08-07" in md
+
+
+async def test_stale_index_blocks_publication(db, stub_llm, monkeypatch) -> None:
+    """핵심 축(지수)이 낡으면 판세를 아예 발행하지 않는다 — 틀린 판세보다 침묵."""
+    sent: list[dict] = []
+
+    async def _fake_notify(**kw):
+        sent.append(kw)
+        return {"channel": "test"}
+
+    monkeypatch.setattr(ms, "notify", _fake_notify)
+    _seed_day(db, "2026-08-12")
+    # 실제 사고 재현 — 지수 차트가 08-07 에서 멈춘 상태(당일 봉 없음)
+    db.execute("DELETE FROM chart_ohlcv WHERE ticker='0001'")
+    _index_ohlcv(db, "0001", "2026-08-07", 6258.77)
+
+    out = await ms.run_market_stance("2026-08-12", "postclose")
+    assert out is None
+    assert sent == []
+    assert stub_llm == [], "낡은 데이터로 LLM 을 호출하지도 말 것 (비용 낭비)"
+
+
+async def test_fresh_index_publishes(db, stub_llm, monkeypatch) -> None:
+    sent: list[dict] = []
+
+    async def _fake_notify(**kw):
+        sent.append(kw)
+        return {"channel": "test"}
+
+    monkeypatch.setattr(ms, "notify", _fake_notify)
+    _seed_day(db, "2026-08-12")   # macro·chart 종가 일치 상태
+
+    out = await ms.run_market_stance("2026-08-12", "postclose")
+    assert out is not None and len(sent) == 1
+
+
+def test_snapshot_mismatch_is_flagged_even_when_chart_is_fresh(db) -> None:
+    """2026-08-12 사고의 핵심 — 원천은 신선한데 소비 스냅샷이 옛 값을 복사한 경우."""
+    _macro(db, "2026-08-12", "KOSPI", index_close=6258.77)   # 08-07 종가를 복사한 상태
+    _index_ohlcv(db, "0001", "2026-08-12", 6584.41)          # 원천은 오늘치
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.stale_axes == ["index_snapshot_mismatch"]
+
+
+def test_matching_snapshot_is_fresh(db) -> None:
+    _macro(db, "2026-08-12", "KOSPI", index_close=6584.41)
+    _index_ohlcv(db, "0001", "2026-08-12", 6584.41)
+    assert build_stance_facts("2026-08-12", "postclose").stale_axes == []
+
+
+def test_small_rounding_difference_is_tolerated(db) -> None:
+    _macro(db, "2026-08-12", "KOSPI", index_close=6584.41)
+    _index_ohlcv(db, "0001", "2026-08-12", 6584.60)
+    assert build_stance_facts("2026-08-12", "postclose").stale_axes == []
