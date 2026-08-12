@@ -45,7 +45,12 @@ class SectorRS:
     rs_score: float      # 0~10 (5 = KOSPI 동행)
     return_60d: float    # 섹터 ETF 60일 수익률 (%)
     kospi_return_60d: float
-    rs_ratio: float      # excess return (etf_return - kospi_return)
+    rs_ratio: float      # excess return (etf_return - kospi_return), 60일
+    # 다중 시간축 (F2) — 60일만 보면 변곡이 구조적으로 후행한다. 짧은 축을 같이 본다.
+    excess_1d: float | None = None    # 당일 초과수익 (시장의 오늘 반응)
+    excess_5d: float | None = None
+    excess_20d: float | None = None
+    turning: str | None = None        # rebound_attempt | fatigue | None
 
 
 def _return_60d_from_df(df: pd.DataFrame, window: int = _WINDOW_BARS) -> float | None:
@@ -59,6 +64,40 @@ def _return_60d_from_df(df: pd.DataFrame, window: int = _WINDOW_BARS) -> float |
     if start is None or start <= 0:
         return None
     return float((end - start) / start * 100)
+
+
+# 전환 판정 임계 (%). 잡음 방지 — 단기 움직임이 이만큼은 돼야 "전환 시도"로 본다.
+TURN_SHORT_MIN = 1.5
+# 장기 축이 이 밖이어야 "엇갈림"이라 부를 수 있다 (중립 구간은 전환이랄 게 없다).
+TURN_LONG_WEAK = -5.0
+TURN_LONG_STRONG = 10.0
+
+
+def turning_signal(
+    *,
+    excess_60d: float | None,
+    excess_5d: float | None,
+    excess_1d: float | None,
+) -> str | None:
+    """시간축 간 엇갈림에 이름을 붙인다 (F2) — 변곡의 미묘함을 코드가 먼저 잡는다.
+
+    - `rebound_attempt` : 60일은 소외(회피)인데 최근이 강함 → 바닥에서 도는 중.
+      2026-08-12 반도체가 정확히 이 케이스였다(60일 -10.7%인데 그날 장대양봉).
+    - `fatigue`         : 60일 주도주인데 최근 밀림 → 주도 피로.
+
+    단기 축은 5일·당일 중 **더 큰 쪽**을 쓴다 — 하루짜리 급반등도, 5일 누적 전환도 잡되
+    임계 미만은 잡음으로 버린다.
+    """
+    if excess_60d is None:
+        return None
+    shorts = [v for v in (excess_5d, excess_1d) if v is not None]
+    if not shorts:
+        return None
+    if excess_60d <= TURN_LONG_WEAK and max(shorts) >= TURN_SHORT_MIN:
+        return "rebound_attempt"
+    if excess_60d >= TURN_LONG_STRONG and min(shorts) <= -TURN_SHORT_MIN:
+        return "fatigue"
+    return None
 
 
 def _rs_score_from_excess(excess_return_pct: float) -> float:
@@ -112,6 +151,14 @@ async def compute_sector_rs(
             log.warning("sector_rs_etf_unavailable", ticker=ticker, sector=name)
             continue
         excess = etf_return - kospi_return
+
+        def _ex(win: int) -> float | None:
+            """win 봉 초과수익 — 섹터·벤치마크 둘 다 봉이 충분할 때만."""
+            e = _return_60d_from_df(etf_df, window=win)
+            b = _return_60d_from_df(benchmark_df, window=win)
+            return round(e - b, 4) if (e is not None and b is not None) else None
+
+        ex1, ex5, ex20 = _ex(2), _ex(5), _ex(20)
         results.append(SectorRS(
             sector=name,
             etf_ticker=ticker,
@@ -119,6 +166,8 @@ async def compute_sector_rs(
             return_60d=round(etf_return, 4),
             kospi_return_60d=round(kospi_return, 4),
             rs_ratio=round(excess, 4),
+            excess_1d=ex1, excess_5d=ex5, excess_20d=ex20,
+            turning=turning_signal(excess_60d=excess, excess_5d=ex5, excess_1d=ex1),
         ))
 
     results.sort(key=lambda r: r.rs_score, reverse=True)
@@ -140,15 +189,19 @@ def persist_sector_rs(date_str: str, market: str, rows: list[SectorRS]) -> None:
     with db.connect() as conn:
         conn.executemany(
             "INSERT INTO sector_rs_snapshot "
-            "(date, market, sector, etf_ticker, rs_score, return_60d, kospi_return_60d, rs_ratio) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "(date, market, sector, etf_ticker, rs_score, return_60d, kospi_return_60d, "
+            " rs_ratio, excess_1d, excess_5d, excess_20d, turning) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(date, market, sector) DO UPDATE SET "
             " etf_ticker=excluded.etf_ticker, rs_score=excluded.rs_score, "
             " return_60d=excluded.return_60d, kospi_return_60d=excluded.kospi_return_60d, "
-            " rs_ratio=excluded.rs_ratio",
+            " rs_ratio=excluded.rs_ratio, excess_1d=excluded.excess_1d, "
+            " excess_5d=excluded.excess_5d, excess_20d=excluded.excess_20d, "
+            " turning=excluded.turning",
             [
                 (date_str, market, r.sector, r.etf_ticker, r.rs_score,
-                 r.return_60d, r.kospi_return_60d, r.rs_ratio)
+                 r.return_60d, r.kospi_return_60d, r.rs_ratio,
+                 r.excess_1d, r.excess_5d, r.excess_20d, r.turning)
                 for r in rows
             ],
         )
@@ -162,6 +215,10 @@ def _row_to_sector_rs(row: Any) -> SectorRS:
         return_60d=float(row["return_60d"]) if row["return_60d"] is not None else 0.0,
         kospi_return_60d=float(row["kospi_return_60d"]) if row["kospi_return_60d"] is not None else 0.0,
         rs_ratio=float(row["rs_ratio"]) if row["rs_ratio"] is not None else 0.0,
+        excess_1d=float(row["excess_1d"]) if row["excess_1d"] is not None else None,
+        excess_5d=float(row["excess_5d"]) if row["excess_5d"] is not None else None,
+        excess_20d=float(row["excess_20d"]) if row["excess_20d"] is not None else None,
+        turning=row["turning"],
     )
 
 

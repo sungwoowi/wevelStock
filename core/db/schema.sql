@@ -489,7 +489,12 @@ CREATE TABLE IF NOT EXISTS sector_rs_snapshot (
     rs_score         REAL NOT NULL,           -- 0~10
     return_60d       REAL,
     kospi_return_60d REAL,
-    rs_ratio         REAL,                    -- excess return
+    rs_ratio         REAL,                    -- excess return (60일)
+    -- v24 (ADVISOR-CORE-001 F2): 다중 시간축. 60일만 보면 변곡이 구조적으로 후행한다.
+    excess_1d        REAL,                    -- 당일 초과수익 = 시장의 오늘 반응
+    excess_5d        REAL,
+    excess_20d       REAL,
+    turning          TEXT,                    -- rebound_attempt | fatigue (축 간 엇갈림)
     PRIMARY KEY (date, market, sector)
 );
 CREATE INDEX IF NOT EXISTS idx_sector_rs_date ON sector_rs_snapshot(date, market);

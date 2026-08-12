@@ -36,6 +36,9 @@ GAP_THRESHOLD = 0.5
 # 렌더 예산 — Track C 프롬프트에서 판세가 차지할 몫 (SPEC §3-c).
 RENDER_BUDGET_CHARS = 2000
 _MAX_SECTORS_PER_BAND = 5
+# F2 — 오늘 반응 축. 임계 미만은 잡음이라 안 싣는다.
+_TODAY_MOVE_MIN = 1.0
+_MAX_TODAY = 3
 
 
 @dataclass
@@ -67,7 +70,10 @@ class NightRead:
 @dataclass
 class SectorEntry:
     sector: str
-    rs_ratio: float
+    rs_ratio: float                   # 60일 초과수익
+    excess_1d: float | None = None    # 당일 초과수익 = 시장의 오늘 반응 (F2)
+    excess_5d: float | None = None
+    turning: str | None = None        # rebound_attempt | fatigue
 
 
 @dataclass
@@ -75,6 +81,10 @@ class SectorBands:
     strong: list[SectorEntry] = field(default_factory=list)
     neutral: list[SectorEntry] = field(default_factory=list)
     avoid: list[SectorEntry] = field(default_factory=list)
+    # F2 다중 시간축 — 60일 밴드는 큰 흐름이지만 구조적으로 후행한다.
+    today_strong: list[SectorEntry] = field(default_factory=list)
+    today_weak: list[SectorEntry] = field(default_factory=list)
+    turning: list[SectorEntry] = field(default_factory=list)
 
 
 @dataclass
@@ -237,14 +247,15 @@ def _collect_sectors(db: Any, as_of: str, market: str = SECTOR_BENCHMARK_MARKET)
     한 섹터가 강세·회피 양쪽에 걸리는 모순이 생긴다. 판세의 기준 시장은 KOSPI 로 두고,
     코스닥 대비 값은 필요할 때 별도로 조회한다(현재는 미사용 — 과잉 노출 회피).
     """
+    cols = ("sector, etf_ticker, rs_ratio, excess_1d, excess_5d, turning")
     rows = db.fetch_all(
-        "SELECT sector, etf_ticker, rs_ratio FROM sector_rs_snapshot "
+        f"SELECT {cols} FROM sector_rs_snapshot "
         "WHERE date = ? AND market = ? AND rs_ratio IS NOT NULL ORDER BY rs_ratio DESC",
         (as_of, market),
     )
     if not rows:   # 해당 시장 미적재 시 시장 무관 폴백 (구 데이터 호환)
         rows = db.fetch_all(
-            "SELECT sector, etf_ticker, rs_ratio FROM sector_rs_snapshot WHERE date = ? "
+            f"SELECT {cols} FROM sector_rs_snapshot WHERE date = ? "
             "AND rs_ratio IS NOT NULL ORDER BY rs_ratio DESC", (as_of,),
         )
     bands = SectorBands()
@@ -252,6 +263,8 @@ def _collect_sectors(db: Any, as_of: str, market: str = SECTOR_BENCHMARK_MARKET)
         e = SectorEntry(
             sector=_short_sector(r["etf_ticker"], r["sector"]),
             rs_ratio=round(_f(r["rs_ratio"]) or 0.0, 1),
+            excess_1d=_f(r["excess_1d"]), excess_5d=_f(r["excess_5d"]),
+            turning=r["turning"],
         )
         if e.rs_ratio >= SECTOR_STRONG_MIN:
             bands.strong.append(e)
@@ -260,6 +273,24 @@ def _collect_sectors(db: Any, as_of: str, market: str = SECTOR_BENCHMARK_MARKET)
         else:
             bands.neutral.append(e)
     bands.avoid.sort(key=lambda e: e.rs_ratio)   # 나쁜 순 (피할 것부터)
+
+    # F2 — 오늘 반응 축. 60일 밴드와 **독립**으로 뽑는다(회피 섹터가 오늘 강세일 수 있고,
+    # 그 엇갈림이 바로 변곡 신호다).
+    todays = [e for e in (bands.strong + bands.neutral + bands.avoid) if e.excess_1d is not None]
+    todays.sort(key=lambda e: e.excess_1d, reverse=True)
+    bands.today_strong = [e for e in todays if e.excess_1d >= _TODAY_MOVE_MIN][:_MAX_TODAY]
+    bands.today_weak = [e for e in reversed(todays) if e.excess_1d <= -_TODAY_MOVE_MIN][:_MAX_TODAY]
+    # turning 은 저장돼 있으면 그대로, 없으면 여기서 파생 — 구 데이터·수동 적재도 커버.
+    from collectors.sector_rs import turning_signal
+
+    for e in bands.strong + bands.neutral + bands.avoid:
+        if not e.turning:
+            e.turning = turning_signal(
+                excess_60d=e.rs_ratio, excess_5d=e.excess_5d, excess_1d=e.excess_1d
+            )
+    bands.turning = [
+        e for e in (bands.strong + bands.neutral + bands.avoid) if e.turning
+    ][:_MAX_TODAY]
     return bands
 
 
@@ -403,6 +434,7 @@ def _collect_shorts(as_of: str) -> ShortRead:
 # ---------------------------------------------------------------------------
 
 _MARKET_KR = {"KOSPI": "코스피", "KOSDAQ": "코스닥"}
+_TURNING_KR = {"rebound_attempt": "반등 시도", "fatigue": "주도 피로"}
 _TREND_KR = {"uptrend": "상승", "downtrend": "하락", "sideways": "횡보"}
 _GAP_KR = {
     "gap_up": "갭상승 우위", "gap_down": "갭하락 우위",
@@ -495,8 +527,25 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
         ) if x
     ]
     if band_lines:
-        L.append("\n### 섹터 (60일 초과수익)")
+        L.append("\n### 섹터 추세 (60일 초과수익)")
         L.extend(band_lines)
+
+    # F2 — 오늘 반응 + 전환. 60일 밴드는 구조적으로 후행하므로 짧은 축을 따로 보여준다.
+    if b.today_strong or b.today_weak:
+        L.append("\n### 섹터 — 오늘 반응 (당일 초과수익)")
+        if b.today_strong:
+            L.append("- 오늘 강세: " + " · ".join(
+                f"{e.sector} {e.excess_1d:+.1f}%" for e in b.today_strong))
+        if b.today_weak:
+            L.append("- 오늘 약세: " + " · ".join(
+                f"{e.sector} {e.excess_1d:+.1f}%" for e in b.today_weak))
+    if b.turning:
+        L.append("- **전환 조짐**: " + " · ".join(
+            f"{e.sector}({_TURNING_KR.get(e.turning, e.turning)}, 60일 {e.rs_ratio:+.1f}% "
+            f"↔ 최근 {(e.excess_5d if e.excess_5d is not None else (e.excess_1d or 0)):+.1f}%)"
+            for e in b.turning
+        ))
+        L.append("  ※ 60일 추세와 최근 움직임이 엇갈린다 — 추세 라벨만 보고 단정하지 말 것.")
 
     # 수급
     fl = facts.flows

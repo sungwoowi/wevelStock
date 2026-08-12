@@ -151,6 +151,20 @@ class Database:
         except Exception:  # noqa: BLE001
             pass
 
+        # v24 — 섹터 다중 시간축 (ADVISOR-CORE-001 F2). 60일만 보면 변곡이 후행한다.
+        _v24_columns = (
+            ("sector_rs_snapshot", "excess_1d", "REAL"),
+            ("sector_rs_snapshot", "excess_5d", "REAL"),
+            ("sector_rs_snapshot", "excess_20d", "REAL"),
+            ("sector_rs_snapshot", "turning", "TEXT"),
+        )
+        for table, col, ddl in _v24_columns:
+            try:
+                if not _column_exists(conn, table, col):
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            except Exception:  # noqa: BLE001 — 새 DB 는 schema.sql 가 처리
+                pass
+
         # v23 — 주간 선물 종가 (ADVISOR-CORE-001 F1). 야간 등락의 **기준선**.
         #   KIS 선물 일봉은 하루 1행이라 주간/야간이 합쳐져 주간 종가를 못 뽑는다(실측).
         #   그래서 주간 세션에 계산될 때 우리가 저장해 둔다. 없으면 야간 등락은 근사 또는 None.
