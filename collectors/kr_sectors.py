@@ -45,6 +45,22 @@ DEFAULT_TRACKED_ETFS: list[tuple[str, str]] = [
     ("228790", "TIGER 화장품"),
 ]
 
+# 코스닥 성격이 강한 테마 (ADVISOR-CORE-001 M1-c). 2026-08-11 KIS etf_price probe 유효 확인.
+#   국내 섹터 ETF 대부분이 코스피·코스닥 종목을 함께 담아 "코스닥 전용 섹터"는 희소하다.
+#   그래서 M1-c 의 본질은 ETF 교체가 아니라 **벤치마크 분리**(코스닥 지수 대비 초과수익)이고,
+#   아래 4종은 코스닥 비중이 큰 테마를 보강하는 것.
+KOSDAQ_TRACKED_ETFS: list[tuple[str, str]] = [
+    ("229200", "KODEX 코스닥150"),
+    ("261070", "TIGER 코스닥150바이오테크"),
+    ("445290", "KODEX 게임산업"),
+    ("266370", "KODEX IT"),
+]
+
+# RS·차트 갱신 대상 = 두 목록의 합집합 (중복 티커 제거, 순서 보존).
+ALL_TRACKED_ETFS: list[tuple[str, str]] = list(
+    {t: (t, n) for t, n in (*DEFAULT_TRACKED_ETFS, *KOSDAQ_TRACKED_ETFS)}.values()
+)
+
 
 async def _fetch_inner(
     kis: KISClient,

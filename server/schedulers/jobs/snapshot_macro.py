@@ -86,8 +86,23 @@ async def run_snapshot_macro_refresh() -> dict[str, Any]:
         log.exception("snapshot_macro_us_macro_failed", error=str(e))
         us_macro_result = {"error": str(e)}
 
+    # 3.5단계: 섹터 RS 양 시장 적재 (ADVISOR-CORE-001 M1-c).
+    #   그전엔 KOSPI 만 적재돼 코스닥이 더 강한 국면에서도 코스닥 섹터를 못 봤다.
+    #   build_market_view 보다 **앞** — view 가 load_sector_rs_snapshot 으로 DB-hit 하도록.
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from collectors.sector_rs import refresh_sector_rs_all_markets
+
+        today = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d")
+        rs_markets = await refresh_sector_rs_all_markets(today)
+        log.info("snapshot_macro_sector_rs_done", markets=rs_markets)
+    except Exception as e:  # noqa: BLE001 — 섹터 RS 실패가 나머지 단계를 막지 않음
+        log.warning("snapshot_macro_sector_rs_failed", error=str(e))
+
     # 4단계: market_view 종합 적재 (sector_rs_snapshot + market_view_snapshot, us_macro 흡수 포함).
-    #   순환매 다일 누적의 일일 적재 지점 (LB-MS2 운영 ramp). KOSPI 만 (KOSDAQ SLOT).
+    #   순환매 다일 누적의 일일 적재 지점 (LB-MS2 운영 ramp).
     try:
         view = await build_market_view("KOSPI", force_refresh=True)
         market_view_result = {

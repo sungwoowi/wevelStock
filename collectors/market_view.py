@@ -611,7 +611,9 @@ async def build_market_view(
 
     today_rs = load_sector_rs_snapshot(today, market)
     if not today_rs:
-        today_rs = await compute_sector_rs()
+        # M1-c: 벤치마크를 market 에 맞춘다. 그전엔 market 인자와 무관하게 항상 KOSPI 대비로
+        # 계산해 코스닥 행에 코스피 기준 RS 가 들어가던 결함(코스닥 호출이 없어 드러나지 않았음).
+        today_rs = await compute_sector_rs(market=market)
         if today_rs:
             try:
                 persist_sector_rs(today, market, today_rs)

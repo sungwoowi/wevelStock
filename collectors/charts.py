@@ -621,12 +621,17 @@ def _seed_tickers() -> list[str]:
     """`chart_ohlcv` 에 항상 적재되어야 하는 seed ticker list.
 
     INFRA-SNAPSHOT-EXTEND-001 R1 결단: 지수 (KOSPI 0001 / KOSDAQ 1001) +
-    14 섹터 ETF (kr_sectors.DEFAULT_TRACKED_ETFS) 가 chart_ohlcv 적재 필요.
-    market_macro / sector_rs collector 가 chart_ohlcv 직접 read 위임.
+    섹터 ETF 가 chart_ohlcv 적재 필요. market_macro / sector_rs collector 가 직접 read.
+    ADVISOR-CORE-001 M1-c 부터 코스닥 테마 ETF 포함 (ALL_TRACKED_ETFS).
     """
-    from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
+    from collectors.kr_sectors import ALL_TRACKED_ETFS
 
-    return ["0001", "1001"] + [t for t, _ in DEFAULT_TRACKED_ETFS]
+    return ["0001", "1001"] + [t for t, _ in ALL_TRACKED_ETFS]
+
+
+def chart_refresh_universe() -> list[str]:
+    """OHLCV 갱신 대상 티커 (공개 진입점 — 테스트·운영 점검용)."""
+    return _seed_tickers()
 
 
 async def _select_refresh_tickers(

@@ -21,7 +21,7 @@ from typing import Any
 import pandas as pd
 
 from collectors.charts import load_ohlcv_from_db
-from collectors.kr_sectors import DEFAULT_TRACKED_ETFS
+from collectors.kr_sectors import ALL_TRACKED_ETFS
 from core.db import get_db
 from core.logging import get_logger
 
@@ -29,6 +29,11 @@ log = get_logger(__name__)
 
 _BENCHMARK_TICKER = "0001"          # KOSPI
 _WINDOW_BARS = 60                   # 60 거래일
+
+# 시장별 RS 벤치마크 (ADVISOR-CORE-001 M1-c).
+#   그전까지 섹터 RS 는 market 인자와 무관하게 **항상 KOSPI 대비**로 계산됐다. 코스닥이 더
+#   강한 국면(2026-08-10: 코스닥 상승종목 86% vs 코스피 79%)에서 코스닥 섹터를 못 보던 결함.
+BENCHMARK_BY_MARKET: dict[str, str] = {"KOSPI": "0001", "KOSDAQ": "1001"}
 
 
 @dataclass
@@ -68,21 +73,26 @@ def _rs_score_from_excess(excess_return_pct: float) -> float:
 async def compute_sector_rs(
     etfs: list[tuple[str, str]] | None = None,
     *,
-    benchmark_ticker: str = _BENCHMARK_TICKER,
+    market: str | None = None,
+    benchmark_ticker: str | None = None,
     window_bars: int = _WINDOW_BARS,
 ) -> list[SectorRS]:
     """14 섹터 ETF + KOSPI(0001) 60일 RS 계산. rs_score 내림차순 정렬.
 
     Args:
-        etfs: (ticker, name) tuple list. None 이면 DEFAULT_TRACKED_ETFS (14).
-        benchmark_ticker: 기준 지수. 기본 KOSPI(0001).
+        etfs: (ticker, name) tuple list. None 이면 ALL_TRACKED_ETFS.
+        market: "KOSPI" | "KOSDAQ" — 벤치마크 지수를 시장에 맞춰 고른다(M1-c).
+        benchmark_ticker: 벤치마크 직접 지정 (market 보다 우선).
         window_bars: RS 윈도우. 기본 60 거래일.
 
     Returns:
         SectorRS list. ETF chart 부재 시 해당 섹터 skip + log.warning.
         벤치마크 (KOSPI) chart 부재 또는 return 산출 불가 시 빈 list.
     """
-    etf_list = etfs if etfs is not None else DEFAULT_TRACKED_ETFS
+    etf_list = etfs if etfs is not None else ALL_TRACKED_ETFS
+    # market 지정 시 그 시장의 지수를 벤치마크로 (미지정·미상 시장은 KOSPI 폴백).
+    if benchmark_ticker is None:
+        benchmark_ticker = BENCHMARK_BY_MARKET.get(market or "", _BENCHMARK_TICKER)
 
     benchmark_df = load_ohlcv_from_db(benchmark_ticker, limit=window_bars + 10)
     kospi_return = _return_60d_from_df(benchmark_df, window=window_bars)
@@ -188,3 +198,30 @@ def load_prev_sector_rs(
         return None
     prev_date = cutoff_row["date"]
     return prev_date, load_sector_rs_snapshot(prev_date, market)
+
+
+async def refresh_sector_rs_all_markets(
+    date_str: str,
+    *,
+    etfs: list[tuple[str, str]] | None = None,
+    markets: tuple[str, ...] = ("KOSPI", "KOSDAQ"),
+) -> int:
+    """양 시장 섹터 RS 계산 + 영속 (ADVISOR-CORE-001 M1-c). 적재된 시장 수 반환.
+
+    같은 테마 ETF 라도 벤치마크가 다르면 초과수익이 달라진다 — 코스피 대비로는 회피인
+    섹터가 코스닥 대비로는 강세일 수 있다. 시장별 독립 graceful (한쪽 지수 OHLCV 가
+    없어도 나머지는 적재).
+    """
+    done = 0
+    for market in markets:
+        try:
+            rows = await compute_sector_rs(etfs, market=market)
+            if not rows:
+                log.warning("sector_rs_market_empty", market=market, date=date_str)
+                continue
+            persist_sector_rs(date_str, market, rows)
+            done += 1
+            log.info("sector_rs_refreshed", market=market, date=date_str, sectors=len(rows))
+        except Exception as e:  # noqa: BLE001 — 한 시장 실패가 나머지를 막지 않음
+            log.warning("sector_rs_market_failed", market=market, error=str(e))
+    return done

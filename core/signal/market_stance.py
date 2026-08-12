@@ -224,11 +224,26 @@ def _short_sector(ticker: str | None, full: str) -> str:
     return stem or str(full)
 
 
-def _collect_sectors(db: Any, as_of: str) -> SectorBands:
+SECTOR_BENCHMARK_MARKET = "KOSPI"
+
+
+def _collect_sectors(db: Any, as_of: str, market: str = SECTOR_BENCHMARK_MARKET) -> SectorBands:
+    """섹터 3밴드. **벤치마크 시장을 하나로 고정**한다 (M1-c 이후 양 시장이 적재되므로).
+
+    같은 테마가 코스피 대비·코스닥 대비 두 행으로 존재한다 — 둘 다 읽으면 섹터가 중복되고
+    한 섹터가 강세·회피 양쪽에 걸리는 모순이 생긴다. 판세의 기준 시장은 KOSPI 로 두고,
+    코스닥 대비 값은 필요할 때 별도로 조회한다(현재는 미사용 — 과잉 노출 회피).
+    """
     rows = db.fetch_all(
-        "SELECT sector, etf_ticker, rs_ratio FROM sector_rs_snapshot WHERE date = ? "
-        "AND rs_ratio IS NOT NULL ORDER BY rs_ratio DESC", (as_of,),
+        "SELECT sector, etf_ticker, rs_ratio FROM sector_rs_snapshot "
+        "WHERE date = ? AND market = ? AND rs_ratio IS NOT NULL ORDER BY rs_ratio DESC",
+        (as_of, market),
     )
+    if not rows:   # 해당 시장 미적재 시 시장 무관 폴백 (구 데이터 호환)
+        rows = db.fetch_all(
+            "SELECT sector, etf_ticker, rs_ratio FROM sector_rs_snapshot WHERE date = ? "
+            "AND rs_ratio IS NOT NULL ORDER BY rs_ratio DESC", (as_of,),
+        )
     bands = SectorBands()
     for r in rows:
         e = SectorEntry(
