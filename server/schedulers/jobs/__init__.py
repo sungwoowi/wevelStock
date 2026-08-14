@@ -39,18 +39,39 @@ def _news_premarket_cfg() -> dict:
     return (load_news_source_config().get("premarket") or {})
 
 
+# 절전·바쁜 루프 내성 기본값 (2026-08-13 — 같은 계열 사고 세 번째).
+#   APScheduler 기본 misfire grace = **1초**라, 노트북 덮개 절전이나 이벤트 루프가 1초만
+#   바빠도 그 회차가 영구 스킵된다. 06-15(절전)·07-07(파이프라인 잡)에서 두 번 보강했는데
+#   그때마다 *일부* 등록 지점만 고쳐서, 08-10~08-12 `chart_ohlcv` 갱신 전멸로 재발했다.
+#   증거 = 유예 1h 잡(daily_refresh·auto_signal)이 쓰는 universe_membership 은 그 사흘 행이
+#   멀쩡한데 유예 1초인 chart refresh 만 0행. **모든 infra 잡에 같은 내성을 준다.**
+_MISFIRE_KW: dict = {
+    "misfire_grace_time": MISFIRE_GRACE_SEC,
+    "coalesce": True,
+    "max_instances": 1,
+}
+
+
 def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
     cfg = get_config().scheduler
     tz = get_config().timezone
     registered = 0
     if cfg.backup.cron:
-        scheduler.add_job(run_backup, _cron_from_expr(cfg.backup.cron, tz), id="infra::backup")
+        scheduler.add_job(
+            run_backup, _cron_from_expr(cfg.backup.cron, tz), id="infra::backup", **_MISFIRE_KW
+        )
         registered += 1
     if cfg.daily_rollup.cron:
-        scheduler.add_job(run_daily_rollup, _cron_from_expr(cfg.daily_rollup.cron, tz), id="infra::daily_rollup")
+        scheduler.add_job(
+            run_daily_rollup, _cron_from_expr(cfg.daily_rollup.cron, tz),
+            id="infra::daily_rollup", **_MISFIRE_KW,
+        )
         registered += 1
     if cfg.weekly_rollup.cron:
-        scheduler.add_job(run_weekly_rollup, _cron_from_expr(cfg.weekly_rollup.cron, tz), id="infra::weekly_rollup")
+        scheduler.add_job(
+            run_weekly_rollup, _cron_from_expr(cfg.weekly_rollup.cron, tz),
+            id="infra::weekly_rollup", **_MISFIRE_KW,
+        )
         registered += 1
     if cfg.monthly_rollup.day:
         scheduler.add_job(
@@ -62,6 +83,7 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
                 timezone=tz,
             ),
             id="infra::monthly_rollup",
+            **_MISFIRE_KW,
         )
         registered += 1
     if cfg.memory_cleanup.day:
@@ -74,6 +96,7 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
                 timezone=tz,
             ),
             id="infra::memory_cleanup",
+            **_MISFIRE_KW,
         )
         registered += 1
     # INFRA-CHART-DATA-001 — 평일 18:00 KST chart_ohlcv refresh (config 불필요, 고정 cron)
@@ -82,6 +105,7 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=tz),
         id="infra::chart_ohlcv_refresh",
         replace_existing=True,
+        **_MISFIRE_KW,
     )
     registered += 1
     # INFRA-FUNDAMENTAL-DATA-001 — 일요일 18:00 KST fundamentals refresh (config 불필요, 고정 cron)
@@ -90,6 +114,7 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
         CronTrigger(day_of_week="sun", hour=18, minute=0, timezone=tz),
         id="infra::fundamentals_refresh",
         replace_existing=True,
+        **_MISFIRE_KW,
     )
     registered += 1
     # 평일 18:05 KST 일일 적재 통합 허브 (고정 cron). macro(snapshot_macro 4단계) + 뉴스 합류.
