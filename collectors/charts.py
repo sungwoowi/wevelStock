@@ -189,8 +189,12 @@ def compute_indicators(ohlcv: pd.DataFrame) -> dict[str, Any]:
 
     Default 6:
       1. 월봉 7MA / 20MA
-      2. 주봉 10MA / 20MA / 60MA
-      3. 일봉 4MA / 7MA / 20MA / 60MA / 120MA
+      2. 주봉 5MA / 10MA / 20MA / 60MA
+      3. 일봉 4MA / 7MA / 13MA / 20MA / 60MA / 120MA
+
+    일봉 13 · 주봉 5 는 2026-08-13 사용자 이평 체계(일 7·13·20·60·120 / 주 5·10·20 /
+    월 7)에 맞춘 **가산**이다. 기존 키는 전부 보존 — 소비처(render_chart_data_md·
+    technicals·alpha_posture) 무영향. 구조 해석은 `core/signal/ma_structure.py`.
       4. MACD 12-26-9 (daily)
       5. 거래량 20일 이평 + 오늘 거래량 / 20일 이평 (spike 비율)
       6. 52주 (252 영업일) 고저 + 현재가 위치
@@ -213,7 +217,7 @@ def compute_indicators(ohlcv: pd.DataFrame) -> dict[str, Any]:
     out["current_close"] = _safe_last(close)
 
     # 1) 일봉 MA
-    for n in (4, 7, 20, 60, 120):
+    for n in (4, 7, 13, 20, 60, 120):
         if len(close) >= n:
             out["daily_ma"][f"ma{n}"] = _safe_last(close.rolling(window=n).mean())
         else:
@@ -231,14 +235,14 @@ def compute_indicators(ohlcv: pd.DataFrame) -> dict[str, Any]:
         out["reasons"].append(f"weekly resample 실패: {e}")
     if len(weekly):
         wclose = weekly["close"]
-        for n in (10, 20, 60):
+        for n in (5, 10, 20, 60):
             if len(wclose) >= n:
                 out["weekly_ma"][f"ma{n}"] = _safe_last(wclose.rolling(window=n).mean())
             else:
                 out["weekly_ma"][f"ma{n}"] = None
                 out["reasons"].append(f"주봉 {n}MA 데이터 부족 ({len(wclose)}봉)")
     else:
-        for n in (10, 20, 60):
+        for n in (5, 10, 20, 60):
             out["weekly_ma"][f"ma{n}"] = None
 
     # 3) 월봉 MA — resample('ME') 월말 종가 기준
@@ -530,7 +534,10 @@ def render_chart_data_md(chart: ChartData, *, name: str | None = None) -> str:
     lines.append("### 주봉 추세")
     lines.append("| 지표 | 값 | 현재가 대비 |")
     lines.append("|---|---|---|")
-    for k, label in (("ma10", "주봉 10MA"), ("ma20", "주봉 20MA"), ("ma60", "주봉 60MA")):
+    for k, label in (
+        ("ma5", "주봉 5MA"), ("ma10", "주봉 10MA"),
+        ("ma20", "주봉 20MA"), ("ma60", "주봉 60MA"),
+    ):
         v = wma.get(k)
         lines.append(f"| {label} | {_fmt_price(v)} | {_fmt_pct(cur, v)} |")
     lines.append("")
@@ -541,8 +548,8 @@ def render_chart_data_md(chart: ChartData, *, name: str | None = None) -> str:
     lines.append("| 지표 | 값 | 현재가 대비 |")
     lines.append("|---|---|---|")
     for k, label in (
-        ("ma4", "일봉 4MA"), ("ma7", "일봉 7MA"), ("ma20", "일봉 20MA"),
-        ("ma60", "일봉 60MA"), ("ma120", "일봉 120MA"),
+        ("ma4", "일봉 4MA"), ("ma7", "일봉 7MA"), ("ma13", "일봉 13MA"),
+        ("ma20", "일봉 20MA"), ("ma60", "일봉 60MA"), ("ma120", "일봉 120MA"),
     ):
         v = dma.get(k)
         lines.append(f"| {label} | {_fmt_price(v)} | {_fmt_pct(cur, v)} |")

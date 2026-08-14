@@ -53,6 +53,37 @@ def _flow(db, date, market, foreign, institution=0, individual=0, pension=0):
     )
 
 
+def _ohlcv(db, ticker, *, end="2026-08-12", bars=260, start=100.0, rate=0.004):
+    """일봉 적재 — F3 이평 구조의 유일한 입력. 기하 상승이라 정배열이 나온다.
+
+    260봉 = 일봉 120MA·주봉 20MA(100일)·월봉 7MA(~147일)를 모두 채우는 최소치.
+    `execute` 는 호출마다 커넥션을 여닫으므로 **executemany 한 번**으로 넣는다.
+    """
+    import pandas as pd
+
+    dates = pd.bdate_range(end=pd.Timestamp(end), periods=bars)
+    rows, price = [], start
+    for d in dates:
+        rows.append((ticker, d.strftime("%Y-%m-%d"), price, price * 1.01, price * 0.99,
+                     price, 1000, f"{end}T18:00:00+09:00"))
+        price *= 1 + rate
+    db.executemany(
+        "INSERT OR REPLACE INTO chart_ohlcv "
+        "(ticker, date, open, high, low, close, volume, adjusted, fetched_at) "
+        "VALUES (?,?,?,?,?,?,?,1,?)",
+        rows,
+    )
+
+
+def _universe(db, date, ticker, name, *, rank=1, market="KOSPI", change_pct=3.0):
+    db.execute(
+        "INSERT OR REPLACE INTO universe_membership "
+        "(date, market, ticker, list_type, name, rank, trade_amount, change_pct, source) "
+        "VALUES (?,?,?,'trade_value',?,?,?,?,'test')",
+        (date, market, ticker, name, rank, 1_000_000, change_pct),
+    )
+
+
 def _usm(db, date, **kw):
     row = {"date": date, "nasdaq_change_pct": 0.08, "sox_change_pct": -1.16, "vix": 15.22,
            "dxy": 99.72, "us_10y": 4.68, "us_10y_change_bp": 2.0, "gold_change_pct": 1.48,
@@ -805,3 +836,185 @@ def test_small_rounding_difference_is_tolerated(db) -> None:
     _macro(db, "2026-08-12", "KOSPI", index_close=6584.41)
     _index_ohlcv(db, "0001", "2026-08-12", 6584.60)
     assert build_stance_facts("2026-08-12", "postclose").stale_axes == []
+
+
+# --- F3. 이평 구조 축 (지수 + 주도 종목, 2026-08-13) -------------------------
+#
+# 판세에 개별 종목 축이 없어 "삼성전자가 20일선 하단에서 변곡하는 장대양봉" 같은 걸
+# 못 보던 자리. 검증 무게중심 = ① 지수·종목에 **같은 렌즈** ② 낡은 차트는 아예 안 씀
+# ③ 빠진 종목 수를 **숫자로 남김**(조용히 사라지면 갱신 중단을 아무도 모른다).
+
+
+@pytest.fixture()
+def chart_db(db, monkeypatch):
+    """F3 는 collectors.charts.load_ohlcv_from_db 를 거쳐 DB 를 읽는다."""
+    from collectors import charts
+
+    monkeypatch.setattr(charts, "get_db", lambda: db)
+    return db
+
+
+def test_index_structure_collected_for_both_markets(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    _ohlcv(chart_db, "1001")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert [d.name for d in f.structures.indices] == ["코스피", "코스닥"]
+    assert all(d.kind == "index" for d in f.structures.indices)
+
+
+def test_index_structure_reports_order_and_ma20_motion(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    d = build_stance_facts("2026-08-12", "postclose").structures.indices[0]
+    assert d.daily_order == "bullish_stack"
+    assert d.ma20_deviation_pct is not None
+    assert d.ma20_motion in ("diverging", "converging", "flat")
+
+
+def test_leaders_come_from_universe_by_rank(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    for i, (tk, nm) in enumerate([("005930", "삼성전자"), ("000660", "SK하이닉스")], start=1):
+        _universe(chart_db, "2026-08-12", tk, nm, rank=i)
+        _ohlcv(chart_db, tk)
+    names = [d.name for d in build_stance_facts("2026-08-12", "postclose").structures.leaders]
+    assert names == ["삼성전자", "SK하이닉스"]
+
+
+def test_leader_axis_is_capped(chart_db) -> None:
+    """실을 수 있는 종목 수 상한 — 넘치면 md 예산을 먹고 LLM 이 뭉갠다."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    for i in range(ms._MAX_LEADERS + 3):
+        tk = f"90000{i}"
+        _universe(chart_db, "2026-08-12", tk, f"종목{i}", rank=i + 1)
+        _ohlcv(chart_db, tk)
+    leaders = build_stance_facts("2026-08-12", "postclose").structures.leaders
+    assert len(leaders) == ms._MAX_LEADERS
+
+
+def test_stale_chart_is_skipped_not_guessed(chart_db) -> None:
+    """차트가 어제까지면 오늘 이평 변곡을 **말하지 않는다** (근거 없으면 None)."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _universe(chart_db, "2026-08-12", "005930", "삼성전자")
+    _ohlcv(chart_db, "005930", end="2026-08-07")     # 5일 낡음
+    s = build_stance_facts("2026-08-12", "postclose").structures
+    assert s.leaders == []
+    assert s.skipped_stale == 1
+
+
+def test_short_history_is_skipped_with_its_own_counter(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _universe(chart_db, "2026-08-12", "900001", "신규상장")
+    _ohlcv(chart_db, "900001", bars=20)
+    s = build_stance_facts("2026-08-12", "postclose").structures
+    assert s.leaders == []
+    assert s.skipped_short == 1 and s.skipped_stale == 0
+
+
+def test_render_names_skipped_coverage(chart_db) -> None:
+    """빠진 종목을 조용히 지우면 '커버리지가 원래 이만큼'으로 읽힌다."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    _universe(chart_db, "2026-08-12", "005930", "삼성전자")
+    _ohlcv(chart_db, "005930", end="2026-08-07")
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    assert "차트 미갱신 1종" in md
+
+
+def test_total_wipeout_still_warns_instead_of_vanishing(chart_db) -> None:
+    """전멸 시 블록을 통째로 생략하면 갱신 중단이 숨는다 — 2026-08-13 사고의 은폐 경로."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _universe(chart_db, "2026-08-12", "005930", "삼성전자")
+    _ohlcv(chart_db, "005930", end="2026-08-07")
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    assert "산출 0" in md
+    assert "이평 구조·변곡을 언급하지 말 것" in md
+
+
+def test_render_shows_stock_name_never_code(chart_db) -> None:
+    """노출 단은 종목명만 (feedback_no_stock_code_in_display)."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _universe(chart_db, "2026-08-12", "005930", "삼성전자")
+    _ohlcv(chart_db, "005930")
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    assert "삼성전자" in md
+    assert "005930" not in md
+
+
+def test_structure_block_states_the_ma_system(chart_db) -> None:
+    """LLM 이 어떤 이평 체계를 읽고 있는지 사실 블록에 명시 (사용자 정의 체계)."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    assert "일 7·13·20·60·120" in md and "주 5·10·20" in md and "월 7" in md
+
+
+def test_structures_survive_to_dict_for_replay(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    payload = build_stance_facts("2026-08-12", "postclose").to_dict()
+    assert payload["structures"]["indices"][0]["name"] == "코스피"
+
+
+def test_missing_universe_does_not_break_stance(chart_db) -> None:
+    """종목 축이 비어도 판세는 발행된다 (축별 독립 graceful)."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _ohlcv(chart_db, "0001")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.structures.leaders == []
+    assert f.structures.indices and render_stance_facts_md(f)
+
+
+# --- F3′. 섹터 RS 신선도 (2026-08-13) ----------------------------------------
+#
+# 지수와 같은 함정: `sector_rs_snapshot` 행은 매일 생기지만 계산 입력인 ETF 일봉이
+# 멈추면 밴드가 며칠 전 시장을 가리킨다. 08-10~08-12 에 실제로 이 상태로 발행됐다.
+
+
+def test_stale_sector_etf_charts_are_counted(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _sector(chart_db, "2026-08-12", "KOSPI", "반도체", -18.5)
+    chart_db.execute(
+        "UPDATE sector_rs_snapshot SET etf_ticker = '091160' WHERE sector = '반도체'"
+    )
+    _ohlcv(chart_db, "091160", end="2026-08-07")      # 5일 낡은 ETF 차트
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.stale_sector_etfs == 1 and f.sector_etf_total == 1
+
+
+def test_fresh_sector_etf_charts_raise_no_warning(chart_db) -> None:
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _sector(chart_db, "2026-08-12", "KOSPI", "반도체", -18.5)
+    chart_db.execute(
+        "UPDATE sector_rs_snapshot SET etf_ticker = '091160' WHERE sector = '반도체'"
+    )
+    _ohlcv(chart_db, "091160", end="2026-08-12")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.stale_sector_etfs == 0
+    assert "섹터 회전을 오늘의 사실로" not in render_stance_facts_md(f)
+
+
+def test_stale_sector_warning_sits_above_the_numbers(chart_db) -> None:
+    """경고가 밴드 아래 붙으면 LLM 이 숫자를 먼저 읽고 결론을 굳힌다."""
+    _macro(chart_db, "2026-08-12", "KOSPI")
+    _sector(chart_db, "2026-08-12", "KOSPI", "반도체", -18.5)
+    chart_db.execute(
+        "UPDATE sector_rs_snapshot SET etf_ticker = '091160' WHERE sector = '반도체'"
+    )
+    _ohlcv(chart_db, "091160", end="2026-08-07")
+    md = render_stance_facts_md(build_stance_facts("2026-08-12", "postclose"))
+    assert md.index("섹터 ETF 1/1종") < md.index("반도체")
+
+
+def test_stale_sector_does_not_block_publication(chart_db) -> None:
+    """섹터 강등은 **차단이 아니다** — stale_axes 에 들어가면 판세가 통째로 안 나간다."""
+    _macro(chart_db, "2026-08-12", "KOSPI", index_close=6584.41)
+    _index_ohlcv(chart_db, "0001", "2026-08-12", 6584.41)
+    _sector(chart_db, "2026-08-12", "KOSPI", "반도체", -18.5)
+    chart_db.execute(
+        "UPDATE sector_rs_snapshot SET etf_ticker = '091160' WHERE sector = '반도체'"
+    )
+    _ohlcv(chart_db, "091160", end="2026-08-07")
+    f = build_stance_facts("2026-08-12", "postclose")
+    assert f.stale_sector_etfs == 1
+    assert f.stale_axes == []          # 발행 차단은 핵심 축(지수)에만

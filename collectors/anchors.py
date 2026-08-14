@@ -90,10 +90,13 @@ class AlphaResult:
 # ---------------------------------------------------------------------------
 
 
-def _resample_ohlcv(ohlcv: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+def resample_ohlcv(ohlcv: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     """daily DataFrame → weekly (W-FRI) / monthly (ME) resample.
 
     daily 시 그대로 반환.
+
+    public 승격 (2026-08-13) — `core/signal/ma_structure.py` 가 같은 주/월봉 규약을 써야 해서.
+    resample 규약이 두 벌이 되면 주봉 이평이 모듈마다 달라진다 (`_resample_ohlcv` 별칭 유지).
     """
     if timeframe == "daily":
         return ohlcv
@@ -109,6 +112,10 @@ def _resample_ohlcv(ohlcv: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     }
     keep = [c for c in agg if c in ohlcv.columns]
     return ohlcv[keep].resample(rule).agg({k: agg[k] for k in keep}).dropna(subset=["close"])
+
+
+# 기존 호출부 호환 별칭 (모듈 내부 다수 사용).
+_resample_ohlcv = resample_ohlcv
 
 
 def _window_for_timeframe(timeframe: str) -> int:

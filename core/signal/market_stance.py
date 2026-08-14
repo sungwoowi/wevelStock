@@ -34,7 +34,10 @@ SECTOR_AVOID_MAX = -5.0
 GAP_THRESHOLD = 0.5
 
 # 렌더 예산 — Track C 프롬프트에서 판세가 차지할 몫 (SPEC §3-c).
-RENDER_BUDGET_CHARS = 2000
+#   2,000 → 3,000 (2026-08-13, F3 이평 구조 축 합류). 지수 2 + 종목 5 의 구조 줄이
+#   ~700자를 쓴다. 늘린 만큼은 **사실**이지 지시문이 아니라 Track C 다이어트 방향과
+#   어긋나지 않는다 (지시문 감축 · 사실 증가 = SPEC §3-c 역전).
+RENDER_BUDGET_CHARS = 3000
 _MAX_SECTORS_PER_BAND = 5
 # F2 — 오늘 반응 축. 임계 미만은 잡음이라 안 싣는다.
 _TODAY_MOVE_MIN = 1.0
@@ -128,6 +131,49 @@ class ShortRead:
 
 
 @dataclass
+class StructureDigest:
+    """다중 시간축 이평 구조의 압축 투영 (F3). 지수·종목 **같은 형태**로 담는다.
+
+    `MAStructure` 원본은 시간축×이평×미분이라 통째로 실으면 md 예산을 먹는다. LLM 이
+    실제로 쓰는 건 ① 정배열/역배열 ② 20선과의 관계와 그 **움직임** ③ 월봉 지지력 ④ 라벨.
+    """
+
+    name: str
+    kind: str                                   # index | leader
+    market: str | None = None
+    close: float | None = None
+    change_pct: float | None = None
+    daily_order: str | None = None
+    weekly_order: str | None = None
+    ma20_deviation_pct: float | None = None
+    ma20_motion: str | None = None              # diverging | converging | flat
+    ma20_accel: str | None = None               # accelerating | decelerating | steady
+    monthly_support_event: str | None = None
+    monthly_months_held: int | None = None
+    labels: list[str] = field(default_factory=list)
+    bars: int = 0
+    data_date: str | None = None
+
+
+@dataclass
+class StructureRead:
+    """F3 — 지수·주도 종목의 이평 구조 축.
+
+    판세에 개별 종목 축이 없어 *"삼성전자가 20일선 하단에서 변곡하는 장대양봉"* 같은 걸
+    못 보던 자리를 메운다. 사용자 정의 체계(일 7·13·20·60·120 / 주 5·10·20 / 월 7)를
+    **지수와 종목에 같은 렌즈로** 적용한다.
+    """
+
+    indices: list[StructureDigest] = field(default_factory=list)
+    leaders: list[StructureDigest] = field(default_factory=list)
+    # 차트가 안 갱신돼 구조를 못 낸 **종목** 수(지수 제외 — 지수는 stale_axes 가 경고).
+    # 조용히 빼면 "커버리지가 원래 이만큼"으로 읽히므로 숫자로 남긴다
+    # (2026-08-13 갱신 3일 전멸 사고가 정확히 그렇게 숨었다).
+    skipped_stale: int = 0
+    skipped_short: int = 0
+
+
+@dataclass
 class StanceFacts:
     as_of: str
     session: str
@@ -137,10 +183,16 @@ class StanceFacts:
     flows: FlowRead = field(default_factory=FlowRead)
     assets: AssetRead = field(default_factory=AssetRead)
     shorts: ShortRead = field(default_factory=ShortRead)
+    structures: StructureRead = field(default_factory=StructureRead)
     # 신선도 (2026-08-12 사고) — 지수 차트가 5일 멈췄는데 breadth·야간선물은 실시간이라
     # "반쯤 신선한" 판세가 나갔다. 완전히 죽었으면 알아챘을 것을 반쯤 살아서 못 잡았다.
     index_data_date: str | None = None
     stale_axes: list[str] = field(default_factory=list)
+    # 섹터 RS 를 떠받치는 ETF 차트 중 오늘 봉이 없는 수. 60일 초과수익은 ETF 일봉에서
+    # 나오므로 차트가 멈추면 밴드가 통째로 과거를 가리키는데, 스냅샷 행 날짜는 오늘이라
+    # 날짜 검사로는 안 잡힌다 (2026-08-13: ETF 14종이 5일 낡은 채 밴드가 발행되고 있었다).
+    stale_sector_etfs: int = 0
+    sector_etf_total: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """facts_json 영속용 — point-in-time 리플레이 재현."""
@@ -383,6 +435,28 @@ def _index_freshness(
     return latest, []
 
 
+def _sector_freshness(db: Any, as_of: str) -> tuple[int, int]:
+    """(낡은 ETF 수, 전체 ETF 수) — 섹터 밴드가 오늘 차트로 계산됐는지.
+
+    지수와 같은 함정이다. `sector_rs_snapshot` 행은 매일 생기지만 그 계산의 입력인
+    ETF 일봉이 멈춰 있으면 밴드는 며칠 전 시장을 가리킨다. 그래서 스냅샷 날짜가 아니라
+    **입력 차트의 신선도**를 본다 (원천이 아니라 소비값을 검증하는 것과 같은 원리).
+    """
+    rows = db.fetch_all(
+        """
+        SELECT s.etf_ticker AS ticker,
+               (SELECT MAX(c.date) FROM chart_ohlcv c WHERE c.ticker = s.etf_ticker) AS last_bar
+          FROM (SELECT DISTINCT etf_ticker FROM sector_rs_snapshot
+                 WHERE date = ? AND rs_ratio IS NOT NULL AND etf_ticker IS NOT NULL) s
+        """,
+        (as_of,),
+    )
+    if not rows:
+        return 0, 0
+    stale = sum(1 for r in rows if not r["last_bar"] or str(r["last_bar"]) < as_of)
+    return stale, len(rows)
+
+
 def build_stance_facts(as_of: str, session: str) -> StanceFacts:
     """판세 결정론 팩트 수집 — DB read only. LLM 0 · 외부 호출 0.
 
@@ -392,16 +466,160 @@ def build_stance_facts(as_of: str, session: str) -> StanceFacts:
     db = get_db()
     legs = _collect_legs(db, as_of)
     index_date, stale = _index_freshness(db, as_of, legs)
+    # 섹터 신선도는 **stale_axes 에 넣지 않는다.** 그 집합은 발행 자체를 막는 차단 조건이라
+    # (핵심 축=지수), 섹터 하나 낡았다고 판세 전체를 침묵시키면 과잉이다. 대신 md 에
+    # 경고로 실어 LLM 이 섹터 회전을 단정하지 못하게 한다 — 축 강등이지 차단이 아니다.
+    stale_etfs, total_etfs = _sector_freshness(db, as_of)
+    if stale_etfs:
+        log.warning(
+            "stance_sector_charts_stale", as_of=as_of, stale=stale_etfs, total=total_etfs,
+        )
     return StanceFacts(
         index_data_date=index_date,
         stale_axes=stale,
+        stale_sector_etfs=stale_etfs,
+        sector_etf_total=total_etfs,
         as_of=as_of, session=session, legs=legs,
         night=_collect_night(db, as_of, legs),
         sectors=_collect_sectors(db, as_of),
         flows=_collect_flows(db, as_of),
         assets=_collect_assets(db, as_of),
         shorts=_collect_shorts(as_of),
+        structures=_collect_structures(db, as_of),
     )
+
+
+# ---------------------------------------------------------------------------
+# F3 — 이평 구조 축 (지수 + 주도 종목). 신규 수집 0 — chart_ohlcv·universe_membership read.
+# ---------------------------------------------------------------------------
+
+_MAX_LEADERS = 5              # 판세에 실을 종목 수. 더 실으면 md 예산을 먹고 LLM 이 뭉갠다.
+_LEADER_CANDIDATES = 20       # 이 중 차트가 신선한 것만 위에서부터 채운다.
+_STRUCTURE_MIN_BARS = 60      # 60봉 미만이면 구조를 말하지 않는다 (20선·60선이 안 나온다).
+_INDEX_TICKERS = (("0001", "코스피", "KOSPI"), ("1001", "코스닥", "KOSDAQ"))
+
+
+def _digest_structure(
+    structure: Any,
+    *,
+    name: str,
+    kind: str,
+    market: str | None = None,
+    change_pct: float | None = None,
+    data_date: str | None = None,
+) -> StructureDigest:
+    """`MAStructure` → 판세용 압축 투영. 없는 축은 None 그대로 둔다."""
+    d = StructureDigest(
+        name=name, kind=kind, market=market, change_pct=change_pct, data_date=data_date,
+        labels=list(structure.labels),
+    )
+    daily = structure.daily
+    if daily is not None:
+        d.bars = daily.bars
+        d.close = daily.close
+        d.daily_order = daily.order
+        ma20 = daily.dev(20)
+        if ma20 is not None:
+            d.ma20_deviation_pct = ma20.deviation_pct
+            d.ma20_motion = ma20.motion
+            d.ma20_accel = ma20.accel
+    if structure.weekly is not None:
+        d.weekly_order = structure.weekly.order
+    if structure.monthly_support is not None:
+        d.monthly_support_event = structure.monthly_support.event
+        d.monthly_months_held = structure.monthly_support.months_held
+    return d
+
+
+def _latest_bar_date(db: Any, ticker: str) -> str | None:
+    row = db.fetch_one("SELECT MAX(date) AS d FROM chart_ohlcv WHERE ticker = ?", (ticker,))
+    return str(row["d"]) if row and row["d"] else None
+
+
+def _structure_for_ticker(
+    db: Any, ticker: str, as_of: str
+) -> tuple[Any | None, str | None, str | None]:
+    """(MAStructure, data_date, skip_reason) — 낡거나 짧으면 구조를 만들지 않는다.
+
+    skip_reason ∈ {None, "stale", "short"}. **낡은 차트로 이평 변곡을 말하는 것이
+    이 축에서 가장 위험한 실패**라 신선도를 통과 조건으로 둔다.
+    """
+    from collectors.charts import load_ohlcv_from_db
+    from core.signal.ma_structure import build_ma_structure
+
+    data_date = _latest_bar_date(db, ticker)
+    if data_date is None or data_date < as_of:
+        return None, data_date, "stale"
+    df = load_ohlcv_from_db(ticker)
+    if df is None or len(df) < _STRUCTURE_MIN_BARS:
+        return None, data_date, "short"
+    return build_ma_structure(df, name=ticker), data_date, None
+
+
+def _collect_structures(db: Any, as_of: str) -> StructureRead:
+    """F3 수집 — 지수 2 + 거래대금 상위 주도 종목. 실패해도 판세는 발행된다."""
+    out = StructureRead()
+
+    for ticker, label, market in _INDEX_TICKERS:
+        try:
+            st, data_date, skip = _structure_for_ticker(db, ticker, as_of)
+        except Exception as e:  # noqa: BLE001 — 한 지수 실패가 나머지를 막지 않음
+            log.warning("stance_structure_index_failed", ticker=ticker, error=str(e))
+            continue
+        if st is None:
+            # 지수 신선도는 이미 `stale_axes` 가 최상단에 경고한다. 여기서 또 세면
+            # "차트 미갱신 N종"의 N 이 지수+종목 혼합이 돼 메시지가 거짓이 된다.
+            log.info("stance_structure_index_skipped", ticker=ticker, reason=skip)
+            continue
+        out.indices.append(
+            _digest_structure(st, name=label, kind="index", market=market, data_date=data_date)
+        )
+
+    try:
+        rows = db.fetch_all(
+            """
+            SELECT ticker, name, market, rank, change_pct
+              FROM universe_membership
+             WHERE date = (SELECT MAX(date) FROM universe_membership WHERE date <= ?)
+               AND list_type = 'trade_value'
+             ORDER BY rank
+             LIMIT ?
+            """,
+            (as_of, _LEADER_CANDIDATES),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("stance_structure_universe_failed", as_of=as_of, error=str(e))
+        return out
+
+    from collectors.universe_membership import resolve_stock_name
+
+    for r in rows:
+        if len(out.leaders) >= _MAX_LEADERS:
+            break
+        ticker = r["ticker"]
+        try:
+            st, data_date, skip = _structure_for_ticker(db, ticker, as_of)
+        except Exception as e:  # noqa: BLE001
+            log.warning("stance_structure_leader_failed", ticker=ticker, error=str(e))
+            continue
+        if st is None:
+            if skip == "stale":
+                out.skipped_stale += 1
+            elif skip == "short":
+                out.skipped_short += 1
+            continue
+        out.leaders.append(
+            _digest_structure(
+                st,
+                # 사람·LLM 노출단은 종목명 (feedback_no_stock_code_in_display)
+                name=resolve_stock_name(ticker, r["name"] or ""),
+                kind="leader",
+                market=r["market"],
+                change_pct=_f(r["change_pct"]),
+                data_date=data_date,
+            )
+        )
+    return out
 
 
 def _collect_shorts(as_of: str) -> ShortRead:
@@ -456,6 +674,84 @@ def _eok(v: float | None) -> str:
     return f"{v / 100.0:+,.0f}억"
 
 
+_ORDER_KR = {"bullish_stack": "정배열", "bearish_stack": "역배열", "mixed": "혼조"}
+_MOTION_KR = {"diverging": "벌어짐", "converging": "수렴", "flat": "정체"}
+_ACCEL_KR = {"accelerating": "가속", "decelerating": "감속", "steady": "일정"}
+_SUPPORT_KR = {
+    "regained": "지지 회복", "lost": "이탈", "holding": "지지 유지", "below": "아래",
+}
+
+
+def _structure_line(d: StructureDigest) -> str:
+    """구조 한 줄 — 정지 사진(이격도)이 아니라 **움직임**까지 한 줄에 넣는다."""
+    head = d.name
+    if d.change_pct is not None:
+        head += f" {_pct(d.change_pct)}"
+    bits: list[str] = []
+
+    order = " / ".join(
+        f"{lbl} {_ORDER_KR[o]}"
+        for lbl, o in (("일봉", d.daily_order), ("주봉", d.weekly_order))
+        if o in _ORDER_KR
+    )
+    if order:
+        bits.append(order)
+
+    if d.ma20_deviation_pct is not None:
+        motion = " · ".join(
+            x for x in (_MOTION_KR.get(d.ma20_motion or ""), _ACCEL_KR.get(d.ma20_accel or ""))
+            if x
+        )
+        tail = f" ({motion})" if motion else ""
+        bits.append(f"20일선 {d.ma20_deviation_pct:+.1f}%{tail}")
+
+    if d.monthly_support_event in _SUPPORT_KR:
+        held = f" {d.monthly_months_held}개월" if d.monthly_months_held else ""
+        bits.append(f"월봉 7선 {_SUPPORT_KR[d.monthly_support_event]}{held}")
+
+    line = f"- {head} · {' · '.join(bits)}" if bits else f"- {head}"
+    # 라벨 = 코드가 감지한 **사건**. 앞줄이 이미 말한 것(배열·월봉 지지)은 빼고,
+    # 짧은 축부터 싣는다 — 일봉 변곡이 가장 실행 가능한데 슬롯을 월·주봉이 먹으면 묻힌다.
+    events = [
+        l for l in d.labels
+        if "정배열" not in l and "역배열" not in l and "월봉" not in l
+    ]
+    events.sort(key=lambda l: 0 if "일선" in l else 1)
+    if events:
+        line += f"\n  ↳ {' · '.join(events[:3])}"
+    return line
+
+
+def _render_structures(s: StructureRead) -> list[str]:
+    """F3 블록 — 지수·종목에 같은 이평 렌즈를 적용한 결과."""
+    if not s.indices and not s.leaders and not (s.skipped_stale or s.skipped_short):
+        return []
+    L = ["\n### 이평 구조 (일 7·13·20·60·120 / 주 5·10·20 / 월 7 · 종가 기준)"]
+    if not s.indices and not s.leaders:
+        # **전멸 케이스에서 침묵하지 않는다.** 블록을 통째로 생략하면 "원래 없는 축"으로
+        # 읽혀서, 갱신이 멈춘 걸 아무도 모른다 (2026-08-13 사고가 정확히 그렇게 숨었다).
+        return L + [
+            f"- ⚠ 산출 0 — 차트 미갱신 {s.skipped_stale}종 · 이력 부족 {s.skipped_short}종. "
+            "**이평 구조·변곡을 언급하지 말 것** (근거 데이터가 없다)."
+        ]
+    for d in s.indices:
+        L.append(_structure_line(d))
+    if s.leaders:
+        L.append("- **거래대금 상위 종목**")
+        for d in s.leaders:
+            L.append("  " + _structure_line(d).replace("\n  ↳", "\n    ↳"))
+    skipped = s.skipped_stale + s.skipped_short
+    if skipped:
+        # 조용히 빼면 "커버리지가 원래 이만큼"으로 읽힌다. 빠진 사실을 남긴다.
+        parts = []
+        if s.skipped_stale:
+            parts.append(f"차트 미갱신 {s.skipped_stale}종")
+        if s.skipped_short:
+            parts.append(f"이력 부족 {s.skipped_short}종")
+        L.append(f"- ※ {' · '.join(parts)}은 구조 미산출 — 이 종목들은 판단에서 제외할 것.")
+    return L
+
+
 def _band_line(label: str, entries: list[SectorEntry]) -> str | None:
     if not entries:
         return None
@@ -508,6 +804,10 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
                 f"상승종목이 {leg.breadth_ratio:.0%} — 지수와 종목이 따로 움직인다."
             )
 
+    # F3 — 이평 구조 (지수 + 주도 종목). 지수 바로 뒤 = 사실 우선순위 상위
+    #      (예산 초과 시 아래에서부터 잘리므로 위치가 곧 중요도다).
+    L.extend(_render_structures(facts.structures))
+
     # 야간선물
     n = facts.night
     if n.gap_call != "unknown" or n.nq_futures_pct is not None:
@@ -528,6 +828,13 @@ def render_stance_facts_md(facts: StanceFacts) -> str:
     ]
     if band_lines:
         L.append("\n### 섹터 추세 (60일 초과수익)")
+        if facts.stale_sector_etfs:
+            # 밴드 **바로 위**에 붙인다. 아래에 달면 LLM 이 숫자를 먼저 읽고 결론을 굳힌다.
+            L.append(
+                f"- ⚠ 섹터 ETF {facts.stale_sector_etfs}/{facts.sector_etf_total}종의 차트가 "
+                f"{facts.as_of} 이전에서 멈춰 있다 — 아래 60일 수치는 과거 구간이다. "
+                "**섹터 회전을 오늘의 사실로 단정하지 말 것.**"
+            )
         L.extend(band_lines)
 
     # F2 — 오늘 반응 + 전환. 60일 밴드는 구조적으로 후행하므로 짧은 축을 따로 보여준다.
@@ -639,6 +946,10 @@ _STANCE_SYSTEM = """당신은 한국 주식시장 판세를 읽는 애널리스�
 - 수급은 방향뿐 아니라 연속성과 엇갈림(현물↔선물)을 보라.
 - 자산군(금·유가·금리·달러)이 국내 섹터 흐름과 같은 이야기를 하는지 대조하라.
 - "무너지는 중"과 "눌림"을 구분하고, 무너짐의 **조건**을 미리 걸어라.
+- **이평 구조는 정지 사진이 아니라 움직임으로 읽어라.** "20일선 위 3%"보다 그것이
+  벌어지는 중인지 수렴하는 중인지, 가속인지 감속인지가 국면을 가른다. 지수와 개별
+  종목의 구조가 엇갈리면(지수는 아래인데 주도 종목은 돌파 시도) 그 자체가 신호다.
+- 구조가 "산출 0"이거나 미갱신으로 제외된 종목은 **이평·변곡을 아예 언급하지 마라**.
 - 근거 없는 낙관·비관 금지. 사실에 없는 것은 "아직 알 수 없다"고 하라.
 
 stance 는 셋 중 하나:
