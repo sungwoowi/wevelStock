@@ -14,6 +14,7 @@ PDF 를 텍스트로 추출하고 frontmatter 메타와 함께 reference/ 에 �
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -21,11 +22,14 @@ from pathlib import Path
 
 import frontmatter
 import yaml
+from dotenv import load_dotenv
 from pypdf import PdfReader
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPO_ROOT / "config" / "knowledge_sources.yaml"
 REFERENCE_ROOT = REPO_ROOT / "knowledge" / "reference"
+
+load_dotenv(REPO_ROOT / ".env")
 
 
 def slugify(stem: str) -> str:
@@ -87,8 +91,30 @@ def resolve_subfolder(rel_parent: str, mapping: dict[str, str], default: str) ->
     return rel_parent
 
 
+def resolve_source_root(dept_id: str, raw_source: str) -> Path:
+    """config 의 source 를 실경로로. ${VAR} 환경변수 + ~ 홈 확장.
+
+    OS 마다 외부 자료 위치가 다르므로(Windows OneDrive vs macOS CloudStorage)
+    경로는 하드코딩하지 않고 .env 의 환경변수로 주입한다.
+    미설정 환경변수는 silent fallback 없이 즉시 실패시킨다 — 잘못된 경로로
+    빈 결과를 내놓고 "PDF 0개" 로 보이는 오진을 막기 위해.
+    """
+    expanded = os.path.expandvars(raw_source)
+    unresolved = re.findall(r"\$\{(\w+)\}|\$(\w+)", expanded)
+    if unresolved:
+        missing = sorted({name for pair in unresolved for name in pair if name})
+        missing_list = ', '.join(missing)
+        example = f"{missing[0]}=/Users/<사용자>/Library/CloudStorage/OneDrive-Personal/..."
+        raise SystemExit(
+            f"[{dept_id}] source 의 환경변수가 설정되지 않았습니다: {missing_list}\n"
+            f"  .env 에 다음을 추가하세요. 예:\n"
+            f"    {example}"
+        )
+    return Path(expanded).expanduser()
+
+
 def sync_learning_dept(dept_id: str, dept_cfg: dict) -> dict:
-    source_root = Path(dept_cfg["source"])
+    source_root = resolve_source_root(dept_id, dept_cfg["source"])
     if not source_root.exists():
         raise SystemExit(f"source not found: {source_root}")
 

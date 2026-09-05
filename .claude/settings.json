@@ -24,7 +24,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/pytest_safety.ps1"
+            "command": "python3 .claude/hooks/pytest_safety.py"
           }
         ]
       }

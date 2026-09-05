@@ -3,7 +3,9 @@
 
 # 메인 worktree 의 .venv 를 모든 worktree 에서 공유.
 # worktree 안에서도 uv/python 이 항상 같은 가상환경을 보도록 강제 (google-genai 등 deps 재설치 불필요).
-export VIRTUAL_ENV := `git rev-parse --git-common-dir | sed 's,/\.git/*$,,'` + "/.venv"
+# --path-format=absolute 필수: 메인 레포에서는 --git-common-dir 이 상대경로 '.git' 을 내놓아
+# sed 가 매치되지 않고 VIRTUAL_ENV=.git/.venv 라는 잘못된 값이 되었다.
+export VIRTUAL_ENV := `git rev-parse --path-format=absolute --git-common-dir | sed 's,/\.git/*$,,'` + "/.venv"
 
 # 기본: 명령 목록 출력
 default:
