@@ -4,7 +4,7 @@ title: 차트 데이터 인프라 — KIS daily OHLCV + on-demand snapshot + Def
 team: shared
 type: feature
 status: implemented
-version: 2
+version: 3
 owner: platform
 generates:
   - collectors/charts.py
@@ -13,6 +13,7 @@ generates:
   - tests/test_charts.py
   - tests/test_charts_indicators.py
   - tests/test_chart_ohlcv_db.py
+  - tests/test_chart_refresh_incremental.py
   - tests/test_compose_chart_data_md.py
   - tests/test_run_analyst_chart_injection.py
   - tests/test_stock_analyst_v3_persona.py
@@ -25,6 +26,8 @@ modifies:
   - agents/analysts/stock_analyst/manifest.yaml
   - server/schedulers/jobs/__init__.py
   - justfile
+  - config/screening.yaml
+  - collectors/screening.py
 depends_on:
   - INFRA-RUNTIME-EFFICIENCY-001 v2 (server mode reuse 패턴 미러)
   - ANALYST-PERSONAS-001 v2 (stock_analyst persona v3 정정 트레이스 3 위치)
@@ -33,6 +36,8 @@ contracts:
     version: "1.0"
     description: "compose.build_pipeline_prompt 의 [4] 차트 데이터 블록 markdown 표 형식"
 ---
+
+> **v3 (2026-08-15 증분 갱신 / 2026-09-05 커밋)**: 매일 종목당 1,825봉을 통째로 다시 받던 refresh 를 **증분**으로 전환. KIS 가 1콜당 ~100봉이라 종목당 19 페이징 × 1.1초 ≈ 22초, 200종이면 **73분** — 18:00 갱신이 19:15에야 끝나 18:00 판세·18:05 자동 권고가 **갱신 중인 차트**를 읽고 있었다. 증분(마지막 보유 봉 이후만) → 1콜/종목 ≈ **4분**. 단 증분만으로는 액면분할·유상증자 시 **과거 봉의 수정주가가 통째로 바뀌는 것**을 반영하지 못해 조용히 틀린 차트가 되므로, 장이 없는 **일요일에 전체 재적재**한다 (cron 하나 + 잡 내부 `_should_run_full` 요일 판단, 토요일은 새 봉이 없어 제외). 부수: 적재에 불필요한 `get_current_price` 호출 제거, `retention_bars` 보관 상한 신설(용량 대책 아님 — 무한 증가 상한이며 낮추면 백테스트·월봉 파동이 소비하는 과거 구간을 깎으므로 평소 no-op 값). 정책은 `config/screening.yaml` `chart_refresh` 블록. tests/test_chart_refresh_incremental.py 17 passed.
 
 > **v2 (2026-05-20 cycle 6 구현 완료)**: Phase 1 (텍스트 지표) 풀세트 구현 완료. KIS `inquire-daily-itemchartprice` 페이징 fetch + on-demand snapshot 7 필드 + Default 6 지표 (pandas 기본 rolling/ewm — pandas-ta 미사용, numpy 호환성 위험 회피) + `chart_data_md` `[4]` 블록 자동 주입 + stock_analyst v3 마이크로 정정 3 위치 (환각 가드 2 해제, chart_data_md 출처 명시 강제) + 평일 18:00 KST APScheduler cron + `just refresh-charts` 수동 백업. pytest 341 → 376 passed (회귀 0). production 호출 시 stock_analyst manifest 의 `reads_chart_data: true` + `target_ticker` 명시 시 chart 블록 자동 주입.
 

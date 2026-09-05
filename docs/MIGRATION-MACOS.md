@@ -216,5 +216,8 @@ cd webapp && npm run dev
 
 ## 6. 이전 후 정리
 
+- **`CLAUDE.md` 의 "운영 환경" 절을 갱신한다.** 현재 "플랫폼: **Windows**. 패키지 매니저는 `winget`"
+  으로 적혀 있어, 그대로 두면 맥 세션이 잘못된 전제로 시작한다. macOS / `brew` 로 고칠 것.
+  PowerShell 전용 안내(`$env:TESTING='1'`)도 POSIX 형태를 앞세우도록 정리한다.
 - Windows 쪽 레포는 **DB 검증(§4-4)이 끝날 때까지 지우지 않는다.** 롤백 경로다.
 - 검증 완료 후 Windows 쪽 서버·스케줄러 자동 실행을 해제한다 (텔레그램 Conflict 방지).

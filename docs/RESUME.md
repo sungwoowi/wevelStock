@@ -9,7 +9,9 @@
 
 ## 📍 지금 어디 있나
 
-**현재 위치**: **🧭 ADVISOR-CORE-001 신설 + M1 시장 판세 트랙 라이브 (2026-08-12)**. 사용자가 프로젝트 본질을 재정의 — *"폭등장·폭락장 겪고 간결해졌다. 필요한 건 ①시장분석 ②배분 ③종목 스크리닝·추천. 정량은 결정론, 추론만 LLM"* → **Track A/B 접고 Track C(1콜 2관점) + 시장 판세 트랙(18:00·07:05) 신설** SPEC. M1 을 a(배선)·b(공매도·대주잔고·프로그램)·c(코스닥 섹터 RS)·e(판세 LLM+알림) 구현, **텔레그램 실발송 2회·cron 등록 확인**(1585 passed). M1-d 호가는 *"단타 칠 거 아니면 의미 없다"* 는 사용자 판단으로 **접음**. **사용자 제보 3건이 전부 "모르는 걸 아는 척"** — 신선도·야간선물·근사 폴백 → 셋 다 **"근거 없으면 None"** 으로 통일. 60일 섹터의 구조적 후행은 **다중 시간축**(F2)으로 보완. **다음 = F3 주도 종목 축 → M2 Track C.** [[project_advisor_core_redefinition]]
+**현재 위치**: **💻 macOS 이전 준비 완료 — Windows 종속 3곳 해소 (2026-09-05)**. 사용자가 Windows 데스크탑 → 맥북 **완전 이사**를 결정. 실측 결과 옮길 실물은 **150MB 미만**이었고(DB 108MB + chroma 31MB + `.env`; `data/backups/` 2.5GB·`knowledge/reference/` 1.4GB 는 재생성 대상) **진짜 문제는 용량이 아니라 Windows 종속**이었다. ① **pytest 안전 훅이 `.ps1`** — 맥에 powershell 이 없어 *모든 Bash 호출마다* 실패했을 것이고, 이 훅은 "테스트가 실 BOT_TOKEN 으로 실제 카톡에 스팸 발송" 사고를 막는 장치라 끌 수도 없었다 → 파이썬 포팅(+맥 heredoc 오탐 방지 추가, 12케이스·라이브 양방향 검증) ② `knowledge_sources.yaml` Windows 절대경로 → `${KNOWLEDGE_SOURCE_ROOT}` ③ **그 경로가 이미 깨져 있었다** — 폴더가 OneDrive→Desktop 으로 이사하고 계층이 하나 늘어 `just knowledge-sync` 가 죽어 있었음(정정 후 PDF 31개 인식). 부수로 justfile `VIRTUAL_ENV` 오산정 정정, 워크트리 5·브랜치 15 정리, **`git gc` 로 `.git` 1.4GB→9.4MB**. 3주간 미커밋이던 **chart_ohlcv 증분 갱신**(18:00 갱신 73분→4분, 판세가 갱신 중인 차트를 읽던 경합 해소)도 함께 커밋. **1649 passed**. **다음 = 실제 이전 수행 → F3 주도 종목 축.**
+
+**(직전) 현재 위치**: **🧭 ADVISOR-CORE-001 신설 + M1 시장 판세 트랙 라이브 (2026-08-12)**. 사용자가 프로젝트 본질을 재정의 — *"폭등장·폭락장 겪고 간결해졌다. 필요한 건 ①시장분석 ②배분 ③종목 스크리닝·추천. 정량은 결정론, 추론만 LLM"* → **Track A/B 접고 Track C(1콜 2관점) + 시장 판세 트랙(18:00·07:05) 신설** SPEC. M1 을 a(배선)·b(공매도·대주잔고·프로그램)·c(코스닥 섹터 RS)·e(판세 LLM+알림) 구현, **텔레그램 실발송 2회·cron 등록 확인**(1585 passed). M1-d 호가는 *"단타 칠 거 아니면 의미 없다"* 는 사용자 판단으로 **접음**. **사용자 제보 3건이 전부 "모르는 걸 아는 척"** — 신선도·야간선물·근사 폴백 → 셋 다 **"근거 없으면 None"** 으로 통일. 60일 섹터의 구조적 후행은 **다중 시간축**(F2)으로 보완. **다음 = F3 주도 종목 축 → M2 Track C.** [[project_advisor_core_redefinition]]
 
 **(직전) 현재 위치**: **📣 일일 요약 알림 종목명 전개 + Track A 90초 타임아웃 진단 (2026-08-11)**. 사용자 지적("매일 오는 알림이 카운트만 와서 뭐가 매수인지 알 수가 없다")에서 출발 → `AUTO-SIGNAL-DIGEST-001` 신설·구현·**텔레그램 실발송 검증**(1460 passed). 버킷 5개(매수/매도·지켜볼·변화없음·**미산출 신설**)로 전개 + 밴드 스킵을 "직전 판단 유지"로 정정 + 사유 내부용어 한국어화. **그 압축이 결함을 가리고 있었다** — 08-10 평가 10건인데 요약 합은 5, 사라진 5건 전부 Track A. 진단 결과 **`claude_code.timeout_sec=90` 에 Track A 가 87.7초로 붙어 있음**(Track B 39.3초), 회귀 시점 = `0a23704`(07-17) provider→claude_code. 두 달간 안 보인 이유 = 관측 구멍 3겹(실패 버킷 부재 + 원장 `success=True` 하드코딩 + 로그 파일 미기록). **다음 = F1 timeout 90→180(즉효) → F3·F4 관측 봉합 → 서버 재시작.**
 
@@ -124,33 +126,35 @@
 
 **미해결 부채**: ~~INFRA-SCORE-INPUTS-001 코드 미구현~~ (✅ 2026-05-31 MVP+S3+S1 theme_match+종목 레벨 수급(KIS 3주체) 라이브+**SLOT S2 flow 3축 임계 13종 분포 튜닝·다종목 변별 실증**, pytest 714. **잔여 = breakpoint 중간점 운용 재튜닝(다일 누적 후) / S3 ATH 근처 목표 measured-move / ~~S-Score 배선~~(✅ 2026-06-01) / ~~buy_score 배선~~(✅ 2026-06-01 — CAN SLIM 7축 collector + classify_market_regime + cross-agent collector 직접 호출, 800. **5점수 S/T/α/buy/F 전부 라이브**) / 잔여 = 임계 production 캘리브레이션(RS R1/R2/R3 + regime + buyscore, 다일 누적 후) + 공백 2축 데이터 확장(~~A 연간 EPS 3년~~ ✅2026-06-04 yfinance income_stmt / ~~N 뉴스부=NEWS-SOURCE-001~~ ✅2026-06-07 — buy_score N = 52주 신고가 ⨯ 종목 catalyst_tilt 블렌드(MS-C3, config n_axis_blend). 라이브 005930 N 7.0→4.5)**) / ~~KRX 5주체 + market_breadth 복구~~ (✅/❌ 2026-05-31 종결 — KRX STAT 전체가 **Akamai 봇차단**으로 영구 불가 실증(devtools도 무의미). **market_breadth는 KIS `inquire-index-price` `*_issu_cnt`로 복구**(전체 시장 source=kis_index). **종목 5주체는 KIS 3주체로 영구 확정**(실익≈0). KRX 휴면 helper에 Akamai 폐기 주석 박음) / **ANALYST-PERSONAS-001 옵션 b 정정 노트** (T/F-Score 는 advisory+LLM 권위로 정련됨 — persona 1줄 정정 권고, 별 작업) / **pytest_safety hook 오탐 재발** (2026-06-01 — `884a5b4` 수정은 인용 argv만 처리, git here-string `<<'EOF'` 커밋 본문의 "pytest" 단어는 여전히 차단. 우회=메시지 단어 회피. 근본=hook이 heredoc 본문도 strip하도록 보강, 별 작업) / ~~Flash 코드 라벨 잔존 누출~~ (✅ 2026-05-29 결정론 스크러버 `scrub_code_labels` 해소) / ~~cited_scores 누수~~ (✅ 2026-06-01 — 전략가가 분석가 점수를 LLM 자유텍스트 재추출하다 누락 → `render_prefetched_analyst_outputs` 결정론 점수 구조 직접 주입, 808) / ~~**Track B trader 라우팅 누락**~~ (✅ 2026-06-02 — `track_required.track_b=[trader]` config 블록 + `_resolve_analyst_ids_for_scenario` track 인지 append. 실 경로 검증 swing→trader 포함, 813) / **regime run간 흔들림** (같은 종목 strong/moderate 경계 인접, 히스테리시스 점검) / **Pro 발동 라우팅 미확정** (SLOT S7) / **임원 frame_mode 결정론 배선** (advisory 비결정성 하드닝, SLOT S1) / production UX 부분 답변 정직성 / SLOT S4 정확도 정정 (KIS top30 → KRX manual) / 기존 영역 LLM 3계층 마이그레이션 (`LLM-TIER-MIGRATION-001`) / **gemini transient 503 + provider 명시 fallback 없음** (2026-06-07 MS-D 재확인 — `provider="gemini"` 명시 호출은 503 시 fallback 없이 죽음. probe·analyst 대화 첫 시도 503→재시도 성공. production-chat·analyst 경로에 transient 503 retry 배선 필요, 작은 부채) / **KIS rate limiter 전역화** (`INFRA-KIS-RATELIMIT-001` 후보, 여유 시 — 현 throttle `self._last_call` 인스턴스별 + lock 없는 레이싱이라 snapshot/chart 병렬 fan-out 시 "초당 거래건수 초과" 반복. 토큰은 이미 전역 공유, 호출 간격만 인스턴스별로 남은 빈틈. warning 수준 = retry 1회 + `return_exceptions=True` + DB-first 폴백으로 자가 회복하므로 비차단. 근본 = 프로세스 전역 token-bucket/세마포어. 2026-05-29 진단) / **validate.py cp949 크래시** (여유 시 — Windows 콘솔 cp949 에서 마지막 `✓` 출력 `UnicodeEncodeError`. 검증 자체는 정상, `PYTHONIOENCODING=utf-8` 우회 가능. print 인코딩 가드만 추가하면 됨) / ~~**chart_ohlcv 시드 universe 공백**~~ (✅ 2026-06-02 3세션 — `refresh_all_tickers`가 거래대금 상위 50종 매일 자동 적재(`fetch_universe_tickers`+`_select_refresh_tickers`, fetched_at cap). chart_ohlcv 31→71) / ~~**macro DB 캐시 충실도**~~ (✅ 2026-06-02 3세션 — `distribution_count_25d`/`breadth_source` 컬럼(v9 멱등 ALTER) + round-trip) / ~~**extension_score 천장 포화 = k 약함**~~ (✅/정정 2026-06-02 3세션 — **k 오진**: ma20-아래 100%가 k 무관 10 clamp. C = ma20-아래 거리비례 감점 floor+deadband. magnitude 다일 튜닝 잔여) / **k_below/MA-ride magnitude 다일 튜닝** (2026-06-02 — 보수적 기본(1.0/1.0)만 커밋, universe 누적 후 `--k-below` 스윕 = Top 1) / ~~**persona MA-ride 인용**~~ (✅ 2026-06-04 — stock_picker alignment 축 stale 정정+S-Score Doctrine 해석 지침+Knowledge Categories 갱신, stock_analyst 경량 cross-ref. **canon 주입=부서별 필터 제약**으로 stock_analyst는 ID 직접 인용 X. 106 passed) / ~~**buy_score A축(연간 EPS)**~~ (✅ 2026-06-04 2세션 — yfinance `fetch_annual`(income_stmt Diluted EPS) + `compute_annual_eps_yoy` + A축 배선, 중립 5.0 탈피. 라이브 005930 A 10.0. buy_score 6.5/7축 라이브, 837 passed) / **k_below/MA-ride magnitude 다일 튜닝** (universe 다일 누적 전제 미충족, 매일 장후 refresh 필요) / ~~**sector_rs 일일 적재 cron**~~ (✅ 2026-06-07 — `snapshot_macro` 3단계 `build_market_view` 배선, 904. ~~dev cron 미작동 근본 해소~~(✅ 2026-06-08 — cron·CLI(`just refresh-daily`)·endpoint(`POST /api/infra/refresh-snapshots`) 3-surface `run_daily_refresh` 단일 호출점 + 뉴스 cron 합류. ~~Windows 작업 스케줄러 평일 18:05 등록은 사용자 수동~~ ✅ 2026-06-08 등록 완료 `wevelStock-daily-refresh`(LastTaskResult=0, 로그온 시)) + 순환매 ≥2 평일 라이브 누적 관찰) / ~~**뉴스 종목/섹터 scope 다일 누적**~~ (✅ 2026-06-09 — affected_refs 정규화(종목명→6자리 코드, classify 시 저장) + news_ingest 다중 scope 루프(market+universe 50+섹터 15=66). 조용한 누락 봉합. 989 passed, 라이브 정규화 실발화(Samsung→005930). 잔여 = RSS 한국 소스 보강(현 미국 편중)·종목 catalyst 다일 밀도) / ~~**미장 매크로(INFRA-US-MACRO-SNAPSHOT-001)**~~ (✅ 2026-06-08 — yfinance 재사용 영속 `us_macro_snapshot` + classify_us_risk 결정론(risk_on/off+vix_panic) + MarketView 흡수(entry_posture 단계강등·극단 게이트·one_liner 미장 토큰) + 18:05·장전 둘 다 적재. 라이브 실 risk-off 장 필반 -10.26%→defensive. **966 passed = 왼쪽 뇌 4/4 완성**. 잔여 = FRED·buy_score·risk_on 상향·KOSDAQ·임계 캘리브레이션 SLOT).
 
-**마지막 작업일**: 2026-08-12 (**ADVISOR-CORE-001 신설 + M1 시장 판세 트랙 라이브 + 제보 3건 정정**). 직전 = 2026-08-11 일일 요약 알림·Track A 타임아웃.
-**마지막 세션 로그**: [2026-08-12_advisor-core-market-stance-track.md](c_worked/2026-08-12_advisor-core-market-stance-track.md). 직전 = [2026-08-11_daily-summary-notification-track-a-timeout.md](c_worked/2026-08-11_daily-summary-notification-track-a-timeout.md).
+**마지막 작업일**: 2026-09-05 (**macOS 이전 준비 — Windows 종속 3곳 해소 + chart_ohlcv 증분 갱신 커밋**). 직전 = 2026-08-12 ADVISOR-CORE-001 M1 판세 트랙.
+**마지막 세션 로그**: [2026-09-05_macos-migration-prep-chart-incremental.md](c_worked/2026-09-05_macos-migration-prep-chart-incremental.md). 직전 = [2026-08-12_advisor-core-market-stance-track.md](c_worked/2026-08-12_advisor-core-market-stance-track.md).
 **산출**: `core/config/schema.py`(ChatConfig) + `config/defaults.yaml`(chat.executive_mode_default=true) + `server/api/production_chat.py`(tri-state+`_resolve_executive_mode`) + 신규 테스트 6 + `tests/test_auto_signal.py` stale 수리 + `docs/specs/ENGINE-FUNNEL-REWIRE-001`(roadmap SPEC) + `idea_memo/2026-07-18-five-axis-funnel-engine-refocus.md`. **1430 passed**·validate 0. **서버 재시작 필요**(P0 반영 + 이월된 12:35 케이던스 제거 반영).
 **Git**: feat 1커밋 + docs 1커밋 push (해시는 git log 참조). main 직전 tip=`0a23704`.
 
 ---
 
-## 🎯 다음에 할 일 (Top 3) — F3 주도 종목 → M2 Track C → 라이브 관측
+## 🎯 다음에 할 일 (Top 3) — 맥북 이전 수행 → F3 주도 종목 → 증분 라이브 관측
 
-**🧭 2026-08-12** — ADVISOR-CORE-001 M1(판세)이 라이브에 올랐다. 서버 재시작 완료·cron 13건 등록 확인.
-**다음 세션은 `docs/specs/ADVISOR-CORE-001-market-stance-and-track-c.md` 부터 읽고 시작.**
+**💻 2026-09-05** — Windows → 맥북 **완전 이사** 결정. 코드 쪽 준비는 끝났고(종속 3곳 해소·검증 완료), 남은 건 실제 이동이다.
+**다음 세션은 `docs/MIGRATION-MACOS.md` 부터 읽고 시작.** 이전이 끝나면 곧장 ADVISOR-CORE-001 F3 으로 복귀한다.
 
-### 1. F3 주도 종목 축 ⭐
-- **왜**: 판세에 **개별 종목 축이 없다**. 시장·섹터 레벨만 봐서 *"삼성전자가 20일선 하단에서 변곡하는 장대양봉"* 같은 걸 못 본다. 체감이 가장 큰 갭이고, "반도체 투심이 바닥에서 돈다"는 판단이 여기서 나온다.
+### 1. 맥북 이전 수행 ⭐
+- **왜**: 코드 준비는 됐지만 **실물이 아직 안 옮겨졌다**. DB(108MB)가 유일한 진짜 자산이고, `.env` 를 빠뜨리면 아무것도 안 돈다.
+- **범위**: `docs/MIGRATION-MACOS.md` §2~§4. 옮길 것 = `.env`(2KB) + `stock-advisor.sqlite`(108MB) + `data/chroma/`(31MB) + notifications·queries(3MB). **`data/backups/` 2.5GB 와 `knowledge/reference/` 1.4GB 는 두고 간다.**
+- **검증**: §4 체크리스트 전부. 특히 **§4-3 훅이 실제로 막는지**(조용히 죽으면 실 API 호출 사고) + **§4-4 DB 행 수 대조**(team_outputs 1312 / briefing_parts 699 / llm_call_cache 2823).
+- **주의**: 이전 완료·검증 전까지 Windows 레포를 지우지 않는다(롤백 경로). 검증 후 Windows 쪽 서버·스케줄러를 꺼야 텔레그램 `getUpdates` Conflict 가 안 난다.
+
+### 2. F3 주도 종목 축 (이전 전 원래 Top 1)
+- **왜**: 판세에 **개별 종목 축이 없다**. 시장·섹터 레벨만 봐서 *"삼성전자가 20일선 하단에서 변곡하는 장대양봉"* 같은 걸 못 본다. "반도체 투심이 바닥에서 돈다"는 판단이 여기서 나온다.
 - **범위**: 지수를 끌어올린/끌어내린 상위 종목 + 20일선 관계 + 당일 등락. `kr_leading_stocks`·`universe_membership`·`chart_ohlcv` 재사용 → **신규 수집 0 예상**.
 - **방식**: F2 와 같은 결 — 코드가 먼저 감지해 이름 붙이기(예: `20일선 상향 돌파 시도`). 판세 md 예산(2,000자) 재검 필요.
 
-### 2. M2 — Track C 착수
-- **왜**: Track A/B 는 종목당 콜 2배를 쓰면서 같은 결론(wait)을 냈고, 분석가 9 는 자동 경로에서 이미 우회 중. C 하나로 합치면 콜이 절반이 되고 예산 월 ₩30,000 이 성립한다.
-- **범위**: `agents/strategists/track_c/`(페르소나 **≤4,000자 하드 상한**) + manifest `canon_categories` 선별 + 라우팅 2줄 + 판세 advisory 주입 + 2관점(`data.mid_term`/`short_term`+`divergence_reason`) 렌더 + A/B 비활성 + 상위 10종·cadence 1회.
-- **핵심**: 다이어트는 축소가 아니라 **역전** — 지시문 42,850→7,500자, 사실은 오히려 증가(종목 점수표 613→3,000). 사실 비중 30%→63% (SPEC §3-c 표).
+### 3. chart 증분 갱신 라이브 관측
+- **왜**: 코드는 **테스트만 통과했고 라이브 1주기를 아직 안 돌았다**. 특히 일요일 전체 재적재는 실제로 발동한 적이 없다.
+- **범위**: `chart_refresh_cron_done` 로그의 `mode`·`bars_requested`·`elapsed_s` 확인. 평일 증분이 ≈4분인지, 일요일 전체가 도는지, 18:00 판세가 더 이상 갱신 중인 차트를 읽지 않는지.
+- **주의**: 맥으로 이전한 뒤 관측하는 게 맞다 — Windows 에서 봐도 어차피 다시 봐야 한다.
 
-### 3. 라이브 관측 1~2일 + 비용 검산
-- **왜**: 판세가 자동으로 나가는지, 예산이 실제로 맞는지 실측 없이는 모른다.
-- **범위**: 18:00·07:05 판세 실물 확인(워딩·정보량 조정) / `/ops/llm-cost` 월 환산 ₩30,000 검산 / 07:00 기존 브리핑과 중복도 비교(D5) 후 흡수·하이브리드 결정 / 야간선물 기준선(`k200_futures_day_close`)이 주간에 쌓이는지 확인.
-
-(이월: **P1 `KNOWLEDGE-INTAKE-001` spec-interview** / **P2 채점 루프**(track record 0 해소, P3 재배선·P5 통폐합의 전제) / **M1-d 호가**는 *"단타 칠 거 아니면 의미 없다"* 로 **접음**.)
+(이월: **M2 Track C 착수**(A/B 접고 1콜 2관점, 페르소나 ≤4,000자) / **P1 `KNOWLEDGE-INTAKE-001` spec-interview** / **P2 채점 루프**(track record 0 해소) / **M1-d 호가**는 *"단타 칠 거 아니면 의미 없다"* 로 **접음**.)
 
 ## 🚀 시연 마일스톤 (시연 가능 단위)
 
@@ -343,7 +347,13 @@
 
 ### 꼭 알아둘 판단
 
-**이번 세션에 굳힌 판단 (2026-08-12 ADVISOR-CORE-001 M1 판세 트랙)**
+**이번 세션에 굳힌 판단 (2026-09-05 macOS 이전 준비 + 증분 갱신)**
+- **크로스 플랫폼 안전장치는 OS 종속으로 짓지 않는다**: pytest 안전 훅이 `.ps1` 이라 맥에서 *모든 Bash 호출마다* 실패했을 것이고, 훅은 실패해도 조용해서 **안전장치가 죽은 줄 모른 채** 실 API 호출 사고로 갔을 것이다. 의존성 0 파이썬 + `python3` 로 통일. 이전 후 **훅이 실제로 막는지 눈으로 확인**하는 절차를 체크리스트에 넣었다.
+- **머신 종속 경로는 config 가 아니라 .env 로**: `knowledge_sources.yaml` 의 하드코딩 절대경로는 **이미 깨져 있었는데 아무도 몰랐다**(폴더가 이사했고 계층이 하나 늘었다). 미설정 시 silent fallback 금지 — 즉시 실패해야 "PDF 0개"를 정상으로 오해하지 않는다. [[feedback_no_false_certainty]]
+- **증분화의 진짜 이유는 속도가 아니라 경합**: 18:00 차트 갱신이 73분 걸려 19:15에 끝나는 바람에 **18:00 판세·18:05 자동 권고가 갱신 중인 차트를 읽고 있었다**. 느린 것보다 *틀린 것을 읽는 것*이 문제. 다만 증분만으론 액면분할 시 과거 수정주가가 어긋나므로 **주 1회 전체 재적재**가 짝으로 필요하다.
+- **`git gc` 를 한 번도 안 돌린 레포는 30배 부풀어 있다**: 루즈 오브젝트 4181개 1.34GiB → 팩 4.03MiB. 기기 이전처럼 레포를 통째로 옮길 일이 생기면 gc 를 먼저 돌린다.
+
+**직전 세션 판단 (2026-08-12 ADVISOR-CORE-001 M1 판세 트랙)**
 - **"모르면 모른다고 한다"를 코드 규약으로 격상**: 제보 3건이 전부 같은 병이었다 — 신선도(5일 전 지수를 오늘 값으로) · 야간선물(전일대비 누적을 야간 이동으로) · 근사 폴백(빈 응답을 0으로). 셋 다 **근거 없으면 None**, 핵심 축이 낡으면 **LLM 호출조차 안 한다**. [[feedback_no_false_certainty]]
 - **신선도는 원천이 아니라 소비값에서 검증한다**: `chart_ohlcv` 를 고쳐도 `market_macro_snapshot` 이 옛 값을 복사하고 있으면 똑같이 틀린다(실측). 날짜만 오늘인 행에 속지 말 것.
 - **엇갈림·전환은 코드가 먼저 이름을 붙인다**: 나열만 하면 LLM 이 지나친다. 추세↔상승종목폭, 현물↔선물, 60일↔최근(rebound_attempt/fatigue)을 결정론으로 감지해 문장으로 명시. 실측에서 2차전지 60일 −18.3%인데 20일 +12.4% 를 잡았다.
