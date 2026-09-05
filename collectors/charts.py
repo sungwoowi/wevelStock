@@ -29,7 +29,7 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -691,47 +691,144 @@ async def _select_refresh_tickers(
     return tickers, meta
 
 
-async def refresh_all_tickers(*, period_days: int = 1825) -> dict[str, Any]:
+def _last_bar_dates(db: Any, tickers: list[str]) -> dict[str, str]:
+    """ticker → 보유 마지막 봉 날짜. 증분 폭 산정의 입력 (한 방에 읽어 N+1 쿼리 회피)."""
+    rows = db.fetch_all(
+        "SELECT ticker, MAX(date) AS d FROM chart_ohlcv GROUP BY ticker"
+    )
+    have = {r["ticker"]: str(r["d"]) for r in rows if r["d"]}
+    return {t: have[t] for t in tickers if t in have}
+
+
+def _incremental_period_days(
+    last_date: str | None, today: date, cfg: dict[str, Any]
+) -> int:
+    """이 종목에 요청할 봉 수. 보유분이 없거나 너무 오래 비었으면 전체.
+
+    KIS 는 1콜당 ~100봉을 주고 `len(bars) >= period_days` 에서 페이징을 멈춘다.
+    그래서 작은 수를 주면 **1콜**로 끝난다 — 73분이 4분이 되는 지점이 정확히 여기다.
+
+    거래일 환산: 달력 gap × 5/7 + 여유. 여유는 정정·누락 봉을 덮기 위한 것이고,
+    upsert 가 멱등이라 겹쳐 받아도 해가 없다 (모자라면 구멍이 남는다 — 넉넉히 잡는다).
+    """
+    full = int(cfg["full_period_days"])
+    if not last_date:
+        return full
+    try:
+        gap_days = (today - date.fromisoformat(last_date)).days
+    except ValueError:
+        return full
+    if gap_days <= 0:
+        gap_days = 1
+    if gap_days > int(cfg["max_incremental_gap_days"]):
+        return full
+    bars = int(gap_days * 5 / 7) + int(cfg["incremental_buffer_bars"])
+    return max(int(cfg["min_incremental_bars"]), min(bars, full))
+
+
+def prune_ohlcv_history(retention_bars: int) -> dict[str, Any]:
+    """종목당 최신 `retention_bars` 봉만 남기고 그 이전을 삭제. 0 이하면 no-op.
+
+    ⚠ 용량 대책이 아니다 — 실측 연 증가 ~14MB. 무한 증가를 막는 상한이고, 낮추면
+    백테스트·월봉 파동이 소비하는 과거 구간을 직접 깎는다. 그래서 기본값을 현재
+    보유량보다 한참 위에 둔다 (평소 no-op, 10년 뒤에야 발동).
+    """
+    if retention_bars <= 0:
+        return {"pruned": 0, "tickers": 0, "enabled": False}
+    db = get_db()
+    rows = db.fetch_all(
+        "SELECT ticker, COUNT(*) AS n FROM chart_ohlcv GROUP BY ticker HAVING n > ?",
+        (retention_bars,),
+    )
+    pruned = 0
+    for r in rows:
+        cur = db.execute(
+            "DELETE FROM chart_ohlcv WHERE ticker = ? AND date < ("
+            "  SELECT MIN(date) FROM (SELECT date FROM chart_ohlcv WHERE ticker = ?"
+            "   ORDER BY date DESC LIMIT ?))",
+            (r["ticker"], r["ticker"], retention_bars),
+        )
+        pruned += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    if pruned:
+        log.info("chart_ohlcv_pruned", rows=pruned, tickers=len(rows), keep=retention_bars)
+    return {"pruned": pruned, "tickers": len(rows), "enabled": True}
+
+
+async def refresh_all_tickers(
+    *, period_days: int | None = None, full: bool = False
+) -> dict[str, Any]:
     """`chart_ohlcv` ticker (seed + 당일 leading universe + 누적 DB cap) daily refresh.
 
     APScheduler cron `0 18 * * 1-5` + `just refresh-charts` 진입점.
     rate limit 자체는 KISClient 의 _CALL_INTERVAL=1.1s 가 보장.
 
     대상 선정 = `_select_refresh_tickers` (seed 지수 0001/1001 + 14 섹터 ETF + 당일 거래대금
-    상위 universe + 누적 DB 종목을 max_tickers 상한 내에서 fetched_at 최신순). 첫 발동 시 새 종목은
-    KIS get_daily_chart 로 백필됨.
+    상위 universe + 누적 DB 종목을 max_tickers 상한 내에서 fetched_at 최신순).
+
+    **증분 기본** (2026-08-15): 종목마다 보유 마지막 봉 이후만 받는다. 신규 종목이나
+    오래 빈 종목만 전체를 받는다. 시세 snapshot(get_current_price)은 **호출하지 않는다** —
+    적재에 불필요한데 종목당 1콜(1.1초)을 더 썼다.
+
+    Args:
+        period_days: 모든 종목에 강제할 봉 수. None = 종목별 증분 산정.
+        full: True 면 전체 재적재 (수정주가 정합 — 주 1회). period_days 보다 우선순위 낮음.
 
     Returns:
-        {"refreshed": [...], "failed": [...], "elapsed_s": float, "universe": {...}}
+        {"refreshed": [...], "failed": [...], "elapsed_s": float, "universe": {...},
+         "mode": "incremental"|"full"|"forced", "bars_requested": int, "pruned": {...}}
     """
+    from collectors.screening import get_chart_refresh_config
+
+    cfg = get_chart_refresh_config()
     db = get_db()
     started = time.monotonic()
+    today = datetime.now(ZoneInfo("Asia/Seoul")).date()
     refreshed: list[str] = []
     failed: list[dict[str, Any]] = []
+    bars_requested = 0
+
+    if period_days is not None:
+        mode = "forced"
+    elif full:
+        mode = "full"
+    else:
+        mode = "incremental"
+
     async with KISClient() as kis:
         tickers, uni_meta = await _select_refresh_tickers(db, kis)
         if not tickers:
             log.info("chart_refresh_skipped", reason="no tickers (DB + seed + universe empty)")
-            return {"refreshed": [], "failed": [], "elapsed_s": 0.0, "universe": uni_meta}
+            return {"refreshed": [], "failed": [], "elapsed_s": 0.0, "universe": uni_meta,
+                    "mode": mode, "bars_requested": 0, "pruned": {}}
+        last_dates = _last_bar_dates(db, tickers)
         for tk in tickers:
+            if period_days is not None:
+                want = period_days
+            elif full:
+                want = int(cfg["full_period_days"])
+            else:
+                want = _incremental_period_days(last_dates.get(tk), today, cfg)
+            bars_requested += want
             try:
-                # 캐시 우회 강제 (cron 은 새로 받아오는 게 목적)
-                _LAST_AT_BY_TICKER[tk] = 0.0
-                chart, _ = await build_chart_data(
-                    tk, kis=kis, max_age_seconds=0, period_days=period_days,
-                )
-                if chart.failures:
-                    failed.append({"ticker": tk, "failures": chart.failures})
-                else:
+                bars = await kis.get_daily_chart(tk, period_days=want, adjust=True)
+                if bars:
+                    persist_ohlcv_to_db(tk, bars, adjusted=True)
+                    # 인메모리 캐시는 이제 옛 봉을 들고 있다 — 다음 read 가 DB 를 보게 비운다.
+                    _LAST_AT_BY_TICKER[tk] = 0.0
                     refreshed.append(tk)
+                else:
+                    failed.append({"ticker": tk, "failures": ["kis_chart_empty"]})
             except Exception as e:  # noqa: BLE001
                 failed.append({"ticker": tk, "error": f"{type(e).__name__}: {e}"})
                 log.warning("chart_refresh_failed", ticker=tk, error=str(e))
     elapsed = time.monotonic() - started
+    pruned = prune_ohlcv_history(int(cfg["retention_bars"]))
     log.info(
         "chart_refresh_done",
+        mode=mode,
         refreshed=len(refreshed),
         failed=len(failed),
+        bars_requested=bars_requested,
         elapsed_s=round(elapsed, 2),
         universe=uni_meta.get("universe"),
         selected=uni_meta.get("selected"),
@@ -741,6 +838,9 @@ async def refresh_all_tickers(*, period_days: int = 1825) -> dict[str, Any]:
         "failed": failed,
         "elapsed_s": round(elapsed, 2),
         "universe": uni_meta,
+        "mode": mode,
+        "bars_requested": bars_requested,
+        "pruned": pruned,
     }
 
 
@@ -750,14 +850,18 @@ def _main_cli() -> None:
 
     parser = argparse.ArgumentParser(description="chart_ohlcv refresh utility")
     sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("refresh", help="DB 적재된 모든 ticker daily refresh")
+    refresh = sub.add_parser("refresh", help="대상 ticker refresh (기본 증분)")
+    refresh.add_argument(
+        "--full", action="store_true",
+        help="전체 재적재 (수정주가 정합). 미지정 시 마지막 봉 이후만 = 훨씬 빠름",
+    )
     fetch = sub.add_parser("fetch", help="단일 ticker fetch + 적재")
     fetch.add_argument("ticker")
     fetch.add_argument("--days", type=int, default=1825)
     args = parser.parse_args()
 
     if args.cmd == "refresh":
-        result = asyncio.run(refresh_all_tickers())
+        result = asyncio.run(refresh_all_tickers(full=args.full))
         sys.stdout.write(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     elif args.cmd == "fetch":
         async def _run() -> dict[str, Any]:

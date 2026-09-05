@@ -122,6 +122,28 @@ def get_universe_max_tickers() -> int:
         return 200
 
 
+_CHART_REFRESH_DEFAULTS: dict[str, Any] = {
+    "full_period_days": 1825,
+    "incremental_buffer_bars": 10,
+    "min_incremental_bars": 12,
+    "max_incremental_gap_days": 200,
+    "full_refresh_weekday": 6,
+    "retention_bars": 2600,
+}
+
+
+def get_chart_refresh_config() -> dict[str, Any]:
+    """chart_ohlcv 갱신 정책 (증분·전체 재적재·보관 상한). 부재 키는 기본값."""
+    cfg = _load_screening_config().get("chart_refresh") or {}
+    out = dict(_CHART_REFRESH_DEFAULTS)
+    for k, default in _CHART_REFRESH_DEFAULTS.items():
+        try:
+            out[k] = int(cfg.get(k, default))
+        except (TypeError, ValueError):
+            out[k] = default
+    return out
+
+
 def get_signal_min_score() -> float:
     """자동 권고 funnel Stage 0 결정론 컷 임계 (AUTO-SIGNAL-GENERATION-001).
 

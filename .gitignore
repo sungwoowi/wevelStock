@@ -83,5 +83,13 @@ knowledge/reference/
 # === 디렉토리 백업 zip (R&D chat ↔ Claude Code 전송용 임시, 커밋 X) ===
 *.zip
 
-# === 루트 스크래치 산출물 (flow/screening distribution 진단 등, _ prefix 컨벤션) ===
+# === 스크래치 산출물 (_ prefix 컨벤션. 진단·백테스트 패널 등 재생성 가능) ===
 /_*.json
+data/_*.csv
+data/_*.json
+
+# === Pencil MCP 내보내기 (시안 PNG. 정본은 .pen) ===
+webapp/.pen-exports/
+
+# === webapp 런타임 산출물 (추천 백업 jsonl 등) ===
+webapp/data/

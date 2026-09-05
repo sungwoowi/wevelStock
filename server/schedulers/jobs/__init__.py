@@ -99,10 +99,13 @@ def register_infra_jobs(scheduler: AsyncIOScheduler) -> int:
             **_MISFIRE_KW,
         )
         registered += 1
-    # INFRA-CHART-DATA-001 — 평일 18:00 KST chart_ohlcv refresh (config 불필요, 고정 cron)
+    # INFRA-CHART-DATA-001 — chart_ohlcv refresh 18:00 KST.
+    #   평일 = 증분(마지막 봉 이후만, ≈4분) / 일요일 = 전체 재적재(수정주가 정합).
+    #   모드 선택은 잡 내부 `_should_run_full` 이 config 요일로 판단하므로 cron 은 하나다.
+    #   토요일은 뺀다 — 새 봉이 없어 증분이 통째로 헛돈다.
     scheduler.add_job(
         run_chart_refresh,
-        CronTrigger(day_of_week="mon-fri", hour=18, minute=0, timezone=tz),
+        CronTrigger(day_of_week="mon-fri,sun", hour=18, minute=0, timezone=tz),
         id="infra::chart_ohlcv_refresh",
         replace_existing=True,
         **_MISFIRE_KW,
